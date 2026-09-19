@@ -24,6 +24,8 @@
 
 * { box-sizing: border-box; }
 
+[hidden] { display: none !important; }
+
 body {
   margin: 0;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -77,6 +79,7 @@ label {
   color: var(--muted);
 }
 .hint { font-size: 0.75rem; opacity: 0.8; }
+.span-2 { grid-column: span 2; }
 
 input, select {
   padding: 8px 10px;
@@ -85,6 +88,29 @@ input, select {
   background: var(--bg);
   color: var(--text);
   font-size: 0.95rem;
+}
+
+.input-with-button {
+  display: flex;
+  gap: 6px;
+}
+.input-with-button input { flex: 1; min-width: 0; }
+.input-with-button button {
+  margin-top: 0;
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  white-space: nowrap;
+}
+
+h4 { margin: 14px 0 6px; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.warning-box {
+  background: color-mix(in srgb, #d1453b 12%, transparent);
+  border: 1px solid #d1453b;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 0.85rem;
+  margin: 12px 0;
 }
 
 button {

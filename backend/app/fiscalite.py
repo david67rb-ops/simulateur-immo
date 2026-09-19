@@ -14,9 +14,17 @@ PS_TAUX_LMNP = 0.186  # LFSS 2026 : CSG relevée à 10,6 % sur les revenus LMNP
 
 PLAFOND_MICRO_FONCIER = 15_000
 PLAFOND_MICRO_BIC_LMNP = 77_700
+PLAFOND_MICRO_BIC_TOURISME_NON_CLASSE = 15_000
 ABATTEMENT_MICRO_FONCIER = 0.30
-ABATTEMENT_MICRO_BIC_LMNP = 0.50
+ABATTEMENT_MICRO_BIC_LMNP = 0.50  # meublé longue durée ou tourisme classé
+ABATTEMENT_MICRO_BIC_TOURISME_NON_CLASSE = 0.30
 PLAFOND_IMPUTATION_DEFICIT_FONCIER = 10_700
+
+# Impôt sur les sociétés (SCI à l'IS)
+IS_TAUX_REDUIT = 0.15
+IS_PLAFOND_TAUX_REDUIT = 42_500
+IS_TAUX_NORMAL = 0.25
+FLAT_TAX_DISTRIBUTION = 0.30  # PFU (12,8 % IR + 17,2 % PS) sur les dividendes distribués
 
 # Barème IR 2026 (revenus 2025), par part : (borne_haute, taux_marginal)
 BAREME_IR_2026 = [
@@ -127,19 +135,29 @@ def foncier_reel(
     )
 
 
-def micro_bic_lmnp(recettes_annuelles: float, tmi: float) -> ResultatFiscalAnnuel:
-    eligible = recettes_annuelles <= PLAFOND_MICRO_BIC_LMNP
-    revenu_imposable = recettes_annuelles * (1 - ABATTEMENT_MICRO_BIC_LMNP)
+def micro_bic_lmnp(
+    recettes_annuelles: float, tmi: float, meuble_tourisme_non_classe: bool = False
+) -> ResultatFiscalAnnuel:
+    if meuble_tourisme_non_classe:
+        plafond = PLAFOND_MICRO_BIC_TOURISME_NON_CLASSE
+        abattement = ABATTEMENT_MICRO_BIC_TOURISME_NON_CLASSE
+        label = "micro-BIC (meublé tourisme non classé)"
+    else:
+        plafond = PLAFOND_MICRO_BIC_LMNP
+        abattement = ABATTEMENT_MICRO_BIC_LMNP
+        label = "micro-BIC (LMNP)"
+    eligible = recettes_annuelles <= plafond
+    revenu_imposable = recettes_annuelles * (1 - abattement)
     impot = revenu_imposable * tmi
     ps = revenu_imposable * PS_TAUX_LMNP
     return ResultatFiscalAnnuel(
-        regime="micro-BIC (LMNP)",
+        regime=label,
         revenu_imposable=revenu_imposable,
         impot_revenu=impot,
         prelevements_sociaux=ps,
         total_prelevements=impot + ps,
         eligible=eligible,
-        motif_inelig="" if eligible else f"Recettes > {PLAFOND_MICRO_BIC_LMNP} €/an",
+        motif_inelig="" if eligible else f"Recettes > {plafond} €/an",
     )
 
 
@@ -181,4 +199,56 @@ def lmnp_reel(
         prelevements_sociaux=ps,
         total_prelevements=impot + ps,
         amortissement_reporte_stock=amortissement_reporte_sortant,
+    )
+
+
+@dataclass
+class ResultatIS:
+    resultat_fiscal: float
+    impot_societes: float
+    resultat_apres_is: float
+    deficit_reportable: float = 0.0
+
+
+def impot_sur_les_societes(
+    resultat_fiscal: float, eligible_taux_reduit: bool = True
+) -> float:
+    """IS 2026 : 15 % jusqu'à 42 500 € (PME éligibles), 25 % au-delà."""
+    if resultat_fiscal <= 0:
+        return 0.0
+    if not eligible_taux_reduit:
+        return resultat_fiscal * IS_TAUX_NORMAL
+    part_reduite = min(resultat_fiscal, IS_PLAFOND_TAUX_REDUIT)
+    part_normale = max(resultat_fiscal - IS_PLAFOND_TAUX_REDUIT, 0.0)
+    return part_reduite * IS_TAUX_REDUIT + part_normale * IS_TAUX_NORMAL
+
+
+def sci_is(
+    recettes_annuelles: float,
+    charges_deductibles: float,
+    amortissement_disponible_annee: float,
+    deficit_reporte_entrant: float = 0.0,
+) -> ResultatIS:
+    """SCI à l'IS : résultat comptable (amortissement inclus), déficits
+    reportables sans limite de montant ni de durée (contrairement au BIC non
+    pro), pas de plafonnement de l'amortissement par le résultat (il peut
+    créer ou aggraver un déficit, à la différence du LMNP réel)."""
+    resultat = (
+        recettes_annuelles
+        - charges_deductibles
+        - amortissement_disponible_annee
+        - deficit_reporte_entrant
+    )
+    if resultat < 0:
+        return ResultatIS(
+            resultat_fiscal=resultat,
+            impot_societes=0.0,
+            resultat_apres_is=resultat,
+            deficit_reportable=-resultat,
+        )
+    impot = impot_sur_les_societes(resultat)
+    return ResultatIS(
+        resultat_fiscal=resultat,
+        impot_societes=impot,
+        resultat_apres_is=resultat - impot,
     )

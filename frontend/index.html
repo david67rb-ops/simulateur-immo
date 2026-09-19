@@ -14,9 +14,40 @@
 </header>
 
 <main>
+  <section class="card" id="projet-section">
+    <h2>0. Type de projet</h2>
+    <div class="form-grid">
+      <label>Type de projet
+        <select id="type-projet">
+          <option value="location_longue_duree">Location longue durée</option>
+          <option value="location_courte_duree">Location courte durée (type Airbnb)</option>
+          <option value="achat_revente">Achat-revente</option>
+        </select>
+      </label>
+      <label>Structure juridique
+        <select id="structure-juridique">
+          <option value="personne_physique">Personne physique (en direct)</option>
+          <option value="sci_ir">SCI à l'IR</option>
+          <option value="sci_is">SCI à l'IS</option>
+        </select>
+      </label>
+    </div>
+    <p class="note" id="structure-note"></p>
+  </section>
+
   <section class="card" id="market-section">
     <h2>1. Étude de marché</h2>
     <div class="form-grid">
+      <label class="span-2">Lien d'une annonce (optionnel)
+        <input id="ms-url" type="url" placeholder="https://www.orpi.com/annonce-... (portails majeurs souvent bloqués, réseaux d'agences généralement OK)" />
+      </label>
+      <label style="justify-content:flex-end">
+        <button type="button" id="btn-extraire" style="margin-top:22px">Extraire les infos</button>
+      </label>
+    </div>
+    <div id="extract-status" class="status"></div>
+
+    <div class="form-grid" style="margin-top:12px">
       <label>Adresse du bien
         <input id="ms-adresse" type="text" placeholder="12 rue de la République, 69002 Lyon" />
       </label>
@@ -36,12 +67,21 @@
     <button id="btn-market">Analyser le marché</button>
     <div id="market-status" class="status"></div>
     <div id="market-results" class="results" hidden>
+      <h4>Prix de vente au m² (transactions DVF comparables)</h4>
       <div class="stat-grid">
-        <div class="stat"><span class="stat-label">Prix marché au m² (médiane)</span><span class="stat-value" id="ms-prix-m2">–</span></div>
-        <div class="stat"><span class="stat-label">Moyenne (5-95e percentile)</span><span class="stat-value" id="ms-prix-m2-moyen">–</span></div>
+        <div class="stat"><span class="stat-label">Bas (p10)</span><span class="stat-value" id="ms-prix-bas">–</span></div>
+        <div class="stat"><span class="stat-label">Moyen (médiane)</span><span class="stat-value" id="ms-prix-moyen">–</span></div>
+        <div class="stat"><span class="stat-label">Haut (p90)</span><span class="stat-value" id="ms-prix-haut">–</span></div>
         <div class="stat"><span class="stat-label">Transactions trouvées</span><span class="stat-value" id="ms-nb-trans">–</span></div>
-        <div class="stat"><span class="stat-label">Loyer marché au m²</span><span class="stat-value" id="ms-loyer-m2">–</span></div>
-        <div class="stat"><span class="stat-label">Fiabilité loyer (R²)</span><span class="stat-value" id="ms-fiabilite">–</span></div>
+      </div>
+      <div id="ms-loyer-block">
+        <h4>Loyer de marché au m² (secteur / commune)</h4>
+        <div class="stat-grid">
+          <div class="stat"><span class="stat-label">Mini</span><span class="stat-value" id="ms-loyer-bas">–</span></div>
+          <div class="stat"><span class="stat-label">Moyen</span><span class="stat-value" id="ms-loyer-moyen">–</span></div>
+          <div class="stat"><span class="stat-label">Maxi</span><span class="stat-value" id="ms-loyer-haut">–</span></div>
+          <div class="stat"><span class="stat-label">Fiabilité (R²)</span><span class="stat-value" id="ms-fiabilite">–</span></div>
+        </div>
       </div>
       <p id="market-note" class="note"></p>
       <button id="btn-use-market">Utiliser ces valeurs dans le simulateur ↓</button>
@@ -66,13 +106,22 @@
           <label>Prix d'achat (€)
             <input name="prix_achat" type="number" min="1" step="any" value="180000" required />
           </label>
+          <label>Bien neuf / VEFA (&lt; 5 ans)
+            <select name="bien_neuf">
+              <option value="false" selected>Non (ancien)</option>
+              <option value="true">Oui (neuf)</option>
+            </select>
+          </label>
           <label>Frais de notaire (€)
-            <input name="frais_notaire" type="number" min="0" step="any" value="14400" />
+            <span class="input-with-button">
+              <input name="frais_notaire" type="number" min="0" step="any" value="14400" />
+              <button type="button" id="btn-calc-notaire" title="Calculer automatiquement">Calculer</button>
+            </span>
           </label>
           <label>Montant travaux (€)
             <input name="montant_travaux" type="number" min="0" step="any" value="0" />
           </label>
-          <label>Montant mobilier (€) <span class="hint">(location meublée)</span>
+          <label id="label-mobilier">Montant mobilier (€) <span class="hint">(location meublée)</span>
             <input name="montant_mobilier" type="number" min="0" step="any" value="0" />
           </label>
         </div>
@@ -87,7 +136,7 @@
           <label>Taux crédit annuel (%)
             <input name="taux_credit_annuel" type="number" min="0" max="20" step="any" value="3.5" />
           </label>
-          <label>Durée crédit (années)
+          <label id="label-duree-credit">Durée crédit (années)
             <input name="duree_credit_annees" type="number" min="1" max="35" step="1" value="20" />
           </label>
           <label>Assurance emprunteur (% capital/an)
@@ -96,13 +145,13 @@
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset id="fieldset-exploitation">
         <legend>Exploitation</legend>
         <div class="form-grid">
-          <label>Loyer mensuel hors charges (€)
-            <input name="loyer_mensuel_hors_charges" type="number" min="1" step="any" value="750" required />
+          <label id="label-loyer">Loyer mensuel hors charges (€)
+            <input name="loyer_mensuel_hors_charges" type="number" min="0" step="any" value="750" />
           </label>
-          <label>Charges copropriété/an (€)
+          <label id="label-charges-copro">Charges copropriété/an (€)
             <input name="charges_copropriete_annuelles" type="number" min="0" step="any" value="1200" />
           </label>
           <label>Taxe foncière/an (€)
@@ -111,31 +160,49 @@
           <label>Assurance PNO/an (€)
             <input name="assurance_pno_annuelle" type="number" min="0" step="any" value="150" />
           </label>
-          <label>Frais de gestion (% des loyers)
+          <label id="label-frais-gestion">Frais de gestion (% des loyers)
             <input name="frais_gestion_pct_loyers" type="number" min="0" max="15" step="any" value="0" />
           </label>
-          <label>Vacance locative (%)
-            <input name="vacance_locative_pct" type="number" min="0" max="50" step="any" value="5" />
+          <label id="label-vacance">Vacance locative (%)
+            <input name="vacance_locative_pct" type="number" min="0" max="90" step="any" value="5" />
           </label>
-          <label>Entretien annuel (€)
+          <label id="label-entretien">Entretien annuel (€)
             <input name="entretien_annuel" type="number" min="0" step="any" value="300" />
           </label>
-          <label>Frais comptable/an (€) <span class="hint">(LMNP réel)</span>
+          <label id="label-frais-comptable">Frais comptable/an (€) <span class="hint">(réel BIC / SCI IS)</span>
             <input name="frais_comptable_annuel" type="number" min="0" step="any" value="0" />
           </label>
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset id="fieldset-lcd" hidden>
+        <legend>Location courte durée</legend>
+        <div class="form-grid">
+          <label>Meublé de tourisme classé
+            <select name="meuble_tourisme_classe">
+              <option value="true" selected>Classé (abattement 50 %)</option>
+              <option value="false">Non classé (abattement 30 %, plafond réduit)</option>
+            </select>
+          </label>
+          <label>Commission plateforme (% des recettes)
+            <input name="frais_plateforme_pct" type="number" min="0" max="30" step="any" value="3" />
+          </label>
+          <label>Ménage/blanchisserie annuel (€)
+            <input name="frais_menage_annuel" type="number" min="0" step="any" value="0" />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset id="fieldset-regime">
         <legend>Régime locatif &amp; fiscalité</legend>
         <div class="form-grid">
-          <label>Régime
+          <label id="label-regime-location">Régime
             <select name="regime_location">
               <option value="nue">Location nue</option>
               <option value="meublee">Location meublée (LMNP)</option>
             </select>
           </label>
-          <label>Tranche marginale d'imposition (TMI)
+          <label id="label-tmi">Tranche marginale d'imposition (TMI) <span class="hint">(personne physique / SCI IR)</span>
             <select name="taux_marginal_imposition">
               <option value="0">0 %</option>
               <option value="0.11">11 %</option>
@@ -148,7 +215,7 @@
       </fieldset>
 
       <fieldset id="fieldset-amortissement" hidden>
-        <legend>Amortissement (LMNP réel)</legend>
+        <legend>Amortissement (LMNP réel / SCI à l'IS)</legend>
         <div class="form-grid">
           <label>Part terrain (non amortissable, %)
             <input name="part_terrain_pct" type="number" min="0" max="50" step="any" value="15" />
@@ -165,17 +232,38 @@
         </div>
       </fieldset>
 
-      <fieldset>
+      <fieldset id="fieldset-projection">
         <legend>Projection</legend>
         <div class="form-grid">
-          <label>Durée de projection (années)
+          <label id="label-duree-projection">Durée de projection (années)
             <input name="duree_projection_annees" type="number" min="1" max="35" step="1" value="20" />
           </label>
           <label>Revalorisation du bien (%/an)
             <input name="taux_revalorisation_bien_annuel" type="number" min="-5" max="10" step="any" value="1" />
           </label>
-          <label>Revalorisation des loyers (%/an)
+          <label id="label-reval-loyers">Revalorisation des loyers (%/an)
             <input name="taux_revalorisation_loyers_annuel" type="number" min="-5" max="10" step="any" value="1" />
+          </label>
+        </div>
+      </fieldset>
+
+      <fieldset id="fieldset-achat-revente" hidden>
+        <legend>Achat-revente</legend>
+        <div class="form-grid">
+          <label>Durée de portage (mois)
+            <input name="duree_portage_mois" type="number" min="1" max="60" step="1" value="9" />
+          </label>
+          <label>Prix de revente visé (€) <span class="hint">(sinon estimé via revalorisation)</span>
+            <input name="prix_revente_vise" type="number" min="0" step="any" placeholder="ex : 230000" />
+          </label>
+          <label>Frais d'agence à la revente (% du prix)
+            <input name="frais_agence_revente_pct" type="number" min="0" max="15" step="any" value="4" />
+          </label>
+          <label>Marchand de biens professionnel
+            <select name="marchand_de_biens_professionnel">
+              <option value="false" selected>Non (occasionnel)</option>
+              <option value="true">Oui (activité habituelle, régime BIC/IS)</option>
+            </select>
           </label>
         </div>
       </fieldset>
@@ -186,37 +274,58 @@
 
   <section class="card" id="results-section" hidden>
     <h2>3. Résultats</h2>
-    <div class="stat-grid">
-      <div class="stat"><span class="stat-label">Coût total d'acquisition</span><span class="stat-value" id="res-cout-total">–</span></div>
-      <div class="stat"><span class="stat-label">Rendement brut</span><span class="stat-value" id="res-rendement-brut">–</span></div>
-      <div class="stat"><span class="stat-label">Rendement net de charges</span><span class="stat-value" id="res-rendement-net">–</span></div>
-      <div class="stat"><span class="stat-label">Mensualité crédit</span><span class="stat-value" id="res-mensualite">–</span></div>
+    <div id="results-location">
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">Coût total d'acquisition</span><span class="stat-value" id="res-cout-total">–</span></div>
+        <div class="stat"><span class="stat-label">Rendement brut</span><span class="stat-value" id="res-rendement-brut">–</span></div>
+        <div class="stat"><span class="stat-label">Rendement net de charges</span><span class="stat-value" id="res-rendement-net">–</span></div>
+        <div class="stat"><span class="stat-label">Mensualité crédit</span><span class="stat-value" id="res-mensualite">–</span></div>
+      </div>
+      <div id="res-avertissements"></div>
+
+      <h3>Comparatif des régimes fiscaux (année 1)</h3>
+      <table id="table-regimes">
+        <thead>
+          <tr><th>Régime</th><th>Revenu imposable</th><th>Impôt total</th><th>Cash-flow mensuel net</th><th>TRI (avec revente)</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+
+      <h3>Cash-flow cumulé sur la durée de projection</h3>
+      <canvas id="chart-cashflow" height="90"></canvas>
+
+      <h3>Revente en fin de projection</h3>
+      <table id="table-revente">
+        <thead>
+          <tr><th>Régime</th><th>Valeur revente</th><th>Plus-value imposable</th><th>Impôt total</th><th>Net vendeur</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
     </div>
 
-    <h3>Comparatif des régimes fiscaux (année 1)</h3>
-    <table id="table-regimes">
-      <thead>
-        <tr><th>Régime</th><th>Revenu imposable</th><th>Impôt + PS</th><th>Cash-flow mensuel net</th><th>TRI (avec revente)</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
-
-    <h3>Cash-flow cumulé sur la durée de projection</h3>
-    <canvas id="chart-cashflow" height="90"></canvas>
-
-    <h3>Revente en fin de projection</h3>
-    <table id="table-revente">
-      <thead>
-        <tr><th>Régime</th><th>Valeur revente</th><th>Plus-value imposable</th><th>Impôt + PS + surtaxe</th><th>Net vendeur</th></tr>
-      </thead>
-      <tbody></tbody>
-    </table>
+    <div id="results-achat-revente" hidden>
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">Marge brute avant impôt</span><span class="stat-value" id="ar-marge-brute">–</span></div>
+        <div class="stat"><span class="stat-label">Régime fiscal</span><span class="stat-value" id="ar-regime">–</span></div>
+        <div class="stat"><span class="stat-label">Impôt total</span><span class="stat-value" id="ar-impot">–</span></div>
+        <div class="stat"><span class="stat-label">Marge nette</span><span class="stat-value" id="ar-marge-nette">–</span></div>
+      </div>
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">Cash final investisseur</span><span class="stat-value" id="ar-cash-final">–</span></div>
+        <div class="stat"><span class="stat-label">Rentabilité de l'opération</span><span class="stat-value" id="ar-rentabilite">–</span></div>
+        <div class="stat"><span class="stat-label">TRI annualisé</span><span class="stat-value" id="ar-tri">–</span></div>
+        <div class="stat"><span class="stat-label">Frais de portage totaux</span><span class="stat-value" id="ar-portage">–</span></div>
+      </div>
+      <table id="table-achat-revente">
+        <tbody></tbody>
+      </table>
+    </div>
   </section>
 </main>
 
 <footer>
   <p>Sources marché : API Adresse (BAN), DVF géolocalisé (data.gouv.fr), Carte des loyers DHUP/ANIL.
-    Fiscalité : barème IR 2026 sur revenus 2025, réforme LMNP (loi de finances 2025, art. 84). Voir le README pour les hypothèses détaillées.</p>
+    Fiscalité : barème IR 2026 sur revenus 2025, IS 2026, réforme LMNP (loi de finances 2025, art. 84). Voir le README pour les hypothèses détaillées.</p>
 </footer>
 
 <script src="/static/app.js"></script>

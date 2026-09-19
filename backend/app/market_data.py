@@ -114,8 +114,16 @@ async def comparables_dvf(
         df = await _charger_dvf_departement(code_departement, annee)
         if not df.empty:
             frames.append(df)
+    vide = {
+        "nb_transactions": 0,
+        "prix_m2_bas": None,
+        "prix_m2_moyen": None,
+        "prix_m2_haut": None,
+        "prix_m2_min": None,
+        "prix_m2_max": None,
+    }
     if not frames:
-        return {"nb_transactions": 0, "prix_m2_moyen": None, "prix_m2_median": None}
+        return vide
 
     df = pd.concat(frames, ignore_index=True)
     df = df[df["type_local"] == type_local_dvf]
@@ -130,18 +138,18 @@ async def comparables_dvf(
     df = df[(df["prix_m2"] > 200) & (df["prix_m2"] < 30_000) & (df["surface_reelle_bati"] >= 9)]
 
     if df.empty:
-        return {"nb_transactions": 0, "prix_m2_moyen": None, "prix_m2_median": None}
+        return vide
 
-    # Moyenne tronquée (5e-95e percentile) pour limiter l'effet des valeurs
-    # extrêmes ; la médiane reste l'indicateur principal affiché.
-    p5, p95 = df["prix_m2"].quantile([0.05, 0.95])
-    df_tronque = df[(df["prix_m2"] >= p5) & (df["prix_m2"] <= p95)]
-    moyenne = df_tronque["prix_m2"].mean() if not df_tronque.empty else df["prix_m2"].mean()
+    # bas/moyen/haut = 10e/50e(médiane)/90e percentile : une fourchette
+    # représentative, plus robuste aux valeurs extrêmes que min/max bruts
+    # (conservés séparément à titre indicatif).
+    p10, p50, p90 = df["prix_m2"].quantile([0.10, 0.50, 0.90])
 
     return {
         "nb_transactions": int(len(df)),
-        "prix_m2_moyen": round(float(moyenne), 0),
-        "prix_m2_median": round(float(df["prix_m2"].median()), 0),
+        "prix_m2_bas": round(float(p10), 0),
+        "prix_m2_moyen": round(float(p50), 0),
+        "prix_m2_haut": round(float(p90), 0),
         "prix_m2_min": round(float(df["prix_m2"].min()), 0),
         "prix_m2_max": round(float(df["prix_m2"].max()), 0),
     }
@@ -174,9 +182,9 @@ async def loyer_marche(code_insee: str, type_bien: str) -> dict | None:
         return None
     row = ligne.iloc[0]
     return {
-        "loyer_m2_estime": round(float(row["loypredm2"]), 2),
-        "intervalle_bas": round(float(row["lwr.IPm2"]), 2),
-        "intervalle_haut": round(float(row["upr.IPm2"]), 2),
+        "loyer_m2_bas": round(float(row["lwr.IPm2"]), 2),
+        "loyer_m2_moyen": round(float(row["loypredm2"]), 2),
+        "loyer_m2_haut": round(float(row["upr.IPm2"]), 2),
         "nb_observations_commune": int(row["nbobs_com"]),
         "fiabilite_r2": round(float(row["R2_adj"]), 2),
     }
