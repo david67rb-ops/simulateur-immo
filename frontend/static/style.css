@@ -90,18 +90,6 @@ input, select {
   font-size: 0.95rem;
 }
 
-.input-with-button {
-  display: flex;
-  gap: 6px;
-}
-.input-with-button input { flex: 1; min-width: 0; }
-.input-with-button button {
-  margin-top: 0;
-  padding: 8px 12px;
-  font-size: 0.82rem;
-  white-space: nowrap;
-}
-
 h4 { margin: 14px 0 6px; color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; }
 
 .warning-box {

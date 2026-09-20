@@ -107,6 +107,7 @@ document.getElementById("btn-extraire").addEventListener("click", async () => {
     if (data.prix_achat) simForm.prix_achat.value = Math.round(data.prix_achat);
     if (data.surface_m2) simForm.surface_m2.value = data.surface_m2;
     if (data.type_bien) simForm.type_bien.value = data.type_bien;
+    if (data.prix_achat) calculerFraisNotaireAuto();
 
     const manquants = data.champs_manquants || [];
     statusEl.textContent = manquants.length
@@ -120,7 +121,9 @@ document.getElementById("btn-extraire").addEventListener("click", async () => {
 
 // ---------- Calcul automatique des frais de notaire ----------
 
-document.getElementById("btn-calc-notaire").addEventListener("click", async () => {
+let notaireDebounce = null;
+
+async function calculerFraisNotaireAuto() {
   const prixAchat = parseFloat(simForm.prix_achat.value);
   const neuf = simForm.bien_neuf.value === "true";
   if (!prixAchat || prixAchat <= 0) return;
@@ -134,7 +137,14 @@ document.getElementById("btn-calc-notaire").addEventListener("click", async () =
   if (resp.ok) {
     simForm.frais_notaire.value = Math.round(data.total);
   }
+}
+
+simForm.prix_achat.addEventListener("input", () => {
+  clearTimeout(notaireDebounce);
+  notaireDebounce = setTimeout(calculerFraisNotaireAuto, 400);
 });
+simForm.bien_neuf.addEventListener("change", calculerFraisNotaireAuto);
+calculerFraisNotaireAuto();
 
 // ---------- Étude de marché ----------
 
@@ -209,7 +219,10 @@ document.getElementById("btn-use-market").addEventListener("click", () => {
   simForm.surface_m2.value = surface;
 
   const prixEstime = lastMarketResult.prix_marche_estime_pour_surface;
-  if (prixEstime) simForm.prix_achat.value = Math.round(prixEstime);
+  if (prixEstime) {
+    simForm.prix_achat.value = Math.round(prixEstime);
+    calculerFraisNotaireAuto();
+  }
 
   const loyerEstime = lastMarketResult.loyer_mensuel_estime_pour_surface;
   if (loyerEstime && simForm.loyer_mensuel_hors_charges) {
