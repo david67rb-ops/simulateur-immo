@@ -49,11 +49,15 @@ function updateVisibility() {
     "label-duree-credit",
     "label-duree-projection",
     "label-reval-loyers",
+    "label-differe-type",
   ]) {
     hide(id, isAchatRevente);
   }
   hide("label-frais-comptable", isAchatRevente || !(isMeublee || isSciIs));
   hide("label-mobilier", isAchatRevente || !isMeublee);
+
+  const differeType = simForm.querySelector("select[name=differe_type]").value;
+  hide("label-differe-duree", isAchatRevente || differeType === "aucun");
 
   // Marché : le loyer n'a pas de sens pour une opération d'achat-revente
   document.getElementById("ms-loyer-block").hidden = isAchatRevente;
@@ -77,6 +81,7 @@ function updateVisibility() {
 typeProjetSelect.addEventListener("change", updateVisibility);
 structureSelect.addEventListener("change", updateVisibility);
 simForm.querySelector("select[name=regime_location]").addEventListener("change", updateVisibility);
+simForm.querySelector("select[name=differe_type]").addEventListener("change", updateVisibility);
 updateVisibility();
 
 // ---------- Extraction depuis un lien d'annonce ----------
@@ -241,7 +246,7 @@ function buildPayload() {
     structure_juridique: structureSelect.value,
   };
   const champsBooleens = ["bien_neuf", "meuble_tourisme_classe", "marchand_de_biens_professionnel"];
-  const champsTexte = ["type_bien", "regime_location"];
+  const champsTexte = ["type_bien", "regime_location", "differe_type"];
 
   for (const [key, value] of fd.entries()) {
     if (champsBooleens.includes(key)) {
@@ -405,3 +410,90 @@ function renderChart(data, regimes) {
     },
   });
 }
+
+// ---------- Dossier de financement (taux d'endettement + export Word) ----------
+
+const profilForm = document.getElementById("profil-form");
+
+function buildProfilPayload() {
+  const fd = new FormData(profilForm);
+  const profil = {};
+  for (const [key, value] of fd.entries()) {
+    profil[key] = parseFloat(value) || 0;
+  }
+  return profil;
+}
+
+profilForm.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const statusEl = document.getElementById("endettement-status");
+  const resultsEl = document.getElementById("endettement-results");
+  statusEl.textContent = "Calcul en cours…";
+  statusEl.className = "status";
+  resultsEl.hidden = true;
+
+  const payload = { simulation: buildPayload(), profil: buildProfilPayload() };
+  const resp = await fetch("/api/endettement", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await resp.json();
+  if (!resp.ok) {
+    statusEl.textContent = "Erreur : " + (data.detail || JSON.stringify(data));
+    statusEl.className = "status error";
+    return;
+  }
+  statusEl.textContent = "";
+
+  document.getElementById("end-revenus").textContent = eur(data.revenus_consideres_mensuels);
+  document.getElementById("end-mensualites").textContent = eur(data.mensualites_totales_mensuelles);
+  document.getElementById("end-taux").textContent = pct(data.taux_endettement, 1);
+  const statutEl = document.getElementById("end-statut");
+  statutEl.textContent = data.depasse_seuil
+    ? `⚠️ Dépasse le seuil HCSF (${pct(data.seuil_hcsf, 0)})`
+    : `OK (seuil HCSF ${pct(data.seuil_hcsf, 0)})`;
+  document.getElementById("end-marge").textContent = data.depasse_seuil
+    ? "Le taux d'endettement dépasse le seuil de 35 % généralement retenu par les banques."
+    : `Marge avant d'atteindre le seuil : ${eur(data.marge_avant_seuil)}/mois de mensualité supplémentaire supportable.`;
+
+  resultsEl.hidden = false;
+});
+
+document.getElementById("btn-export-word").addEventListener("click", async () => {
+  const statusEl = document.getElementById("endettement-status");
+  statusEl.textContent = "Génération du dossier…";
+  statusEl.className = "status";
+
+  const profilFd = new FormData(profilForm);
+  const profilRempli = Array.from(profilFd.values()).some((v) => v !== "");
+  const payload = {
+    simulation: buildPayload(),
+    profil: profilRempli ? buildProfilPayload() : null,
+  };
+
+  try {
+    const resp = await fetch("/api/export-dossier-word", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!resp.ok) {
+      const data = await resp.json();
+      throw new Error(data.detail || "Échec de la génération du dossier");
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "dossier-financement.docx";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    statusEl.textContent = "Dossier téléchargé.";
+  } catch (err) {
+    statusEl.textContent = "Erreur : " + err.message;
+    statusEl.className = "status error";
+  }
+});

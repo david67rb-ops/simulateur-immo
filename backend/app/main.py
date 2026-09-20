@@ -1,15 +1,23 @@
 from __future__ import annotations
 
-from dataclasses import asdict, is_dataclass
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from . import listing_parser, market_data, notaire
-from .schemas import FraisNotaireInput, ListingUrlInput, MarketStudyInput, SimulationInput, TypeProjet
+from . import dossier_export, endettement as endet_mod, listing_parser, market_data, notaire
+from .schemas import (
+    EndettementInput,
+    ExportDossierInput,
+    FraisNotaireInput,
+    ListingUrlInput,
+    MarketStudyInput,
+    SimulationInput,
+    TypeProjet,
+)
 from .simulation import simuler
+from .utils import clean_result
 
 app = FastAPI(title="Simulateur de rentabilité immobilière")
 
@@ -21,16 +29,7 @@ app.add_middleware(
 )
 
 
-def _clean(obj):
-    if is_dataclass(obj) and not isinstance(obj, type):
-        return _clean(asdict(obj))
-    if isinstance(obj, dict):
-        return {k: _clean(v) for k, v in obj.items()}
-    if isinstance(obj, list):
-        return [_clean(v) for v in obj]
-    if isinstance(obj, float):
-        return None if obj != obj else obj  # NaN -> None
-    return obj
+_clean = clean_result
 
 
 @app.get("/api/health")
@@ -50,6 +49,44 @@ def api_simulate(payload: SimulationInput):
 @app.post("/api/frais-notaire")
 def api_frais_notaire(payload: FraisNotaireInput):
     return notaire.calculer_frais_notaire(payload.prix_achat, payload.neuf)
+
+
+@app.post("/api/endettement")
+def api_endettement(payload: EndettementInput):
+    try:
+        resultat = simuler(payload.simulation)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    if payload.simulation.type_projet == TypeProjet.achat_revente:
+        ar = resultat["achat_revente"]
+        mensualite_projet = ar.frais_portage_interets / payload.simulation.duree_portage_mois
+        loyers_mensuels = 0.0
+    else:
+        mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
+        loyers_mensuels = resultat["annees"][0].loyers_bruts / 12
+
+    r = endet_mod.calculer_taux_endettement(
+        payload.profil.revenus_nets_mensuels_foyer,
+        payload.profil.autres_revenus_mensuels,
+        payload.profil.mensualites_credits_existants,
+        mensualite_projet,
+        loyers_mensuels,
+    )
+    return _clean({**r.__dict__, "mensualite_projet": mensualite_projet, "loyers_mensuels_projet": loyers_mensuels})
+
+
+@app.post("/api/export-dossier-word")
+def api_export_dossier_word(payload: ExportDossierInput):
+    try:
+        contenu = dossier_export.generer_dossier_word(payload)
+    except Exception as exc:  # noqa: BLE001
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return Response(
+        content=contenu,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": "attachment; filename=dossier-financement.docx"},
+    )
 
 
 @app.post("/api/parse-listing")

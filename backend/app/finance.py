@@ -10,6 +10,8 @@ class LoanYear:
     interets: float
     capital_rembourse: float
     capital_restant_du: float
+    mensualite_hors_assurance: float
+    assurance_annuelle: float
     mensualite_totale: float
 
 
@@ -28,35 +30,70 @@ def tableau_amortissement_annuel(
     taux_annuel: float,
     duree_annees: int,
     assurance_taux_annuel: float = 0.0,
+    differe_mois: int = 0,
+    differe_total: bool = False,
 ) -> list[LoanYear]:
-    """Tableau d'amortissement agrégé par année (intérêts, capital, CRD)."""
+    """Tableau d'amortissement agrégé par année (intérêts, capital, CRD).
+
+    Différé partiel : seuls les intérêts sont payés pendant `differe_mois`,
+    le capital reste inchangé. Différé total : rien n'est payé, les intérêts
+    courus sont capitalisés (ajoutés au capital restant dû) ; l'amortissement
+    classique démarre ensuite sur ce capital augmenté, sur la durée restante.
+    L'assurance emprunteur (sur capital initial) continue à courir pendant le
+    différé, comme en pratique bancaire.
+    """
     duree_mois = duree_annees * 12
-    mensualite = annuite_mensuelle(capital, taux_annuel, duree_mois)
+    if duree_mois <= 1:
+        differe_mois = 0
+    else:
+        differe_mois = max(0, min(differe_mois, duree_mois - 1))
     taux_mensuel = taux_annuel / 12
     assurance_mensuelle = capital * assurance_taux_annuel / 12
 
     crd = capital
+    mensualite_post_differe: float | None = None
     resultats: list[LoanYear] = []
+
     for annee in range(1, duree_annees + 1):
         interets_annee = 0.0
         capital_annee = 0.0
-        for _ in range(12):
+        mensualite_annee = 0.0
+        for mois_dans_annee in range(12):
+            mois_absolu = (annee - 1) * 12 + mois_dans_annee
             if crd <= 0:
                 break
             interet_mois = crd * taux_mensuel
-            capital_mois = min(mensualite - interet_mois, crd)
-            crd -= capital_mois
-            interets_annee += interet_mois
+            if mois_absolu < differe_mois:
+                if differe_total:
+                    crd += interet_mois  # intérêts capitalisés, non payés
+                    capital_mois = 0.0
+                    mensualite_mois = 0.0
+                    interet_paye = 0.0
+                else:
+                    capital_mois = 0.0
+                    mensualite_mois = interet_mois
+                    interet_paye = interet_mois
+            else:
+                if mensualite_post_differe is None:
+                    mensualite_post_differe = annuite_mensuelle(
+                        crd, taux_annuel, duree_mois - differe_mois
+                    )
+                interet_paye = interet_mois
+                capital_mois = min(mensualite_post_differe - interet_mois, crd)
+                crd -= capital_mois
+                mensualite_mois = mensualite_post_differe
+            interets_annee += interet_paye
             capital_annee += capital_mois
+            mensualite_annee += mensualite_mois
         resultats.append(
             LoanYear(
                 annee=annee,
                 interets=interets_annee,
                 capital_rembourse=capital_annee,
                 capital_restant_du=max(crd, 0.0),
-                mensualite_totale=(mensualite + assurance_mensuelle) * 12
-                if annee <= duree_annees
-                else 0.0,
+                mensualite_hors_assurance=mensualite_annee,
+                assurance_annuelle=assurance_mensuelle * 12,
+                mensualite_totale=mensualite_annee + assurance_mensuelle * 12,
             )
         )
     return resultats

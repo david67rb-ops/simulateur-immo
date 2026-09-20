@@ -27,6 +27,12 @@ class StructureJuridique(str, Enum):
     sci_is = "sci_is"
 
 
+class DiffereType(str, Enum):
+    aucun = "aucun"
+    partiel = "partiel"
+    total = "total"
+
+
 class SimulationInput(BaseModel):
     # --- Projet & structure ---
     type_projet: TypeProjet = TypeProjet.location_longue_duree
@@ -46,6 +52,8 @@ class SimulationInput(BaseModel):
     taux_credit_annuel: float = Field(default=0.035, ge=0, le=0.2)
     duree_credit_annees: int = Field(default=20, gt=0, le=35)
     taux_assurance_emprunteur: float = Field(default=0.003, ge=0, le=0.02)
+    differe_type: DiffereType = DiffereType.aucun
+    differe_duree_mois: int = Field(default=0, ge=0, le=60)
 
     # --- Exploitation (location longue/courte durée) ---
     loyer_mensuel_hors_charges: float = Field(default=0, ge=0)
@@ -116,3 +124,19 @@ class ListingUrlInput(BaseModel):
 class FraisNotaireInput(BaseModel):
     prix_achat: float = Field(gt=0)
     neuf: bool = False
+
+
+class ProfilEmprunteurInput(BaseModel):
+    revenus_nets_mensuels_foyer: float = Field(ge=0)
+    autres_revenus_mensuels: float = Field(default=0, ge=0)
+    mensualites_credits_existants: float = Field(default=0, ge=0)
+
+
+class EndettementInput(BaseModel):
+    profil: ProfilEmprunteurInput
+    simulation: SimulationInput
+
+
+class ExportDossierInput(BaseModel):
+    simulation: SimulationInput
+    profil: ProfilEmprunteurInput | None = None

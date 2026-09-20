@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 
 from . import fiscalite as fisc
 from .finance import irr, tableau_amortissement_annuel
-from .schemas import RegimeLocation, StructureJuridique, SimulationInput, TypeProjet
+from .schemas import DiffereType, RegimeLocation, StructureJuridique, SimulationInput, TypeProjet
 
 TAUX_IR_PLUS_VALUE = 0.19
 TAUX_PS_PLUS_VALUE = 0.172
@@ -126,6 +126,8 @@ def _simuler_location(inp: SimulationInput) -> dict:
         inp.taux_credit_annuel,
         inp.duree_credit_annees,
         inp.taux_assurance_emprunteur,
+        differe_mois=inp.differe_duree_mois if inp.differe_type != DiffereType.aucun else 0,
+        differe_total=inp.differe_type == DiffereType.total,
     )
     loan_by_year = {ly.annee: ly for ly in loan_schedule}
 
@@ -373,15 +375,29 @@ def _simuler_location(inp: SimulationInput) -> dict:
             "principe requalifiée à l'IS par l'administration fiscale (sauf si les recettes "
             "meublées restent accessoires, < 10 % des recettes totales)."
         )
+    differe_actif = inp.differe_type != DiffereType.aucun and inp.differe_duree_mois > 0
+    if differe_actif:
+        libelle = "total (rien n'est payé, intérêts capitalisés)" if inp.differe_type == DiffereType.total else "partiel (intérêts seuls payés)"
+        avertissements.append(
+            f"Différé de crédit {libelle} pendant {inp.differe_duree_mois} mois : la mensualité "
+            "affiche ci-dessous est celle du régime de croisière (après différé), pas celle de "
+            "la première année."
+        )
 
     return {
         "type_projet": inp.type_projet.value,
         "cout_total_acquisition": cout_total_acquisition,
         "montant_emprunte": montant_emprunte,
         "apport_reel": apport_reel,
-        "mensualite_credit_hors_assurance": loan_schedule[0].mensualite_totale / 12
+        "mensualite_credit_hors_assurance": (
+            max((ly.mensualite_hors_assurance for ly in loan_schedule), default=0.0) / 12
+            if differe_actif
+            else (loan_schedule[0].mensualite_hors_assurance / 12 if loan_schedule else 0.0)
+        ),
+        "mensualite_annee1_hors_assurance": loan_schedule[0].mensualite_hors_assurance / 12
         if loan_schedule
         else 0.0,
+        "differe_actif": differe_actif,
         "rendement_brut": rendement_brut,
         "rendement_net_charges": rendement_net_charges,
         "annees": annees,

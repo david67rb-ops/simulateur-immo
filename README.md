@@ -10,7 +10,11 @@ Application locale (FastAPI + JS vanilla) qui combine :
 2. **Simulateur de rentabilité** : cash-flow prévisionnel, fiscalité détaillée
    selon le **type de projet** (location longue durée, location courte durée,
    achat-revente) et la **structure juridique** (personne physique, SCI à
-   l'IR, SCI à l'IS), TRI et simulation de revente/plus-value.
+   l'IR, SCI à l'IS), différé de crédit (partiel/total), TRI et simulation de
+   revente/plus-value.
+3. **Dossier de financement** : taux d'endettement du foyer (pondération
+   bancaire standard sur les loyers prévisionnels) et export Word du dossier
+   à présenter en banque.
 
 ## Lancer en local
 
@@ -19,10 +23,15 @@ cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app --reload
+uvicorn app.main:app
 ```
 
 Puis ouvrir http://localhost:8000
+
+⚠️ Ne pas utiliser `--reload` : le rechargeur multiprocessing d'uvicorn plante
+sur certaines installations Python (erreur `ImportError: cannot import name
+'ASGIApplication'`). Relancer manuellement le process après une modification
+du code backend.
 
 Les données de marché (DVF par département, indicateurs de loyers) sont
 téléchargées à la demande depuis data.gouv.fr et mises en cache dans
@@ -61,6 +70,39 @@ pour un département donné).
   sur la part de trésorerie excédant l'apport initial — une simplification
   qui ignore le compte courant d'associé, le remboursement de capital non
   taxable, etc.
+
+## Différé de crédit
+
+Deux types, calculés dans `finance.py` :
+
+- **Partiel** : seuls les intérêts sont payés pendant le différé (capital
+  inchangé) ; l'amortissement classique démarre après, sur la durée restante.
+- **Total** : rien n'est payé ; les intérêts courus sont **capitalisés**
+  (ajoutés au capital restant dû), donc le capital à amortir ensuite est plus
+  élevé. Coût total plus important, confort de trésorerie maximal pendant le
+  différé (travaux, avant mise en location).
+
+L'assurance emprunteur continue à courir pendant le différé (pratique
+bancaire standard). Le résultat de simulation distingue la mensualité de la
+première année de celle du « régime de croisière » (après différé) — c'est
+cette dernière qui est utilisée pour le calcul du taux d'endettement, par
+prudence.
+
+## Dossier de financement (taux d'endettement + export Word)
+
+Section indépendante du simulateur de rentabilité : à partir des revenus du
+foyer, des autres revenus et des mensualités de crédits déjà en cours,
+calcule le taux d'endettement en reprenant la pratique bancaire française
+standard — les loyers prévisionnels du projet ne sont retenus qu'à hauteur de
+**70 %** (pondération de prudence), et le seuil de référence est celui du
+HCSF (**35 %**). Le « reste à vivre », autre critère bancaire courant, n'est
+pas calculé (dépend du nombre de personnes au foyer et de barèmes internes
+propres à chaque banque) — limite documentée, à approfondir si besoin.
+
+L'export Word (`python-docx`) reprend l'ensemble du projet (bien, financement,
+rentabilité, profil emprunteur et taux d'endettement) dans un document
+présentable à une banque. Estimation pédagogique, pas un dossier de crédit
+formel.
 
 ## Frais de notaire automatiques
 
@@ -136,14 +178,18 @@ comptable, avocat fiscaliste, CGP).
 backend/
   app/
     main.py            FastAPI : /api/simulate, /api/market-study,
-                        /api/frais-notaire, /api/parse-listing
+                        /api/frais-notaire, /api/parse-listing,
+                        /api/endettement, /api/export-dossier-word
     schemas.py          Modèles Pydantic (entrées, types de projet/structure)
-    finance.py           Emprunt, TRI/VAN génériques
+    finance.py           Emprunt (dont différé), TRI/VAN génériques
     fiscalite.py          Barème IR, IS, régimes fiscaux locatifs
     simulation.py          Moteur location (pluriannuel) + achat-revente
-    market_data.py          Géocodage + DVF + loyers (téléchargement/cache)
-    notaire.py               Calcul automatique des frais de notaire
-    listing_parser.py        Extraction best-effort depuis un lien d'annonce
+    endettement.py           Taux d'endettement (dossier de financement)
+    dossier_export.py         Génération du dossier Word (python-docx)
+    market_data.py              Géocodage + DVF + loyers (téléchargement/cache)
+    notaire.py                   Calcul automatique des frais de notaire
+    listing_parser.py             Extraction best-effort depuis un lien d'annonce
+    utils.py                       Sérialisation JSON partagée (dataclasses)
 frontend/
   index.html, static/app.js, static/style.css   SPA vanilla JS (aucun build)
 ```

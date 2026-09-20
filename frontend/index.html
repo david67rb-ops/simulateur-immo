@@ -139,6 +139,16 @@
           <label>Assurance emprunteur (% capital/an)
             <input name="taux_assurance_emprunteur" type="number" min="0" max="2" step="any" value="0.3" />
           </label>
+          <label id="label-differe-type">Différé de crédit
+            <select name="differe_type">
+              <option value="aucun" selected>Aucun</option>
+              <option value="partiel">Partiel (intérêts seuls payés)</option>
+              <option value="total">Total (rien payé, intérêts capitalisés)</option>
+            </select>
+          </label>
+          <label id="label-differe-duree" hidden>Durée du différé (mois)
+            <input name="differe_duree_mois" type="number" min="0" max="60" step="1" value="0" />
+          </label>
         </div>
       </fieldset>
 
@@ -316,6 +326,39 @@
       <table id="table-achat-revente">
         <tbody></tbody>
       </table>
+    </div>
+  </section>
+
+  <section class="card" id="dossier-section">
+    <h2>4. Dossier de financement</h2>
+    <p class="note">
+      Calcule le taux d'endettement du foyer à partir de la simulation ci-dessus (§2) et
+      permet d'exporter un dossier Word pour la banque. Indépendant du calcul de rentabilité.
+    </p>
+    <form id="profil-form">
+      <div class="form-grid">
+        <label>Revenus nets mensuels du foyer (€)
+          <input name="revenus_nets_mensuels_foyer" type="number" min="0" step="any" value="3000" required />
+        </label>
+        <label>Autres revenus mensuels (€)
+          <input name="autres_revenus_mensuels" type="number" min="0" step="any" value="0" />
+        </label>
+        <label>Mensualités de crédits existants (€)
+          <input name="mensualites_credits_existants" type="number" min="0" step="any" value="0" />
+        </label>
+      </div>
+      <button type="submit">Calculer le taux d'endettement</button>
+      <button type="button" id="btn-export-word">Télécharger le dossier (Word)</button>
+    </form>
+    <div id="endettement-status" class="status"></div>
+    <div id="endettement-results" class="results" hidden>
+      <div class="stat-grid">
+        <div class="stat"><span class="stat-label">Revenus considérés (dont 70 % des loyers)</span><span class="stat-value" id="end-revenus">–</span></div>
+        <div class="stat"><span class="stat-label">Mensualités totales</span><span class="stat-value" id="end-mensualites">–</span></div>
+        <div class="stat"><span class="stat-label">Taux d'endettement</span><span class="stat-value" id="end-taux">–</span></div>
+        <div class="stat"><span class="stat-label">Statut</span><span class="stat-value" id="end-statut">–</span></div>
+      </div>
+      <p id="end-marge" class="note"></p>
     </div>
   </section>
 </main>
