@@ -1,6 +1,8 @@
 # Simulateur de rentabilité immobilière
 
-Application locale (FastAPI + JS vanilla) qui combine :
+Application de bureau 100 % Python ([NiceGUI](https://nicegui.io), fenêtre
+native cross-platform Windows/Mac/Linux — plus de HTML/CSS/JS séparés) qui
+combine :
 
 1. **Étude de marché automatique** : à partir d'une adresse (ou d'un lien
    d'annonce), l'app géocode le bien (API Adresse / Base Adresse Nationale),
@@ -16,27 +18,48 @@ Application locale (FastAPI + JS vanilla) qui combine :
    bancaire standard sur les loyers prévisionnels) et export Word du dossier
    à présenter en banque.
 
-## Lancer en local
+## Lancer l'application
 
 ```bash
-cd backend
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
-uvicorn app.main:app
+python3 main.py
 ```
 
-Puis ouvrir http://localhost:8000
+Ouvre une **fenêtre native** (icône dans le dock, pas de navigateur) grâce à
+[pywebview](https://pywebview.flowrl.com/). Pour l'ouvrir dans un navigateur à
+la place (utile pour du débogage ou un accès à distance) :
 
-⚠️ Ne pas utiliser `--reload` : le rechargeur multiprocessing d'uvicorn plante
-sur certaines installations Python (erreur `ImportError: cannot import name
-'ASGIApplication'`). Relancer manuellement le process après une modification
-du code backend.
+```bash
+python3 main.py --web --port 8080
+```
 
 Les données de marché (DVF par département, indicateurs de loyers) sont
 téléchargées à la demande depuis data.gouv.fr et mises en cache dans
-`backend/app/data_cache/` (peut prendre quelques secondes au premier appel
-pour un département donné).
+`app/data_cache/` (peut prendre quelques secondes au premier appel pour un
+département donné).
+
+## Architecture
+
+Toute la logique métier (calculs financiers, fiscaux, appels aux API de
+marché, génération du Word) vit dans le package `app/`, sans aucune
+dépendance à une interface particulière — ce sont de simples fonctions/
+modèles Pydantic. L'interface (`gui/`, construite avec NiceGUI) ne fait
+qu'appeler ces fonctions et afficher le résultat ; elle pourrait être
+remplacée par une CLI, une API HTTP ou une autre UI sans toucher à `app/`.
+
+```
+app/                  Logique métier (inchangée quelle que soit l'UI)
+  schemas.py, finance.py, fiscalite.py, simulation.py, endettement.py,
+  dossier_export.py, market_data.py, notaire.py, listing_parser.py, utils.py
+gui/                 Interface NiceGUI
+  main.py             Page unique : construit l'UI et appelle `app/`
+  theme.py             Couleurs, police (Inter), composants stylés (cartes)
+  charts.py             Construction des options ECharts
+  state.py               Valeurs par défaut des formulaires
+main.py              Point d'entrée (fenêtre native par défaut, --web sinon)
+```
 
 ## Types de projet
 
@@ -172,31 +195,12 @@ comptable, avocat fiscaliste, CGP).
   percentiles des transactions trouvées, plus robustes que le min/max brut
   mais qui restent des estimations statistiques, pas une expertise.
 
-## Architecture
-
-```
-backend/
-  app/
-    main.py            FastAPI : /api/simulate, /api/market-study,
-                        /api/frais-notaire, /api/parse-listing,
-                        /api/endettement, /api/export-dossier-word
-    schemas.py          Modèles Pydantic (entrées, types de projet/structure)
-    finance.py           Emprunt (dont différé), TRI/VAN génériques
-    fiscalite.py          Barème IR, IS, régimes fiscaux locatifs
-    simulation.py          Moteur location (pluriannuel) + achat-revente
-    endettement.py           Taux d'endettement (dossier de financement)
-    dossier_export.py         Génération du dossier Word (python-docx)
-    market_data.py              Géocodage + DVF + loyers (téléchargement/cache)
-    notaire.py                   Calcul automatique des frais de notaire
-    listing_parser.py             Extraction best-effort depuis un lien d'annonce
-    utils.py                       Sérialisation JSON partagée (dataclasses)
-frontend/
-  index.html, static/app.js, static/style.css   SPA vanilla JS (aucun build)
-```
-
 ## Prochaines étapes possibles
 
-- Déploiement (Docker/Render/Railway) une fois le prototype validé.
+- Packaging en exécutable autonome par OS (`nicegui-pack`, basé sur PyInstaller)
+  pour distribuer l'app sans installation Python.
+- Déploiement web (le mode `--web` existant tourne déjà sur FastAPI/uvicorn en
+  interne) si un accès multi-utilisateurs à distance devient utile.
 - Comptes utilisateurs + sauvegarde de plusieurs projets.
 - Comparateur multi-biens.
 - Calcul IR précis du foyer (au lieu d'une TMI) si l'utilisateur fournit son

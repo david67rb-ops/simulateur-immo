@@ -2,18 +2,15 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "backend",
-      "runtimeExecutable": "/Users/davidlehmann/Documents/immo-rentabilite/backend/venv/bin/uvicorn",
+      "name": "app",
+      "runtimeExecutable": "/Users/davidlehmann/Documents/immo-rentabilite/venv/bin/python3",
       "runtimeArgs": [
-        "--app-dir",
-        "/Users/davidlehmann/Documents/immo-rentabilite/backend",
-        "app.main:app",
-        "--host",
-        "127.0.0.1",
+        "/Users/davidlehmann/Documents/immo-rentabilite/main.py",
+        "--web",
         "--port",
-        "8000"
+        "8080"
       ],
-      "port": 8000
+      "port": 8080
     }
   ]
 }
