@@ -96,7 +96,7 @@ def index_page() -> None:
         # 0. Type de projet
         # ---------------------------------------------------------------
         with theme.section_card():
-            ui.label("0. Type de projet").classes(theme.SECTION_TITLE_CLASSES)
+            ui.label("Type de projet").classes(theme.SECTION_TITLE_CLASSES)
             with ui.row().classes("w-full gap-4"):
                 type_projet_select = (
                     ui.select(TYPE_PROJET_OPTIONS, label="Type de projet", value=sim_state["type_projet"])
@@ -116,7 +116,7 @@ def index_page() -> None:
         # 1. Étude de marché
         # ---------------------------------------------------------------
         with theme.section_card():
-            ui.label("1. Étude de marché").classes(theme.SECTION_TITLE_CLASSES)
+            ui.label("Étude de marché").classes(theme.SECTION_TITLE_CLASSES)
             with ui.row().classes("w-full gap-3 items-end"):
                 listing_input = (
                     ui.input(
@@ -186,7 +186,7 @@ def index_page() -> None:
         # 2. Simulateur de rentabilité
         # ---------------------------------------------------------------
         with theme.section_card():
-            ui.label("2. Simulateur de rentabilité").classes(theme.SECTION_TITLE_CLASSES)
+            ui.label("Simulateur de rentabilité").classes(theme.SECTION_TITLE_CLASSES)
 
             # --- Le bien ---
             theme.subsection_title("Le bien")
@@ -389,7 +389,7 @@ def index_page() -> None:
         results_section = theme.section_card()
         results_section.visible = False
         with results_section:
-            ui.label("3. Résultats").classes(theme.SECTION_TITLE_CLASSES)
+            ui.label("Résultats").classes(theme.SECTION_TITLE_CLASSES)
 
             results_location = ui.column().classes("w-full gap-3")
             with results_location:
@@ -466,7 +466,7 @@ def index_page() -> None:
         # 4. Dossier de financement
         # ---------------------------------------------------------------
         with theme.section_card():
-            ui.label("4. Dossier de financement").classes(theme.SECTION_TITLE_CLASSES)
+            ui.label("Dossier de financement").classes(theme.SECTION_TITLE_CLASSES)
             ui.label(
                 "Calcule le taux d'endettement du foyer à partir de la simulation ci-dessus (§2) et "
                 "permet d'exporter un dossier Word pour la banque. Indépendant du calcul de rentabilité."

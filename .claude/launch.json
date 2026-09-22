@@ -2,10 +2,10 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "app",
-      "runtimeExecutable": "/Users/davidlehmann/Documents/immo-rentabilite/venv/bin/python3",
+      "name": "simulateur-immo",
+      "runtimeExecutable": "/Users/davidlehmann/Documents/Claude/immo-rentabilite/venv/bin/python3",
       "runtimeArgs": [
-        "/Users/davidlehmann/Documents/immo-rentabilite/main.py",
+        "/Users/davidlehmann/Documents/Claude/immo-rentabilite/main.py",
         "--web",
         "--port",
         "8080"
