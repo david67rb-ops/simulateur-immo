@@ -1095,7 +1095,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simulateur de rentabilité immobilière")
     parser.add_argument("--web", action="store_true", help="Lance dans le navigateur au lieu d'une fenêtre native")
     parser.add_argument("--port", type=int, default=None)
-    parser.add_argument("--host", type=str, default="0.0.0.0")
+    parser.add_argument("--host", type=str, default=None)
     args = parser.parse_args()
 
     # PORT est fourni par la plupart des hébergeurs (Render, Railway, Fly.io...) :
@@ -1104,13 +1104,18 @@ def main() -> None:
     is_hosted = env_port is not None
     web_mode = args.web or os.environ.get("IMMO_WEB_MODE") == "1" or is_hosted
     port = args.port or (int(env_port) if env_port else 8080)
+    # "0.0.0.0" est nécessaire pour écouter sur toutes les interfaces en
+    # hébergement web, mais une fenêtre native (pywebview) doit pointer sur
+    # "localhost" : 0.0.0.0 n'est pas une adresse valide à charger dans un
+    # navigateur/webview, ce qui donne un écran blanc.
+    host = args.host or ("0.0.0.0" if web_mode else "localhost")
 
     ui.run(
         title="Simulateur de rentabilité immobilière",
         native=not web_mode,
         window_size=(1180, 900) if not web_mode else None,
         reload=False,
-        host=args.host,
+        host=host,
         port=port,
         show=web_mode and not is_hosted,
         storage_secret=os.environ.get("IMMO_STORAGE_SECRET", "immo-rentabilite-local-dev"),
