@@ -14,7 +14,7 @@ import argparse
 import json
 import os
 
-from nicegui import ui
+from nicegui import app, ui
 
 from app import dossier_export, endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
 from app.utils import clean_result
@@ -1074,7 +1074,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
     btn_endettement.on_click(on_calc_endettement)
 
-    def on_export_word() -> None:
+    async def on_export_word() -> None:
         endettement_status.set_text("Génération du dossier…")
         try:
             inp = build_simulation_input(sim_state)
@@ -1085,8 +1085,28 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         except Exception as exc:  # noqa: BLE001
             endettement_status.set_text(f"Erreur : {exc}")
             return
-        ui.download(contenu, "dossier-financement.docx")
-        endettement_status.set_text("Dossier téléchargé.")
+
+        if app.native.main_window:
+            # En fenêtre native (pywebview), le téléchargement navigateur
+            # classique n'existe pas (le fichier n'atterrit nulle part côté
+            # utilisateur) : on passe par un vrai dialogue d'enregistrement.
+            import webview
+
+            chemins = await app.native.main_window.create_file_dialog(
+                dialog_type=webview.FileDialog.SAVE,
+                save_filename="dossier-financement.docx",
+                file_types=("Documents Word (*.docx)",),
+            )
+            chemin = chemins[0] if chemins else None
+            if not chemin:
+                endettement_status.set_text("Export annulé.")
+                return
+            with open(chemin, "wb") as f:
+                f.write(contenu)
+            endettement_status.set_text(f"Dossier enregistré : {chemin}")
+        else:
+            ui.download(contenu, "dossier-financement.docx")
+            endettement_status.set_text("Dossier téléchargé.")
 
     btn_export_word.on_click(on_export_word)
 
