@@ -1,0 +1,7 @@
+venv/
+__pycache__/
+*.pyc
+.git/
+.claude/
+app/data_cache/*.parquet
+.DS_Store

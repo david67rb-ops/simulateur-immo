@@ -1,22 +1,25 @@
 # Simulateur de rentabilité immobilière
 
-Application de bureau 100 % Python ([NiceGUI](https://nicegui.io), fenêtre
-native cross-platform Windows/Mac/Linux — plus de HTML/CSS/JS séparés) qui
-combine :
+Application 100 % Python ([NiceGUI](https://nicegui.io) — plus de HTML/CSS/JS
+séparés), utilisable en fenêtre de bureau native ou en application web
+hébergée. Deux parcours, choisis via un onglet en haut de la page :
 
-1. **Étude de marché automatique** : à partir d'une adresse (ou d'un lien
-   d'annonce), l'app géocode le bien (API Adresse / Base Adresse Nationale),
-   récupère les prix de vente comparables dans le secteur (DVF géolocalisé,
-   fourchette bas/moyen/haut) et le loyer de marché estimé pour la commune
-   (fourchette mini/moyen/maxi, "Carte des loyers" DHUP/ANIL).
-2. **Simulateur de rentabilité** : cash-flow prévisionnel, fiscalité détaillée
-   selon le **type de projet** (location longue durée, location courte durée,
-   achat-revente) et la **structure juridique** (personne physique, SCI à
-   l'IR, SCI à l'IS), différé de crédit (partiel/total), TRI et simulation de
-   revente/plus-value.
-3. **Dossier de financement** : taux d'endettement du foyer (pondération
-   bancaire standard sur les loyers prévisionnels) et export Word du dossier
-   à présenter en banque.
+- **Agent immobilier — estimation rapide** : adresse → prix/loyer de marché
+  (bas/moyen/haut), rien d'autre. Pensé pour une estimation en quelques
+  secondes, sans configuration.
+- **Particulier / investisseur** : parcours complet organisé en onglets qui
+  s'adaptent au **type de projet** choisi (location longue durée, location
+  courte durée, achat-revente) :
+  1. **Marché** : étude de marché automatique (géocodage, comparables DVF,
+     loyers DHUP/ANIL, extraction depuis un lien d'annonce).
+  2. **Financement** : caractéristiques du bien, frais de notaire automatiques,
+     emprunt (classique ou différé partiel/total), spécificités achat-revente.
+  3. **Exploitation** : loyers et charges (masqué en achat-revente).
+  4. **Fiscalité** : structure juridique (personne physique, SCI à l'IR, SCI à
+     l'IS), régime locatif, amortissement, projection, TRI et plus-value.
+  5. **Résultats** : cash-flow, comparatif des régimes, graphique, revente.
+  6. **Dossier de financement** : taux d'endettement du foyer et export Word
+     du dossier à présenter en banque.
 
 ## Lancer l'application
 
@@ -39,6 +42,42 @@ Les données de marché (DVF par département, indicateurs de loyers) sont
 téléchargées à la demande depuis data.gouv.fr et mises en cache dans
 `app/data_cache/` (peut prendre quelques secondes au premier appel pour un
 département donné).
+
+## Déployer en hébergement web
+
+L'app tourne sur FastAPI/uvicorn en interne (via NiceGUI), donc n'importe quel
+hébergeur Python/conteneur convient. Pas de compte utilisateur, pas de base de
+données — l'état de chaque simulation vit dans la session du navigateur de
+la personne qui l'utilise (rien n'est partagé entre visiteurs).
+
+**Avec Docker** (Render, Railway, Fly.io, un VPS...) :
+
+```bash
+docker build -t simulateur-immo .
+docker run -p 8080:8080 -e PORT=8080 simulateur-immo
+```
+
+Le `Dockerfile` utilise `requirements-server.txt` (sans `pywebview`, inutile
+et lourd à compiler en environnement Linux headless — réservé à l'usage
+bureau local avec `requirements.txt`).
+
+**Sans Docker**, sur un hébergeur qui détecte lui-même la commande de
+démarrage (Render "Web Service" sans Docker, par exemple) :
+
+- Build : `pip install -r requirements-server.txt`
+- Start : `python3 main.py --web`
+- La variable d'environnement `PORT` fournie par l'hébergeur est détectée
+  automatiquement (l'app écoute dessus, sur `0.0.0.0`).
+
+**Mise à jour** : il n'y a pas de mécanisme d'auto-update à gérer — un
+déploiement web se met à jour en redéployant (`git push` vers l'hébergeur, ou
+rebuild/redeploy de l'image Docker). Chaque redéploiement prend effet
+immédiatement pour tous les visiteurs.
+
+**Limite connue** : le cache DVF/loyers (`app/data_cache/`) est perdu à
+chaque redéploiement si le système de fichiers de l'hébergeur n'est pas
+persistant (cas fréquent des PaaS) — sans conséquence fonctionnelle, juste un
+re-téléchargement au prochain appel pour un département donné.
 
 ## Architecture
 
