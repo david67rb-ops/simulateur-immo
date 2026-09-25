@@ -91,9 +91,11 @@ def index_page() -> None:
                 "flat round dense"
             ).classes("absolute right-0")
             with ui.column().classes("items-center gap-0"):
-                ui.label("🏠 Simulateur de rentabilité & étude de marché").classes(
-                    "text-2xl font-bold text-center"
-                )
+                with ui.row().classes("items-center gap-2"):
+                    ui.html(theme.LOGO_SVG).classes("shrink-0")
+                    ui.label("Simulateur de rentabilité immobilier").classes(
+                        "text-2xl font-bold text-center"
+                    )
                 ui.label(
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
                 ).classes("text-sm text-gray-500 dark:text-gray-400 text-center")
@@ -276,6 +278,22 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         tab_resultats = ui.tab("Résultats")
         tab_dossier = ui.tab("Dossier")
 
+    tabs_ordre = [tab_marche, tab_financement, tab_exploitation, tab_fiscalite, tab_resultats, tab_dossier]
+
+    def _bouton_onglet_suivant(tab_actuel) -> None:
+        """Bouton de navigation générique : passe au prochain onglet visible
+        (saute p. ex. Exploitation, masqué en achat-revente)."""
+
+        def _aller_suivant() -> None:
+            idx = tabs_ordre.index(tab_actuel)
+            for suivant in tabs_ordre[idx + 1 :]:
+                if suivant.visible:
+                    tab_panels.set_value(suivant)
+                    return
+
+        with ui.row().classes("w-full justify-end mt-1"):
+            ui.button("Onglet suivant", icon="arrow_forward", on_click=_aller_suivant).props("outline")
+
     with ui.tab_panels(tabs, value=tab_marche).classes("w-full") as tab_panels:
         # -----------------------------------------------------------------
         # Onglet Marché
@@ -347,6 +365,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
                     market_note = ui.label("").classes(theme.HINT_CLASSES)
                     btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
+
+            _bouton_onglet_suivant(tab_marche)
 
         # -----------------------------------------------------------------
         # Onglet Financement (le bien + emprunt + spécifique achat-revente)
@@ -441,6 +461,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         ).bind_value(sim_state, "frais_agence_revente_pct").props("outlined dense").classes("w-full")
                 refs["fieldset_achat_revente"] = fieldset_achat_revente
 
+            _bouton_onglet_suivant(tab_financement)
+
         # -----------------------------------------------------------------
         # Onglet Exploitation
         # -----------------------------------------------------------------
@@ -497,6 +519,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             "Ménage/blanchisserie annuel (€)", value=sim_state["frais_menage_annuel"], min=0
                         ).bind_value(sim_state, "frais_menage_annuel").props("outlined dense").classes("w-full")
                 refs["fieldset_lcd"] = fieldset_lcd
+
+            _bouton_onglet_suivant(tab_exploitation)
 
         # -----------------------------------------------------------------
         # Onglet Fiscalité
@@ -651,6 +675,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     rows=[],
                     row_key="k",
                 ).props("hide-header").classes("w-full")
+
+            _bouton_onglet_suivant(tab_resultats)
 
         # -----------------------------------------------------------------
         # Onglet Dossier de financement

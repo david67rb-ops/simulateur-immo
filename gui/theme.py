@@ -10,6 +10,19 @@ ACCENT = "#c9822a"
 POSITIVE = "#1d6f5c"
 NEGATIVE = "#d1453b"
 
+# Logo : silhouette de maison + courbe ascendante (rentabilité), deux couleurs
+# de la palette de l'app. Badge à coins arrondis, dans l'esprit d'une icône
+# d'app moderne plutôt qu'un pictogramme emoji.
+LOGO_SVG = f"""
+<svg width="38" height="38" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo Simulateur de rentabilité immobilier">
+  <rect width="64" height="64" rx="16" fill="{PRIMARY}"/>
+  <path d="M32 13 L49 27.5 V47 H15 V27.5 Z" fill="#FFFFFF"/>
+  <rect x="27" y="35" width="10" height="12" fill="{PRIMARY}"/>
+  <polyline points="13,42 24,29 32,34 47,16" fill="none" stroke="{ACCENT}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
+  <polygon points="47,16 39,17.5 45.5,23" fill="{ACCENT}"/>
+</svg>
+""".strip()
+
 CARD_CLASSES = "w-full rounded-2xl shadow-sm border border-[#e3e5e8] dark:border-[#2c3036] p-5 md:p-6"
 SECTION_TITLE_CLASSES = "text-xl font-semibold mb-1"
 SUBSECTION_TITLE_CLASSES = "text-sm font-semibold uppercase tracking-wide text-[color:var(--primary-color)] mt-2 mb-1"
