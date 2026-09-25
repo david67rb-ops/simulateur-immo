@@ -276,9 +276,18 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         tab_exploitation = ui.tab("Exploitation")
         tab_fiscalite = ui.tab("Fiscalité")
         tab_resultats = ui.tab("Résultats")
+        tab_endettement = ui.tab("Taux d'endettement")
         tab_dossier = ui.tab("Dossier")
 
-    tabs_ordre = [tab_marche, tab_financement, tab_exploitation, tab_fiscalite, tab_resultats, tab_dossier]
+    tabs_ordre = [
+        tab_marche,
+        tab_financement,
+        tab_exploitation,
+        tab_fiscalite,
+        tab_resultats,
+        tab_endettement,
+        tab_dossier,
+    ]
 
     def _bouton_onglet_suivant(tab_actuel) -> None:
         """Bouton de navigation générique : passe au prochain onglet visible
@@ -679,23 +688,14 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             _bouton_onglet_suivant(tab_resultats)
 
         # -----------------------------------------------------------------
-        # Onglet Dossier de financement
+        # Onglet Taux d'endettement
         # -----------------------------------------------------------------
-        with ui.tab_panel(tab_dossier):
+        with ui.tab_panel(tab_endettement):
             with theme.section_card():
                 ui.label(
-                    "Calcule le taux d'endettement du foyer à partir de la simulation (onglets précédents) et "
-                    "permet d'exporter un dossier Word pour la banque. Indépendant du calcul de rentabilité."
+                    "Calcule le taux d'endettement du foyer à partir de la simulation (onglets précédents), "
+                    "indépendamment du calcul de rentabilité."
                 ).classes(theme.HINT_CLASSES + " mb-2")
-
-                with ui.row().classes(theme.GRID_CLASSES):
-                    ui.input(
-                        "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
-                    ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
-                    ui.input(
-                        "Adresse du bien (optionnel, sinon reprise de l'analyse de marché)",
-                        value=dossier_meta_state["adresse_bien"],
-                    ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
 
                 with ui.row().classes(theme.GRID_CLASSES):
                     ui.number(
@@ -712,7 +712,6 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
                 with ui.row().classes("gap-3 mt-3"):
                     btn_endettement = ui.button("Calculer le taux d'endettement").props("unelevated")
-                    btn_export_word = ui.button("Télécharger le dossier (Word)").props("outline")
                 endettement_status = ui.label("").classes(theme.HINT_CLASSES)
 
                 endettement_results = ui.column().classes("w-full gap-2 mt-2")
@@ -724,6 +723,46 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         v_end_taux = theme.stat_card("Taux d'endettement")
                         v_end_statut = theme.stat_card("Statut")
                     end_marge_label = ui.label("").classes(theme.HINT_CLASSES)
+
+            _bouton_onglet_suivant(tab_endettement)
+
+        # -----------------------------------------------------------------
+        # Onglet Dossier de financement
+        # -----------------------------------------------------------------
+        with ui.tab_panel(tab_dossier):
+            with theme.section_card():
+                ui.label(
+                    "Génère un dossier Word pour la banque à partir de la simulation. Commence par générer un "
+                    "aperçu pour vérifier les chiffres, puis télécharge le document."
+                ).classes(theme.HINT_CLASSES + " mb-2")
+
+                with ui.row().classes(theme.GRID_CLASSES):
+                    ui.input(
+                        "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
+                    ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
+                    ui.input(
+                        "Adresse du bien (optionnel, sinon reprise de l'analyse de marché)",
+                        value=dossier_meta_state["adresse_bien"],
+                    ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
+
+                with ui.row().classes("gap-3 mt-3"):
+                    btn_generer_dossier = ui.button("Générer l'aperçu du dossier").props("unelevated")
+                    btn_telecharger_dossier = ui.button("Télécharger le dossier (Word)").props("outline")
+                    btn_telecharger_dossier.visible = False
+                dossier_status = ui.label("").classes(theme.HINT_CLASSES)
+
+                apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
+                apercu_dossier.visible = False
+                with apercu_dossier:
+                    theme.subsection_title("Aperçu des données du dossier")
+                    table_apercu_dossier = ui.table(
+                        columns=[
+                            {"name": "k", "label": "", "field": "k", "align": "left"},
+                            {"name": "v", "label": "", "field": "v", "align": "left"},
+                        ],
+                        rows=[],
+                        row_key="k",
+                    ).props("hide-header").classes("w-full")
 
     # =====================================================================
     # Logique : visibilité dynamique (champs + onglets) selon le projet
@@ -1126,8 +1165,77 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
     btn_endettement.on_click(on_calc_endettement)
 
-    async def on_export_word() -> None:
-        endettement_status.set_text("Génération du dossier…")
+    # =====================================================================
+    # Logique : dossier Word (aperçu des données, puis téléchargement)
+    # =====================================================================
+    def _construire_apercu_dossier(inp, resultat, profil) -> list[tuple[str, str]]:
+        lignes = [
+            ("Type de projet", TYPE_PROJET_OPTIONS.get(inp.type_projet.value, inp.type_projet.value)),
+            ("Structure juridique", STRUCTURE_OPTIONS.get(inp.structure_juridique.value, inp.structure_juridique.value)),
+        ]
+        if inp.type_projet == schemas.TypeProjet.achat_revente:
+            ar = resultat["achat_revente"]
+            lignes += [
+                ("Coût total de l'opération", eur(ar["cout_total_acquisition"])),
+                ("Apport personnel", eur(ar["apport_reel"])),
+                ("Montant emprunté", eur(ar["montant_emprunte"])),
+                ("Marge nette prévisionnelle", eur(ar["marge_nette"])),
+                ("Rentabilité de l'opération", pct(ar["rentabilite_operation_pct"])),
+            ]
+            mensualite_projet = ar["frais_portage_interets"] / inp.duree_portage_mois
+            loyers_mensuels = 0.0
+        else:
+            annee1 = resultat["annees"][0]
+            meilleur = max(annee1["cashflow_apres_impot"], key=annee1["cashflow_apres_impot"].get)
+            lignes += [
+                ("Coût total de l'opération", eur(resultat.get("cout_total_acquisition", 0))),
+                ("Apport personnel", eur(resultat.get("apport_reel", 0))),
+                ("Montant emprunté", eur(resultat.get("montant_emprunte", 0))),
+                ("Régime fiscal le plus favorable (année 1)", meilleur),
+                ("Cash-flow net mensuel (ce régime)", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),
+                ("Rendement brut", pct(resultat.get("rendement_brut", 0))),
+            ]
+            mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
+            loyers_mensuels = annee1["loyers_bruts"] / 12
+
+        if profil is not None:
+            r = endet_mod.calculer_taux_endettement(
+                profil.revenus_nets_mensuels_foyer,
+                profil.autres_revenus_mensuels,
+                profil.mensualites_credits_existants,
+                mensualite_projet,
+                loyers_mensuels,
+            )
+            lignes.append(
+                (
+                    "Taux d'endettement",
+                    pct(r.taux_endettement, 1) + (" ⚠️ dépasse le seuil HCSF" if r.depasse_seuil else " (sous le seuil HCSF)"),
+                )
+            )
+        return lignes
+
+    def on_generer_apercu() -> None:
+        dossier_status.set_text("Génération de l'aperçu…")
+        try:
+            inp = build_simulation_input(sim_state)
+            resultat = clean_result(simulation.simuler(inp))
+            profil_rempli = any(v for v in profil_state.values())
+            profil = schemas.ProfilEmprunteurInput(**profil_state) if profil_rempli else None
+            lignes = _construire_apercu_dossier(inp, resultat, profil)
+        except Exception as exc:  # noqa: BLE001
+            dossier_status.set_text(f"Erreur : {exc}")
+            return
+
+        table_apercu_dossier.rows = [{"k": k, "v": v} for k, v in lignes]
+        table_apercu_dossier.update()
+        apercu_dossier.visible = True
+        btn_telecharger_dossier.visible = True
+        dossier_status.set_text("Aperçu généré — vérifie les chiffres ci-dessous puis télécharge le dossier.")
+
+    btn_generer_dossier.on_click(on_generer_apercu)
+
+    async def on_telecharger_dossier() -> None:
+        dossier_status.set_text("Génération du dossier Word…")
         try:
             # Importé ici plutôt qu'au démarrage : entraîne matplotlib (via
             # app.charts_export), coûteux à charger et inutile tant qu'aucun
@@ -1144,7 +1252,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             )
             contenu = dossier_export.generer_dossier_word(payload)
         except Exception as exc:  # noqa: BLE001
-            endettement_status.set_text(f"Erreur : {exc}")
+            dossier_status.set_text(f"Erreur : {exc}")
             return
 
         if app.native.main_window:
@@ -1160,16 +1268,16 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             )
             chemin = chemins[0] if chemins else None
             if not chemin:
-                endettement_status.set_text("Export annulé.")
+                dossier_status.set_text("Export annulé.")
                 return
             with open(chemin, "wb") as f:
                 f.write(contenu)
-            endettement_status.set_text(f"Dossier enregistré : {chemin}")
+            dossier_status.set_text(f"Dossier enregistré : {chemin}")
         else:
             ui.download(contenu, "dossier-financement.docx")
-            endettement_status.set_text("Dossier téléchargé.")
+            dossier_status.set_text("Dossier téléchargé.")
 
-    btn_export_word.on_click(on_export_word)
+    btn_telecharger_dossier.on_click(on_telecharger_dossier)
 
 
 def main() -> None:
