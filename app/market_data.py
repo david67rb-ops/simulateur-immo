@@ -215,7 +215,7 @@ async def loyer_marche(code_insee: str, type_bien: str) -> dict | None:
 #   commune, faute de signal disponible sur l'attractivité touristique réelle).
 # À ajuster impérativement selon la zone (littoral/montagne/grande ville vs
 # secteur peu touristique).
-MULTIPLICATEUR_NUITEE = 2.0
+MULTIPLICATEUR_NUITEE = 3.0
 TAUX_OCCUPATION_ESTIME = {"bas": 0.35, "moyen": 0.50, "haut": 0.65}
 
 
