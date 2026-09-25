@@ -203,3 +203,34 @@ async def loyer_marche(code_insee: str, type_bien: str) -> dict | None:
         "nb_observations_commune": int(row["nbobs_com"]),
         "fiabilite_r2": round(float(row["R2_adj"]), 2),
     }
+
+
+# Aucune source ouverte fiable (équivalent DVF/DHUP) n'existe pour les tarifs
+# et taux d'occupation des meublés de tourisme par commune. On dérive un
+# ordre de grandeur à partir du loyer nu de la zone (donnée réelle DHUP) :
+# - prix/nuitée = loyer nu ramené à la journée × un multiplicateur usuel
+#   (une location à la nuitée se facture historiquement plus cher au
+#   prorata qu'une location nue, pour compenser vacance/ménage/services) ;
+# - taux d'occupation = hypothèse nationale générique (indépendante de la
+#   commune, faute de signal disponible sur l'attractivité touristique réelle).
+# À ajuster impérativement selon la zone (littoral/montagne/grande ville vs
+# secteur peu touristique).
+MULTIPLICATEUR_NUITEE = 2.0
+TAUX_OCCUPATION_ESTIME = {"bas": 0.35, "moyen": 0.50, "haut": 0.65}
+
+
+def estimer_nuitee_et_occupation(loyer: dict | None, surface_m2: float) -> dict | None:
+    """Estimation pédagogique du prix/nuitée et du taux d'occupation pour une
+    location courte durée, à partir du loyer nu de marché (voir note
+    ci-dessus). Renvoie None si aucun loyer de référence n'est disponible."""
+    if not loyer or not surface_m2:
+        return None
+    resultat: dict[str, float] = {}
+    for niveau, cle in (("bas", "loyer_m2_bas"), ("moyen", "loyer_m2_moyen"), ("haut", "loyer_m2_haut")):
+        loyer_m2 = loyer.get(cle)
+        if not loyer_m2:
+            continue
+        loyer_mensuel = loyer_m2 * surface_m2
+        resultat[f"prix_nuitee_{niveau}"] = round((loyer_mensuel / 30) * MULTIPLICATEUR_NUITEE, 0)
+        resultat[f"taux_occupation_{niveau}"] = TAUX_OCCUPATION_ESTIME[niveau]
+    return resultat or None

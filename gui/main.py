@@ -372,6 +372,25 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             v_fiabilite = theme.stat_card("Fiabilité (R²)")
                     refs["ms_loyer_block"] = loyer_block
 
+                    nuitee_block = ui.column().classes("w-full gap-2")
+                    with nuitee_block:
+                        ui.label("Location courte durée — estimation (secteur / commune)").classes(
+                            theme.SUBSECTION_TITLE_CLASSES
+                        )
+                        ui.label(
+                            "Dérivée du loyer nu de la zone, faute de donnée ouverte sur les tarifs Airbnb : "
+                            "à ajuster selon l'attractivité touristique réelle."
+                        ).classes(theme.HINT_CLASSES)
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            v_nuitee_bas = theme.stat_card("Prix/nuitée mini")
+                            v_nuitee_moyen = theme.stat_card("Prix/nuitée moyen")
+                            v_nuitee_haut = theme.stat_card("Prix/nuitée maxi")
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            v_occupation_bas = theme.stat_card("Taux d'occupation mini")
+                            v_occupation_moyen = theme.stat_card("Taux d'occupation moyen")
+                            v_occupation_haut = theme.stat_card("Taux d'occupation maxi")
+                    refs["ms_nuitee_block"] = nuitee_block
+
                     market_note = ui.label("").classes(theme.HINT_CLASSES)
                     btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
 
@@ -809,7 +828,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         refs["field_mobilier"].visible = not is_achat_revente and is_meublee
         refs["field_differe_duree"].visible = not is_achat_revente and differe_type != "aucun"
 
-        refs["ms_loyer_block"].visible = type_projet != "achat_revente"
+        refs["ms_loyer_block"].visible = type_projet == "location_longue_duree"
+        refs["ms_nuitee_block"].visible = type_projet == "location_courte_duree"
 
         note = ""
         if is_lcd and structure == "sci_ir":
@@ -917,30 +937,30 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         except Exception as exc:  # noqa: BLE001
             comparables = {"erreur": str(exc)}
 
+        is_lcd = sim_state["type_projet"] == "location_courte_duree"
         loyer = None
-        avertissement_loyer = None
         if sim_state["type_projet"] != "achat_revente":
             try:
                 loyer = await market_data.loyer_marche(geo["code_insee"], market_state["type_bien"])
             except Exception as exc:  # noqa: BLE001
                 loyer = {"erreur": str(exc)}
-            if sim_state["type_projet"] == "location_courte_duree":
-                avertissement_loyer = (
-                    "Indicateur basé sur la location longue durée (aucune donnée ouverte fiable sur les "
-                    "loyers courte durée/Airbnb) : à utiliser comme plancher."
-                )
 
         surface = market_state.get("surface_m2") or 0
         loyer_mensuel_estime = None
         prix_marche_estime = None
+        nuitee = None
         if surface and loyer and loyer.get("loyer_m2_moyen"):
             loyer_mensuel_estime = round(loyer["loyer_m2_moyen"] * surface)
+            if is_lcd:
+                nuitee = market_data.estimer_nuitee_et_occupation(loyer, surface)
         if surface and comparables and comparables.get("prix_m2_moyen"):
             prix_marche_estime = round(comparables["prix_m2_moyen"] * surface)
 
         ctx["last_market_result"] = {
             "loyer_mensuel_estime": loyer_mensuel_estime,
             "prix_marche_estime": prix_marche_estime,
+            "prix_nuitee_estime": (nuitee or {}).get("prix_nuitee_moyen"),
+            "taux_occupation_estime": (nuitee or {}).get("taux_occupation_moyen"),
         }
 
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
@@ -953,18 +973,27 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         v_nb_trans.set_text(str(comparables.get("nb_transactions") or 0))
 
         loyer = loyer or {}
-        v_loyer_bas.set_text(f"{loyer['loyer_m2_bas']:.2f} €/m²" if loyer.get("loyer_m2_bas") else "–")
-        v_loyer_moyen.set_text(f"{loyer['loyer_m2_moyen']:.2f} €/m²" if loyer.get("loyer_m2_moyen") else "Non disponible")
-        v_loyer_haut.set_text(f"{loyer['loyer_m2_haut']:.2f} €/m²" if loyer.get("loyer_m2_haut") else "–")
-        v_fiabilite.set_text(str(loyer.get("fiabilite_r2", "–")))
+        nuitee = nuitee or {}
+        if is_lcd:
+            v_nuitee_bas.set_text(eur(nuitee["prix_nuitee_bas"]) if nuitee.get("prix_nuitee_bas") else "–")
+            v_nuitee_moyen.set_text(eur(nuitee["prix_nuitee_moyen"]) if nuitee.get("prix_nuitee_moyen") else "Non disponible")
+            v_nuitee_haut.set_text(eur(nuitee["prix_nuitee_haut"]) if nuitee.get("prix_nuitee_haut") else "–")
+            v_occupation_bas.set_text(pct(nuitee["taux_occupation_bas"]) if nuitee.get("taux_occupation_bas") else "–")
+            v_occupation_moyen.set_text(pct(nuitee["taux_occupation_moyen"]) if nuitee.get("taux_occupation_moyen") else "–")
+            v_occupation_haut.set_text(pct(nuitee["taux_occupation_haut"]) if nuitee.get("taux_occupation_haut") else "–")
+        else:
+            v_loyer_bas.set_text(f"{loyer['loyer_m2_bas']:.2f} €/m²" if loyer.get("loyer_m2_bas") else "–")
+            v_loyer_moyen.set_text(f"{loyer['loyer_m2_moyen']:.2f} €/m²" if loyer.get("loyer_m2_moyen") else "Non disponible")
+            v_loyer_haut.set_text(f"{loyer['loyer_m2_haut']:.2f} €/m²" if loyer.get("loyer_m2_haut") else "–")
+            v_fiabilite.set_text(str(loyer.get("fiabilite_r2", "–")))
 
         note = ""
-        if loyer.get("nb_observations_commune") is not None and loyer["nb_observations_commune"] < 30:
+        if not is_lcd and loyer.get("nb_observations_commune") is not None and loyer["nb_observations_commune"] < 30:
             note += "⚠️ Peu d'observations pour cette commune : indicateur de loyer peu fiable. "
         if not comparables.get("nb_transactions"):
             note += "⚠️ Aucune transaction DVF trouvée dans ce rayon/commune pour ce type de bien. "
-        if avertissement_loyer:
-            note += "⚠️ " + avertissement_loyer
+        if is_lcd and nuitee:
+            note += "⚠️ Prix/nuitée et occupation estimés à partir du loyer nu, faute de donnée ouverte sur les tarifs Airbnb — à ajuster selon l'attractivité touristique réelle de la zone."
         market_note.set_text(note)
 
         market_results.visible = True
@@ -981,7 +1010,14 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             sim_state["prix_achat"] = result["prix_marche_estime"]
             prix_achat_input.set_value(sim_state["prix_achat"])
             recalc_notaire()
-        if result.get("loyer_mensuel_estime") and sim_state["type_projet"] != "location_courte_duree":
+        if sim_state["type_projet"] == "location_courte_duree":
+            if result.get("prix_nuitee_estime"):
+                sim_state["prix_nuitee"] = result["prix_nuitee_estime"]
+                field_prix_nuitee.set_value(sim_state["prix_nuitee"])
+            if result.get("taux_occupation_estime"):
+                sim_state["taux_occupation_pct"] = result["taux_occupation_estime"] * 100
+                field_taux_occupation.set_value(sim_state["taux_occupation_pct"])
+        elif result.get("loyer_mensuel_estime"):
             sim_state["loyer_mensuel_hors_charges"] = result["loyer_mensuel_estime"]
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
         ui.notify("Valeurs de marché appliquées dans l'onglet Financement.", type="positive")
@@ -1172,6 +1208,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         lignes = [
             ("Type de projet", TYPE_PROJET_OPTIONS.get(inp.type_projet.value, inp.type_projet.value)),
             ("Structure juridique", STRUCTURE_OPTIONS.get(inp.structure_juridique.value, inp.structure_juridique.value)),
+            ("Prix d'achat", eur(inp.prix_achat)),
+            ("Frais de notaire", eur(inp.frais_notaire)),
             ("Montant des travaux", eur(inp.montant_travaux)),
         ]
         if inp.type_projet == schemas.TypeProjet.achat_revente:
