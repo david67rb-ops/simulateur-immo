@@ -1229,12 +1229,19 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             annee1 = resultat["annees"][0]
             meilleur = max(annee1["cashflow_apres_impot"], key=annee1["cashflow_apres_impot"].get)
             mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
+            loyers_mensuels_apercu = annee1["loyers_bruts"] / 12
+            label_loyer = (
+                "Chiffre d'affaires mensuel"
+                if inp.type_projet == schemas.TypeProjet.location_courte_duree
+                else "Loyer appliqué (mensuel)"
+            )
             lignes += [
                 ("Coût total de l'opération", eur(resultat.get("cout_total_acquisition", 0))),
                 ("Apport personnel", eur(resultat.get("apport_reel", 0))),
                 ("Montant emprunté", eur(resultat.get("montant_emprunte", 0))),
                 ("Taux du crédit", pct(inp.taux_credit_annuel)),
                 ("Mensualité du crédit", eur(mensualite_projet) + "/mois"),
+                (label_loyer, eur(loyers_mensuels_apercu) + "/mois"),
                 ("Régime fiscal le plus favorable", meilleur),
                 ("Cash-flow net mensuel", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),
                 ("Rendement brut", pct(resultat.get("rendement_brut", 0))),
