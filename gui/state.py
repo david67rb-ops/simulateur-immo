@@ -44,6 +44,8 @@ def default_sim_state() -> dict:
         "entretien_annuel": 300.0,
         "frais_comptable_annuel": 0.0,
         # Location courte durée
+        "prix_nuitee": 80.0,
+        "taux_occupation_pct": 50.0,
         "meuble_tourisme_classe": True,
         "frais_plateforme_pct": 3.0,
         "frais_menage_annuel": 0.0,
@@ -75,6 +77,13 @@ def default_profil_state() -> dict:
     }
 
 
+def default_dossier_meta_state() -> dict:
+    return {
+        "nom_emprunteur": "",
+        "adresse_bien": "",
+    }
+
+
 PERCENT_FIELDS = [
     "taux_credit_annuel",
     "taux_assurance_emprunteur",
@@ -85,4 +94,5 @@ PERCENT_FIELDS = [
     "taux_revalorisation_loyers_annuel",
     "frais_plateforme_pct",
     "frais_agence_revente_pct",
+    "taux_occupation_pct",
 ]

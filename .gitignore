@@ -3,3 +3,10 @@ __pycache__/
 *.pyc
 app/data_cache/*.parquet
 .DS_Store
+
+# Artefacts de build de l'app macOS (voir build_macos_app.sh) : générés à la
+# demande, volumineux, ne pas versionner.
+*.spec
+build/
+dist/
+Simulateur Immobilier.app/

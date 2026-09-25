@@ -14,14 +14,20 @@ import argparse
 import json
 import os
 
-from nicegui import app, ui
+from nicegui import app, native, ui
 
-from app import dossier_export, endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
+from app import endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
 from app.utils import clean_result
 
 from . import theme
 from .charts import cashflow_chart_option
-from .state import PERCENT_FIELDS, default_market_state, default_profil_state, default_sim_state
+from .state import (
+    PERCENT_FIELDS,
+    default_dossier_meta_state,
+    default_market_state,
+    default_profil_state,
+    default_sim_state,
+)
 
 TYPE_PROJET_OPTIONS = {
     "location_longue_duree": "Location longue durée",
@@ -239,6 +245,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     market_state = default_market_state()
     sim_state = default_sim_state()
     profil_state = default_profil_state()
+    dossier_meta_state = default_dossier_meta_state()
     ctx = {"last_market_result": None}
     refs: dict[str, ui.element] = {}
 
@@ -445,6 +452,14 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         "Loyer mensuel hors charges (€)", value=sim_state["loyer_mensuel_hors_charges"], min=0
                     ).bind_value(sim_state, "loyer_mensuel_hors_charges").props("outlined dense").classes("w-full")
                     refs["field_loyer"] = field_loyer
+                    field_prix_nuitee = ui.number(
+                        "Prix moyen par nuitée (€)", value=sim_state["prix_nuitee"], min=0
+                    ).bind_value(sim_state, "prix_nuitee").props("outlined dense").classes("w-full")
+                    refs["field_prix_nuitee"] = field_prix_nuitee
+                    field_taux_occupation = ui.number(
+                        "Taux d'occupation annuel (%)", value=sim_state["taux_occupation_pct"], min=0, max=100
+                    ).bind_value(sim_state, "taux_occupation_pct").props("outlined dense").classes("w-full")
+                    refs["field_taux_occupation"] = field_taux_occupation
                     field_charges_copro = ui.number(
                         "Charges copropriété/an (€)", value=sim_state["charges_copropriete_annuelles"], min=0
                     ).bind_value(sim_state, "charges_copropriete_annuelles").props("outlined dense").classes("w-full")
@@ -648,6 +663,15 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 ).classes(theme.HINT_CLASSES + " mb-2")
 
                 with ui.row().classes(theme.GRID_CLASSES):
+                    ui.input(
+                        "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
+                    ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
+                    ui.input(
+                        "Adresse du bien (optionnel, sinon reprise de l'analyse de marché)",
+                        value=dossier_meta_state["adresse_bien"],
+                    ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
+
+                with ui.row().classes(theme.GRID_CLASSES):
                     ui.number(
                         "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
                     ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes("w-full")
@@ -703,10 +727,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         refs["field_marchand_pro"].visible = is_achat_revente
 
         for key in (
-            "field_loyer",
             "field_charges_copro",
             "field_frais_gestion",
-            "field_vacance",
             "field_entretien",
             "field_duree_credit",
             "field_duree_projection",
@@ -714,6 +736,10 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             "field_differe_type",
         ):
             refs[key].visible = not is_achat_revente
+        refs["field_loyer"].visible = not is_achat_revente and not is_lcd
+        refs["field_vacance"].visible = not is_achat_revente and not is_lcd
+        refs["field_prix_nuitee"].visible = is_lcd
+        refs["field_taux_occupation"].visible = is_lcd
         refs["field_frais_comptable"].visible = not is_achat_revente and (is_meublee or is_sci_is)
         refs["field_mobilier"].visible = not is_achat_revente and is_meublee
         refs["field_differe_duree"].visible = not is_achat_revente and differe_type != "aucun"
@@ -890,7 +916,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             sim_state["prix_achat"] = result["prix_marche_estime"]
             prix_achat_input.set_value(sim_state["prix_achat"])
             recalc_notaire()
-        if result.get("loyer_mensuel_estime"):
+        if result.get("loyer_mensuel_estime") and sim_state["type_projet"] != "location_courte_duree":
             sim_state["loyer_mensuel_hors_charges"] = result["loyer_mensuel_estime"]
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
         ui.notify("Valeurs de marché appliquées dans l'onglet Financement.", type="positive")
@@ -1077,10 +1103,19 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     async def on_export_word() -> None:
         endettement_status.set_text("Génération du dossier…")
         try:
+            # Importé ici plutôt qu'au démarrage : entraîne matplotlib (via
+            # app.charts_export), coûteux à charger et inutile tant qu'aucun
+            # dossier Word n'est généré.
+            from app import dossier_export
+
             inp = build_simulation_input(sim_state)
             profil_rempli = any(v for v in profil_state.values())
             profil = schemas.ProfilEmprunteurInput(**profil_state) if profil_rempli else None
-            payload = schemas.ExportDossierInput(simulation=inp, profil=profil)
+            nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
+            adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
+            payload = schemas.ExportDossierInput(
+                simulation=inp, profil=profil, nom_emprunteur=nom_emprunteur, adresse_bien=adresse_bien
+            )
             contenu = dossier_export.generer_dossier_word(payload)
         except Exception as exc:  # noqa: BLE001
             endettement_status.set_text(f"Erreur : {exc}")
@@ -1123,7 +1158,16 @@ def main() -> None:
     env_port = os.environ.get("PORT")
     is_hosted = env_port is not None
     web_mode = args.web or os.environ.get("IMMO_WEB_MODE") == "1" or is_hosted
-    port = args.port or (int(env_port) if env_port else 8080)
+    # En natif, un port fixe peut être déjà pris par une autre instance ou un
+    # autre logiciel sur la machine de l'utilisateur : on en choisit un libre.
+    if args.port:
+        port = args.port
+    elif env_port:
+        port = int(env_port)
+    elif web_mode:
+        port = 8080
+    else:
+        port = native.find_open_port()
     # "0.0.0.0" est nécessaire pour écouter sur toutes les interfaces en
     # hébergement web, mais une fenêtre native (pywebview) doit pointer sur
     # "localhost" : 0.0.0.0 n'est pas une adresse valide à charger dans un

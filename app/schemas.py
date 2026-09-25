@@ -56,7 +56,9 @@ class SimulationInput(BaseModel):
     differe_duree_mois: int = Field(default=0, ge=0, le=60)
 
     # --- Exploitation (location longue/courte durée) ---
-    loyer_mensuel_hors_charges: float = Field(default=0, ge=0)
+    loyer_mensuel_hors_charges: float = Field(
+        default=0, ge=0, description="Location longue durée uniquement (courte durée : prix_nuitee + taux_occupation_pct)"
+    )
     charges_copropriete_annuelles: float = Field(default=0, ge=0)
     charges_recuperables_annuelles: float = Field(
         default=0, ge=0, description="Charges refacturées au locataire (souvent neutres)"
@@ -73,6 +75,10 @@ class SimulationInput(BaseModel):
     )
 
     # --- Spécifique location courte durée ---
+    prix_nuitee: float = Field(default=0, ge=0, description="Prix moyen par nuitée (location courte durée)")
+    taux_occupation_pct: float = Field(
+        default=0.5, ge=0, le=1, description="Taux d'occupation annuel moyen (location courte durée)"
+    )
     meuble_tourisme_classe: bool = Field(
         default=True, description="Classé (abattement micro-BIC 50 %) sinon non classé (30 %, plafond réduit)"
     )
@@ -140,3 +146,5 @@ class EndettementInput(BaseModel):
 class ExportDossierInput(BaseModel):
     simulation: SimulationInput
     profil: ProfilEmprunteurInput | None = None
+    nom_emprunteur: str | None = None
+    adresse_bien: str | None = None

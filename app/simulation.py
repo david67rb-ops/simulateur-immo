@@ -166,14 +166,18 @@ def _simuler_location(inp: SimulationInput) -> dict:
     annees: list[AnneeResultat] = []
     cashflows_par_regime: dict[str, list[float]] = {r: [-apport_reel] for r in regimes_a_calculer}
 
+    # En courte durée, le loyer se pilote par prix/nuitée x taux d'occupation
+    # (plus fiable à estimer qu'un loyer mensuel) ; la vacance locative n'a
+    # alors plus de sens, l'occupation en tient déjà lieu.
+    loyer_annuel_base = (
+        inp.prix_nuitee * 365 * inp.taux_occupation_pct
+        if is_lcd
+        else inp.loyer_mensuel_hors_charges * 12 * (1 - inp.vacance_locative_pct)
+    )
+
     n = inp.duree_projection_annees
     for annee in range(1, n + 1):
-        loyers_bruts = (
-            inp.loyer_mensuel_hors_charges
-            * 12
-            * (1 - inp.vacance_locative_pct)
-            * (1 + inp.taux_revalorisation_loyers_annuel) ** (annee - 1)
-        )
+        loyers_bruts = loyer_annuel_base * (1 + inp.taux_revalorisation_loyers_annuel) ** (annee - 1)
         charges_hors_credit = _charges_hors_credit(inp, loyers_bruts, is_meublee)
         ly = loan_by_year.get(annee)
         interets = ly.interets if ly else 0.0
@@ -362,11 +366,10 @@ def _simuler_location(inp: SimulationInput) -> dict:
 
     tri_par_regime = {r: irr(cfs) for r, cfs in cashflows_par_regime.items()}
 
-    rendement_brut = (inp.loyer_mensuel_hors_charges * 12) / cout_total_acquisition
+    loyer_annuel_nominal = loyer_annuel_base if is_lcd else inp.loyer_mensuel_hors_charges * 12
+    rendement_brut = loyer_annuel_nominal / cout_total_acquisition
     charges_an1 = annees[0].charges_hors_credit
-    rendement_net_charges = (
-        (inp.loyer_mensuel_hors_charges * 12 - charges_an1) / cout_total_acquisition
-    )
+    rendement_net_charges = (loyer_annuel_nominal - charges_an1) / cout_total_acquisition
 
     avertissements = []
     if is_lcd and inp.structure_juridique == StructureJuridique.sci_ir:

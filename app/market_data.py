@@ -12,13 +12,22 @@ from __future__ import annotations
 import gzip
 import io
 import math
+import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import httpx
-import pandas as pd
 
-CACHE_DIR = Path(__file__).parent / "data_cache"
-CACHE_DIR.mkdir(exist_ok=True)
+if TYPE_CHECKING:
+    import pandas as pd
+
+if getattr(sys, "frozen", False):
+    # Application packagée (PyInstaller) : le dossier de l'app est en lecture
+    # seule (ex. /Applications), le cache doit vivre dans le profil utilisateur.
+    CACHE_DIR = Path.home() / "Library" / "Application Support" / "Simulateur Immobilier" / "data_cache"
+else:
+    CACHE_DIR = Path(__file__).parent / "data_cache"
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 GEOCODE_URL = "https://api-adresse.data.gouv.fr/search/"
 DVF_URL_TEMPLATE = "https://files.data.gouv.fr/geo-dvf/latest/csv/{annee}/departements/{dept}.csv.gz"
@@ -61,6 +70,8 @@ def _dvf_cache_path(dept: str, annee: int) -> Path:
 
 
 async def _charger_dvf_departement(dept: str, annee: int) -> pd.DataFrame:
+    import pandas as pd
+
     cache_path = _dvf_cache_path(dept, annee)
     if cache_path.exists():
         return pd.read_parquet(cache_path)
@@ -108,6 +119,8 @@ def _haversine_m(lat1, lon1, lat2, lon2):
 async def comparables_dvf(
     code_insee: str, code_departement: str, lat: float, lon: float, type_local: str, rayon_m: int
 ) -> dict:
+    import pandas as pd
+
     type_local_dvf = "Appartement" if type_local == "appartement" else "Maison"
     frames = []
     for annee in DVF_ANNEES:
@@ -156,6 +169,8 @@ async def comparables_dvf(
 
 
 async def _charger_loyers(type_bien: str) -> pd.DataFrame:
+    import pandas as pd
+
     cache_path = CACHE_DIR / f"loyers_{type_bien}.parquet"
     if cache_path.exists():
         return pd.read_parquet(cache_path)

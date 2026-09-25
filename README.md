@@ -23,6 +23,29 @@ hébergée. Deux parcours, choisis via un onglet en haut de la page :
 
 ## Lancer l'application
 
+### Au quotidien (macOS) : double-clic
+
+Une vraie application macOS autonome est disponible : **`Simulateur
+Immobilier.app`**, à la racine du projet. Aucune installation de Python ou de
+dépendances n'est nécessaire pour l'utiliser — double-clic, ou glisse-la dans
+le dossier Applications / le Dock.
+
+Premier lancement uniquement : macOS affichera un avertissement (application
+non signée par un développeur identifié apple). Fais un clic droit sur l'app
+> *Ouvrir*, puis confirme — à faire une seule fois.
+
+Pour reconstruire cette application après une modification du code :
+
+```bash
+./build_macos_app.sh
+```
+
+(nécessite l'environnement de développement ci-dessous ; installe
+automatiquement PyInstaller si besoin. Voir la note technique en tête du
+script sur la construction hors du dossier iCloud du projet.)
+
+### En développement
+
 ```bash
 python3 -m venv venv
 source venv/bin/activate
@@ -39,9 +62,10 @@ python3 main.py --web --port 8080
 ```
 
 Les données de marché (DVF par département, indicateurs de loyers) sont
-téléchargées à la demande depuis data.gouv.fr et mises en cache dans
-`app/data_cache/` (peut prendre quelques secondes au premier appel pour un
-département donné).
+téléchargées à la demande depuis data.gouv.fr et mises en cache — dans
+`app/data_cache/` en développement, ou dans `~/Library/Application
+Support/Simulateur Immobilier/` pour l'application packagée (peut prendre
+quelques secondes au premier appel pour un département donné).
 
 ## Déployer en hébergement web
 
