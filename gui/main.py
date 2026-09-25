@@ -1172,6 +1172,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         lignes = [
             ("Type de projet", TYPE_PROJET_OPTIONS.get(inp.type_projet.value, inp.type_projet.value)),
             ("Structure juridique", STRUCTURE_OPTIONS.get(inp.structure_juridique.value, inp.structure_juridique.value)),
+            ("Montant des travaux", eur(inp.montant_travaux)),
         ]
         if inp.type_projet == schemas.TypeProjet.achat_revente:
             ar = resultat["achat_revente"]
@@ -1191,9 +1192,10 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 ("Coût total de l'opération", eur(resultat.get("cout_total_acquisition", 0))),
                 ("Apport personnel", eur(resultat.get("apport_reel", 0))),
                 ("Montant emprunté", eur(resultat.get("montant_emprunte", 0))),
-                ("Régime fiscal le plus favorable (année 1)", meilleur),
-                ("Cash-flow net mensuel (ce régime)", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),
+                ("Régime fiscal le plus favorable", meilleur),
+                ("Cash-flow net mensuel", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),
                 ("Rendement brut", pct(resultat.get("rendement_brut", 0))),
+                ("Rendement net", pct(resultat.get("rendement_net_charges", 0))),
             ]
             mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
             loyers_mensuels = annee1["loyers_bruts"] / 12
