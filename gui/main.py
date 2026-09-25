@@ -98,9 +98,9 @@ def index_page() -> None:
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
                 ).classes("text-sm text-gray-500 dark:text-gray-400 text-center")
 
-        with ui.tabs().classes("w-full") as profil_tabs:
+        with ui.tabs().props("dense").classes("w-full") as profil_tabs:
             tab_investisseur = ui.tab("Particulier / Investisseur")
-            tab_agent = ui.tab("Agent immobilier — estimation rapide")
+            tab_agent = ui.tab("Agent immobilier")
 
         with ui.tab_panels(profil_tabs, value=tab_investisseur).classes("w-full"):
             with ui.tab_panel(tab_investisseur).classes("p-0"):
@@ -268,13 +268,13 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
 
     # -- Barre d'onglets --
-    with ui.tabs().classes("w-full") as tabs:
+    with ui.tabs().props("dense").classes("w-full") as tabs:
         tab_marche = ui.tab("Marché")
         tab_financement = ui.tab("Financement")
         tab_exploitation = ui.tab("Exploitation")
         tab_fiscalite = ui.tab("Fiscalité")
         tab_resultats = ui.tab("Résultats")
-        tab_dossier = ui.tab("Dossier de financement")
+        tab_dossier = ui.tab("Dossier")
 
     with ui.tab_panels(tabs, value=tab_marche).classes("w-full") as tab_panels:
         # -----------------------------------------------------------------
