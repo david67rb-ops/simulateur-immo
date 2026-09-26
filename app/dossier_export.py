@@ -40,6 +40,19 @@ HAUTEUR_PAGE_CM = 21.0
 MARGE_CM = 1.8
 LARGEUR_CONTENU_CM = LARGEUR_PAGE_CM - 2 * MARGE_CM
 
+# Budget vertical d'un chapitre (une page) : hauteur utile moins l'en-tête de
+# chapitre et la rangée de tuiles, avec une marge de sécurité (le rendu exact
+# dépend de Word). Le bloc tableau + graphique doit tenir dans ce reste.
+HAUTEUR_UTILE_CM = HAUTEUR_PAGE_CM - 2 * MARGE_CM
+HAUTEUR_ENTETE_CHAPITRE_CM = 2.2
+HAUTEUR_TUILES_CM = 2.1
+HAUTEUR_NOTE_CM = 1.0
+HAUTEUR_VERDICT_CM = 2.6
+MARGE_SECURITE_CM = 1.0
+HAUTEUR_BLOC_CM = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_TUILES_CM - MARGE_SECURITE_CM
+# Hauteur d'une ligne de tableau clé/valeur selon sa densité (cm).
+HAUTEUR_LIGNE_CM = {"normal": 0.84, "compact": 0.64, "serre": 0.52}
+
 LABELS_TYPE_PROJET = {
     "location_longue_duree": "Location longue durée",
     "location_courte_duree": "Location courte durée (type Airbnb)",
@@ -136,38 +149,63 @@ def _cell_marges(cell, haut: int = 90, bas: int = 90, gauche: int = 120, droite:
     tc_pr.append(marges)
 
 
-def _ajouter_table_kv(container, lignes: list[tuple]):
+def _densite_pour(nb_lignes: int, hauteur_max_cm: float | None) -> str:
+    if hauteur_max_cm is None:
+        return "normal"
+    for densite in ("normal", "compact"):
+        if nb_lignes * HAUTEUR_LIGNE_CM[densite] <= hauteur_max_cm:
+            return densite
+    return "serre"
+
+
+# (taille libellé, taille valeur, marge haut/bas en twips) par densité
+STYLE_DENSITE = {"normal": (10.5, 11, 90), "compact": (9.5, 10, 45), "serre": (9, 9.5, 25)}
+
+
+def _ajouter_table_kv(container, lignes: list[tuple], densite: str = "normal", largeur_cm: float | None = None):
     """Tableau clé/valeur épuré : un filet clair sous chaque ligne, un léger
     zébrage, les montants négatifs en rouge. Une ligne (clé, valeur, "total")
     est mise en évidence (fond teinté, texte en gras)."""
+    taille_cle, taille_valeur, marge = STYLE_DENSITE[densite]
     table = container.add_table(rows=0, cols=2)
     table.style = "Normal Table"
-    table.autofit = True
+    table.autofit = largeur_cm is None
+    # Largeurs fixes : sinon Word partage la place à parts égales et coupe
+    # les libellés sur deux lignes, ce qui allonge le tableau.
+    largeurs = (largeur_cm * 0.64, largeur_cm * 0.36) if largeur_cm else None
     for i, ligne in enumerate(lignes):
         cle, valeur = ligne[0], ligne[1]
         est_total = len(ligne) > 2 and ligne[2] == "total"
         row = table.add_row()
         cell_cle, cell_valeur = row.cells
+        if largeurs:
+            cell_cle.width, cell_valeur.width = Cm(largeurs[0]), Cm(largeurs[1])
 
-        run_cle = _texte(cell_cle.paragraphs[0], cle, 10.5, TEXTE_FONCE if est_total else GRIS_LIBELLE, gras=est_total)
+        _texte(cell_cle.paragraphs[0], cle, taille_cle, TEXTE_FONCE if est_total else GRIS_LIBELLE, gras=est_total)
 
         p_valeur = cell_valeur.paragraphs[0]
         p_valeur.alignment = WD_ALIGN_PARAGRAPH.RIGHT
         negatif = valeur.lstrip().startswith(("-", "−"))
         couleur = ROUGE if negatif else (PRIMARY_COLOR if est_total else TEXTE_FONCE)
-        _texte(p_valeur, valeur, 11.5 if est_total else 11, couleur, gras=True)
+        _texte(p_valeur, valeur, taille_valeur + (0.5 if est_total else 0), couleur, gras=True)
 
         for cell in (cell_cle, cell_valeur):
-            _cell_marges(cell)
+            _cell_marges(cell, haut=marge, bas=marge)
             _bordure_bas_cellule(cell, color=VERT_HEX if est_total else BORDURE_HEX, size=8 if est_total else 4)
             if est_total:
                 _set_cell_background(cell, FOND_TUILE_HEX)
             elif i % 2 == 1:
                 _set_cell_background(cell, ZEBRA_HEX)
+    if largeurs:
+        table.columns[0].width, table.columns[1].width = Cm(largeurs[0]), Cm(largeurs[1])
     return table
 
 
 def _texte(paragraphe, texte: str, taille: float, couleur=None, gras: bool = False, italique: bool = False):
+    # Pas d'espacement automatique après le paragraphe (Word en ajoute par
+    # défaut) : les éléments de mise en page gèrent leurs espaces eux-mêmes.
+    paragraphe.paragraph_format.space_after = Pt(0)
+    paragraphe.paragraph_format.line_spacing = 1.0
     run = paragraphe.add_run(texte)
     run.font.name = POLICE
     run.font.size = Pt(taille)
@@ -282,17 +320,28 @@ def _supprimer_bordures(table) -> None:
     tbl_pr.append(bordures)
 
 
+def _proportions_png(image_bytes: bytes) -> float:
+    """Largeur ÷ hauteur d'une image PNG (lues dans l'en-tête IHDR)."""
+    largeur = int.from_bytes(image_bytes[16:20], "big")
+    hauteur = int.from_bytes(image_bytes[20:24], "big")
+    return largeur / hauteur
+
+
 def _ajouter_table_et_graphique(
     doc: Document,
     lignes: list[tuple[str, str]],
     image_bytes: bytes | None,
     largeur_table_cm: float = 13.2,
     largeur_image_cm: float = 11.5,
+    hauteur_max_cm: float = HAUTEUR_BLOC_CM,
 ) -> None:
     """Tableau de chiffres à gauche, graphique correspondant à droite (mise en
-    page côte à côte, comme les dossiers de financement présentés en réunion)."""
+    page côte à côte). Le graphique est réduit s'il dépasse `hauteur_max_cm`
+    et le tableau passe en version compacte s'il ne tient pas, pour que le
+    chapitre reste sur une seule page."""
+    densite = _densite_pour(len(lignes), hauteur_max_cm)
     if not image_bytes:
-        _ajouter_table_kv(doc, lignes)
+        _ajouter_table_kv(doc, lignes, densite)
         return
 
     conteneur = doc.add_table(rows=1, cols=2)
@@ -305,12 +354,13 @@ def _ajouter_table_et_graphique(
     cell_table.width = Cm(largeur_table_cm)
     cell_image.width = Cm(largeur_image_cm)
 
-    _ajouter_table_kv(cell_table, lignes)
+    _ajouter_table_kv(cell_table, lignes, densite, largeur_cm=largeur_table_cm - 0.4)
 
     p_image = cell_image.paragraphs[0]
     p_image.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    run = p_image.add_run()
-    run.add_picture(io.BytesIO(image_bytes), width=Cm(largeur_image_cm - 0.5))
+    p_image.paragraph_format.space_after = Pt(0)
+    largeur = min(largeur_image_cm - 0.5, hauteur_max_cm * _proportions_png(image_bytes))
+    p_image.add_run().add_picture(io.BytesIO(image_bytes), width=Cm(largeur))
 
 
 def _alignement_vertical(section, valeur: str) -> None:
@@ -352,6 +402,15 @@ def _nouvelle_page_chapitre(doc: Document):
     return section
 
 
+def _taquet_a_droite(paragraphe) -> None:
+    """Un seul taquet, aligné à droite en bout de ligne : on neutralise ceux
+    du style En-tête/Pied de page de Word (centre et droite à 8,3/16,5 cm)."""
+    taquets = paragraphe.paragraph_format.tab_stops
+    for position in (8.255, 16.51):
+        taquets.add_tab_stop(Cm(position), WD_TAB_ALIGNMENT.CLEAR)
+    taquets.add_tab_stop(Cm(LARGEUR_CONTENU_CM), WD_TAB_ALIGNMENT.RIGHT)
+
+
 def _configurer_entete_pied(doc: Document, libelle_projet: str) -> None:
     """En-tête : titre du dossier à gauche, projet à droite, filet vert. Pied :
     mention à gauche, pagination à droite. Absents de la couverture."""
@@ -359,13 +418,13 @@ def _configurer_entete_pied(doc: Document, libelle_projet: str) -> None:
     section.different_first_page_header_footer = True
 
     header_p = section.header.paragraphs[0]
-    header_p.paragraph_format.tab_stops.add_tab_stop(Cm(LARGEUR_CONTENU_CM), WD_TAB_ALIGNMENT.RIGHT)
+    _taquet_a_droite(header_p)
     _texte(header_p, "DOSSIER DE FINANCEMENT IMMOBILIER", 8, PRIMARY_COLOR, gras=True)
     _texte(header_p, "\t" + libelle_projet, 8, GRIS_COLOR)
     _add_bottom_border(header_p, color=VERT_HEX, size=6)
 
     footer_p = section.footer.paragraphs[0]
-    footer_p.paragraph_format.tab_stops.add_tab_stop(Cm(LARGEUR_CONTENU_CM), WD_TAB_ALIGNMENT.RIGHT)
+    _taquet_a_droite(footer_p)
     _texte(footer_p, "Estimation pédagogique — à faire valider par un professionnel", 8, GRIS_COLOR, italique=True)
     _texte(footer_p, "\tPage ", 8, GRIS_COLOR)
     _add_field(footer_p, "PAGE")
@@ -571,7 +630,9 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
     if montant_emprunte > 0 and not is_achat_revente:
         lignes.append(("Mensualité du crédit (hors assurance)", _eur(resultat["mensualite_credit_hors_assurance"]) + "/mois"))
     lignes += lignes_projet
-    _ajouter_table_et_graphique(doc, lignes, image, largeur_table_cm=13.4, largeur_image_cm=11.0)
+    _ajouter_table_et_graphique(
+        doc, lignes, image, largeur_table_cm=13.4, largeur_image_cm=11.0, hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_VERDICT_CM
+    )
 
 
 def _section_presentation(doc, payload, inp, resultat, is_achat_revente):
@@ -778,7 +839,7 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
     image = charts.chart_recettes_charges(
         loyers_bruts_an1, charges_graphique_non_nulles, "Recettes et charges annuelles (crédit inclus)"
     )
-    _ajouter_table_et_graphique(doc, lignes, image, largeur_table_cm=11.5, largeur_image_cm=13.2)
+    _ajouter_table_et_graphique(doc, lignes, image, largeur_table_cm=14.5, largeur_image_cm=11.6)
 
 
 def _ajouter_note(doc, texte: str) -> None:
@@ -804,7 +865,7 @@ def _section_loyer_mensuel(doc, resultat):
     )
     lignes = [(libelle, ("+" if v >= 0 else "") + _eur(v)) for libelle, v in etapes]
     lignes.append(("Cash-flow net mensuel", _eur(cashflow), "total"))
-    _ajouter_table_et_graphique(doc, lignes, _image_cascade_loyer(resultat))
+    _ajouter_table_et_graphique(doc, lignes, _image_cascade_loyer(resultat), hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM)
     _ajouter_note(
         doc,
         f"Moyenne mensuelle de la première année, régime {libelle_regime(resultat['meilleur_regime'])}. "
@@ -828,7 +889,9 @@ def _section_patrimoine(doc, inp, resultat):
     jalons = sorted({a for a in (1, 5, 10, 15, 20, 25, 30, n) if 1 <= a <= n})
     lignes = [(f"Patrimoine net — année {a}", _eur(evolution[a - 1]["patrimoine_net"])) for a in jalons]
     lignes.append((f"Enrichissement net après revente ({n} ans)", _eur(enrichissement), "total"))
-    _ajouter_table_et_graphique(doc, lignes, charts.chart_patrimoine(evolution))
+    _ajouter_table_et_graphique(
+        doc, lignes, charts.chart_patrimoine(evolution), hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM
+    )
     _ajouter_note(
         doc,
         "Patrimoine net = valeur du bien − capital restant dû + cash-flows cumulés − apport, avant impôt "
