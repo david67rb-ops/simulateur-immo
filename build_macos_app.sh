@@ -34,12 +34,17 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 NICEGUI_DIR="$(python3 -c 'import nicegui, os; print(os.path.dirname(nicegui.__file__))')"
+# python-docx lit ses modèles d'en-tête/pied de page via « docx/parts/../templates » :
+# le dossier docx/parts doit donc exister dans l'app, sinon Errno 2.
+DOCX_DIR="$(python3 -c 'import docx, os; print(os.path.dirname(docx.__file__))')"
 
 echo "Construction en cours (plusieurs minutes, dépendances lourdes : pandas/pyarrow/matplotlib)..."
 python3 -m PyInstaller \
     --name "Simulateur Immobilier" \
     --windowed \
     --add-data "${NICEGUI_DIR}:nicegui" \
+    --collect-data docx \
+    --add-data "${DOCX_DIR}/parts/__init__.py:docx/parts" \
     --osx-bundle-identifier com.davidlehmann.simulateurimmo \
     --distpath "$BUILD_DIR/dist" \
     --workpath "$BUILD_DIR/build" \
