@@ -15,6 +15,7 @@ import json
 import os
 
 from nicegui import app, native, ui
+from pydantic import ValidationError
 
 from app import endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
 from app.utils import clean_result
@@ -86,6 +87,82 @@ def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
 
 def build_profil_input(profil_state: dict) -> schemas.ProfilEmprunteurInput:
     return schemas.ProfilEmprunteurInput(**{k: v or 0 for k, v in profil_state.items()})
+
+
+LIBELLES_CHAMPS = {
+    "surface_m2": "Surface (m²)",
+    "prix_achat": "Prix d'achat (€)",
+    "frais_notaire": "Frais de notaire (€)",
+    "montant_travaux": "Montant travaux (€)",
+    "montant_mobilier": "Montant mobilier (€)",
+    "taxe_fonciere_annuelle": "Taxe foncière/an (€)",
+    "assurance_pno_annuelle": "Assurance PNO/an (€)",
+    "apport": "Apport personnel (€)",
+    "taux_credit_annuel": "Taux crédit annuel (%)",
+    "duree_credit_annees": "Durée crédit (années)",
+    "taux_assurance_emprunteur": "Assurance emprunteur (% capital/an)",
+    "differe_duree_mois": "Durée du différé (mois)",
+    "loyer_mensuel_hors_charges": "Loyer mensuel hors charges (€)",
+    "prix_nuitee": "Prix moyen par nuitée (€)",
+    "taux_occupation_pct": "Taux d'occupation annuel (%)",
+    "charges_copropriete_annuelles": "Charges copropriété/an (€)",
+    "charges_recuperables_annuelles": "Charges récupérables/an (€)",
+    "frais_gestion_pct_loyers": "Frais de gestion (% des loyers)",
+    "vacance_locative_pct": "Vacance locative (%)",
+    "entretien_annuel": "Entretien annuel (€)",
+    "frais_comptable_annuel": "Frais comptable/an (€)",
+    "frais_plateforme_pct": "Commission plateforme (% des recettes)",
+    "frais_menage_annuel": "Ménage/blanchisserie annuel (€)",
+    "taux_marginal_imposition": "Taux marginal d'imposition (%)",
+    "part_terrain_pct": "Part terrain (non amortissable, %)",
+    "duree_amortissement_bati_annees": "Durée amortissement bâti (années)",
+    "duree_amortissement_travaux_annees": "Durée amortissement travaux (années)",
+    "duree_amortissement_mobilier_annees": "Durée amortissement mobilier (années)",
+    "duree_projection_annees": "Durée de projection (années)",
+    "taux_revalorisation_bien_annuel": "Revalorisation du bien (%/an)",
+    "taux_revalorisation_loyers_annuel": "Revalorisation des loyers (%/an)",
+    "duree_portage_mois": "Durée de portage (mois)",
+    "prix_revente_vise": "Prix de revente visé (€)",
+    "frais_agence_revente_pct": "Frais d'agence à la revente (% du prix)",
+    "revenus_nets_mensuels_foyer": "Revenus nets mensuels du foyer (€)",
+    "autres_revenus_mensuels": "Autres revenus mensuels (€)",
+    "mensualites_credits_existants": "Mensualités de crédits existants (€)",
+}
+
+
+def _message_champ(err: dict) -> str:
+    champ = next((str(p) for p in reversed(err["loc"]) if isinstance(p, str)), "")
+    libelle = f"« {LIBELLES_CHAMPS.get(champ, champ.replace('_', ' '))} »"
+    ctx = err.get("ctx") or {}
+
+    def fmt(borne: float) -> str:
+        # Les champs en % sont saisis ×100 à l'écran mais validés en fraction.
+        if champ in PERCENT_FIELDS:
+            return f"{borne * 100:g} %".replace(".", ",")
+        return f"{borne:g}".replace(".", ",")
+
+    type_err = err["type"]
+    if type_err in ("missing", "float_type", "int_type", "float_parsing", "int_parsing"):
+        return f"{libelle} doit être renseigné avec un nombre."
+    if type_err == "greater_than":
+        return f"{libelle} doit être supérieur à {fmt(ctx['gt'])}."
+    if type_err == "greater_than_equal":
+        if ctx["ge"] == 0:
+            return f"{libelle} ne peut pas être négatif."
+        return f"{libelle} doit être au moins égal à {fmt(ctx['ge'])}."
+    if type_err == "less_than_equal":
+        return f"{libelle} ne peut pas dépasser {fmt(ctx['le'])}."
+    if type_err == "less_than":
+        return f"{libelle} doit être inférieur à {fmt(ctx['lt'])}."
+    return f"{libelle} : valeur invalide."
+
+
+def message_erreur(exc: Exception) -> str:
+    """Message lisible en français pour une erreur de saisie ; les autres
+    erreurs sont renvoyées telles quelles."""
+    if isinstance(exc, ValidationError):
+        return "Valeur à corriger : " + " ".join(_message_champ(e) for e in exc.errors())
+    return f"Erreur : {exc}"
 
 
 @ui.page("/")
@@ -1143,7 +1220,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         try:
             inp = build_simulation_input(sim_state)
         except Exception as exc:  # noqa: BLE001
-            ui.notify(f"Entrée invalide : {exc}", type="negative")
+            ui.notify(message_erreur(exc), type="negative", multi_line=True)
             return
         try:
             resultat = clean_result(simulation.simuler(inp))
@@ -1190,7 +1267,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         try:
             r = compute_endettement()
         except Exception as exc:  # noqa: BLE001
-            endettement_status.set_text(f"Erreur : {exc}")
+            endettement_status.set_text(message_erreur(exc))
             return
         endettement_status.set_text("")
 
@@ -1282,7 +1359,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             profil = build_profil_input(profil_state) if profil_rempli else None
             lignes = _construire_apercu_dossier(inp, resultat, profil)
         except Exception as exc:  # noqa: BLE001
-            dossier_status.set_text(f"Erreur : {exc}")
+            dossier_status.set_text(message_erreur(exc))
             return
 
         table_apercu_dossier.rows = [{"k": k, "v": v} for k, v in lignes]
@@ -1311,7 +1388,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             )
             contenu = dossier_export.generer_dossier_word(payload)
         except Exception as exc:  # noqa: BLE001
-            dossier_status.set_text(f"Erreur : {exc}")
+            dossier_status.set_text(message_erreur(exc))
             return
 
         if app.native.main_window:
