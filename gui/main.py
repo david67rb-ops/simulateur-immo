@@ -5,8 +5,8 @@ ce module ne fait que construire l'interface et appeler ces fonctions.
 Deux parcours :
 - Agent immobilier : estimation rapide de prix/loyer de marché, rien d'autre.
 - Particulier / investisseur : parcours complet, organisé en onglets qui
-  s'adaptent au type de projet choisi (Marché, Financement, Exploitation,
-  Fiscalité, Résultats, Dossier de financement).
+  s'adaptent au type de projet choisi (Marché, Financement, Revenus &
+  fiscalité, Résultats, Endettement, Dossier), avec une synthèse en direct.
 """
 from __future__ import annotations
 
@@ -235,7 +235,7 @@ def index_page() -> None:
             tab_investisseur = ui.tab("Particulier / Investisseur")
             tab_agent = ui.tab("Agent immobilier")
 
-        with ui.tab_panels(profil_tabs, value=tab_investisseur).classes("w-full"):
+        with ui.tab_panels(profil_tabs, value=tab_investisseur, animated=False).classes("w-full"):
             with ui.tab_panel(tab_investisseur).classes("p-0"):
                 _build_investor_view(profil_tabs, tab_agent)
             with ui.tab_panel(tab_agent).classes("p-0"):
@@ -412,37 +412,41 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         with ui.tabs().props("dense").classes("w-full") as tabs:
             tab_marche = ui.tab("Marché")
             tab_financement = ui.tab("Financement")
-            tab_exploitation = ui.tab("Exploitation")
-            tab_fiscalite = ui.tab("Fiscalité")
+            tab_fiscalite = ui.tab("Revenus & fiscalité")
             tab_resultats = ui.tab("Résultats")
             tab_endettement = ui.tab("Endettement")
             tab_dossier = ui.tab("Dossier")
 
-        tabs_ordre = [
-            tab_marche,
-            tab_financement,
-            tab_exploitation,
-            tab_fiscalite,
-            tab_resultats,
-            tab_endettement,
-            tab_dossier,
-        ]
+        tabs_ordre = [tab_marche, tab_financement, tab_fiscalite, tab_resultats, tab_endettement, tab_dossier]
+
+        def numeroter_onglets() -> None:
+            # Numérotation continue des onglets visibles (Endettement est masqué sans crédit).
+            numero = 0
+            for tab in tabs_ordre:
+                if tab.visible:
+                    numero += 1
+                    tab.props(f'label="{numero}. {tab.props["name"]}"')
 
         def _bouton_onglet_suivant(tab_actuel) -> None:
-            """Bouton de navigation générique : passe au prochain onglet visible
-            (saute p. ex. Exploitation, masqué en achat-revente)."""
+            """Boutons Précédent / Suivant, qui sautent les onglets masqués."""
 
-            def _aller_suivant() -> None:
+            def _aller(sens: int) -> None:
                 idx = tabs_ordre.index(tab_actuel)
-                for suivant in tabs_ordre[idx + 1 :]:
-                    if suivant.visible:
-                        tab_panels.set_value(suivant)
+                candidats = tabs_ordre[idx + 1 :] if sens > 0 else reversed(tabs_ordre[:idx])
+                for tab in candidats:
+                    if tab.visible:
+                        tab_panels.set_value(tab)
                         return
 
-            with ui.row().classes("w-full justify-end mt-1"):
-                ui.button("Onglet suivant", icon="arrow_forward", on_click=_aller_suivant).props("outline")
+            with ui.row().classes("w-full justify-between mt-1"):
+                if tab_actuel is tabs_ordre[0]:
+                    ui.element("div")
+                else:
+                    ui.button("Précédent", icon="arrow_back", on_click=lambda: _aller(-1)).props("flat no-caps")
+                if tab_actuel is not tabs_ordre[-1]:
+                    ui.button("Suivant", icon="arrow_forward", on_click=lambda: _aller(1)).props("outline no-caps")
 
-        with ui.tab_panels(tabs, value=tab_marche).classes("w-full") as tab_panels:
+        with ui.tab_panels(tabs, value=tab_marche, animated=False).classes("w-full") as tab_panels:
             # -----------------------------------------------------------------
             # Onglet Marché
             # -----------------------------------------------------------------
@@ -703,10 +707,10 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 _bouton_onglet_suivant(tab_financement)
 
             # -----------------------------------------------------------------
-            # Onglet Exploitation
+            # Onglet Revenus & fiscalité
             # -----------------------------------------------------------------
-            with ui.tab_panel(tab_exploitation):
-                with theme.section_card():
+            with ui.tab_panel(tab_fiscalite):
+                with theme.section_card() as carte_revenus:
                     theme.subsection_title("Revenus et charges")
                     with ui.row().classes(theme.GRID_CLASSES):
                         field_loyer = champ(
@@ -813,12 +817,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                                 aide="Garantie loyers impayés (GLI), souvent 2,5 à 3,5 % des loyers. Facultative.",
                             )
 
-                _bouton_onglet_suivant(tab_exploitation)
+                refs["carte_revenus"] = carte_revenus
 
-            # -----------------------------------------------------------------
-            # Onglet Fiscalité
-            # -----------------------------------------------------------------
-            with ui.tab_panel(tab_fiscalite):
                 with theme.section_card():
                     fieldset_regime = ui.column().classes("w-full gap-2")
                     with fieldset_regime:
@@ -1309,12 +1309,11 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         is_meublee = is_lcd or regime_location == "meublee"
         is_sci_is = structure == "sci_is"
 
-        tab_exploitation.visible = not is_achat_revente
-        if is_achat_revente and onglet_actif(tab_exploitation):
-            tab_panels.set_value(tab_financement)
+        refs["carte_revenus"].visible = not is_achat_revente
 
         avec_credit = sim_state["avec_credit"]
         tab_endettement.visible = avec_credit
+        numeroter_onglets()
         if not avec_credit and onglet_actif(tab_endettement):
             tab_panels.set_value(tab_dossier)
         libelle_nom = "Nom de l'emprunteur (optionnel)" if avec_credit else "Nom de l'investisseur (optionnel)"
