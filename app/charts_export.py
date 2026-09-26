@@ -70,7 +70,7 @@ def chart_donut(valeurs: list[float], labels: list[str], titre: str, total_label
         colors=couleurs,
         startangle=90,
         wedgeprops={"width": 0.42, "edgecolor": "white"},
-        autopct=lambda p: f"{p:.0f} %",
+        autopct=lambda p: f"{p:.0f} %" if p >= 4 else "",  # petites parts : montant dans la légende
         pctdistance=0.78,
     )
     for t in autotexts:
@@ -274,3 +274,24 @@ def chart_patrimoine(lignes: list[dict]) -> bytes:
     ax.spines["right"].set_visible(False)
     ax.grid(axis="y", color="#EEEEEE", linewidth=0.8)
     return _fig_to_png(fig)
+
+
+def logo_png() -> bytes:
+    """Logo de l'application (maison + courbe ascendante), mêmes proportions
+    que le SVG de l'interface (repère 64 × 64)."""
+    from matplotlib.patches import FancyBboxPatch, Polygon, Rectangle
+
+    fig = plt.figure(figsize=(1, 1))
+    ax = fig.add_axes([0, 0, 1, 1])
+    ax.set_xlim(0, 64)
+    ax.set_ylim(64, 0)
+    ax.axis("off")
+    ax.add_patch(FancyBboxPatch((0, 0), 64, 64, boxstyle="round,pad=0,rounding_size=16", fc=PRIMARY, ec="none"))
+    ax.add_patch(Polygon([(32, 13), (49, 27.5), (49, 47), (15, 47), (15, 27.5)], closed=True, fc="white", ec="none"))
+    ax.add_patch(Rectangle((27, 35), 10, 12, fc=PRIMARY, ec="none"))
+    ax.plot([13, 24, 32, 47], [42, 29, 34, 16], color="#C9822A", linewidth=3.8, solid_capstyle="round", solid_joinstyle="round")
+    ax.add_patch(Polygon([(47, 16), (39, 17.5), (45.5, 23)], closed=True, fc="#C9822A", ec="none"))
+    buf = io.BytesIO()
+    fig.savefig(buf, format="png", dpi=300, transparent=True)
+    plt.close(fig)
+    return buf.getvalue()
