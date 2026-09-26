@@ -54,18 +54,53 @@ def apply_theme() -> None:
           .q-field--outlined .q-field__control { border-radius: 10px !important; }
           .stat-card { background: var(--stat-bg, #eef6f3); border-radius: 14px; padding: 14px 16px; }
           .body--dark .stat-card { --stat-bg: #1a2b26; }
+          /* Les panneaux d'onglets coupent le débordement, ce qui empêche la
+             colonne de synthèse de rester fixe (position: sticky). */
+          .q-tab-panels, .q-tab-panels .q-panel, .q-panel-parent { overflow: visible !important; }
+          .q-tab-panels { background: transparent !important; }
+          .q-tabs--dense .q-tab { padding: 0 10px; }
+          .q-table tbody tr:nth-child(even) { background: rgba(127, 127, 127, 0.06); }
+          .q-table td.text-right, .q-table th.text-right { font-variant-numeric: tabular-nums; }
+          .synthese-ligne { font-variant-numeric: tabular-nums; }
+          /* Quasar force .hidden en !important : classes dédiées pour la synthèse. */
+          .colonne-synthese { display: none; }
+          .barre-synthese-mobile { background: #ffffff; }
+          .body--dark .barre-synthese-mobile { background: #1c1f24; border-color: #2c3036; }
+          @media (min-width: 1024px) {
+            .colonne-synthese { display: block; }
+            .barre-synthese-mobile, .espace-barre-mobile { display: none !important; }
+          }
         </style>
         """
     )
 
 
-def stat_card(label: str, initial: str = "–") -> ui.label:
+def aide(texte: str) -> None:
+    """Petite icône ⓘ affichant une explication au survol (appui long sur mobile)."""
+    ui.icon("info_outline", size="16px").classes("text-gray-400 cursor-help").tooltip(texte).props(
+        'aria-label="Aide"'
+    )
+
+
+def stat_card(label: str, initial: str = "–", aide_texte: str | None = None, grand: bool = False) -> ui.label:
     """Petite carte 'métrique' (fond teinté, valeur en gros). Renvoie le label
     de valeur pour pouvoir le mettre à jour ensuite (`.set_text(...)`)."""
     with ui.column().classes("stat-card gap-0"):
-        ui.label(label).classes("text-xs text-gray-500 dark:text-gray-400")
-        value = ui.label(initial).classes("text-xl font-bold").style(f"color: {PRIMARY}")
+        with ui.row().classes("items-center gap-1 no-wrap"):
+            ui.label(label).classes("text-xs text-gray-500 dark:text-gray-400")
+            if aide_texte:
+                aide(aide_texte)
+        value = ui.label(initial).classes("text-3xl font-bold" if grand else "text-xl font-bold").style(
+            f"color: {PRIMARY}"
+        )
     return value
+
+
+def colorer(label: ui.label, valeur: float | None, inverse: bool = False) -> None:
+    """Rouge si la valeur est défavorable (négative, ou positive si `inverse`),
+    vert sinon."""
+    defavorable = valeur is not None and (valeur > 0 if inverse else valeur < 0)
+    label.style(f"color: {NEGATIVE if defavorable else PRIMARY}")
 
 
 def section_card():

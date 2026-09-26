@@ -65,6 +65,7 @@ class AnneeResultat:
     capital_rembourse: float
     mensualite_totale_credit: float
     cashflow_avant_impot: float
+    capital_restant_du: float = 0.0
     fiscal: dict[str, fisc.ResultatFiscalAnnuel] = field(default_factory=dict)
     cashflow_apres_impot: dict[str, float] = field(default_factory=dict)
 
@@ -223,6 +224,7 @@ def _simuler_location(inp: SimulationInput) -> dict:
             capital_rembourse=capital_rembourse,
             mensualite_totale_credit=mensualite_totale,
             cashflow_avant_impot=cashflow_avant_impot,
+            capital_restant_du=ly.capital_restant_du if ly else 0.0,
         )
 
         amortissement_dispo = (

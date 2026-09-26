@@ -21,7 +21,7 @@ from app import analyse, endettement as endet_mod, listing_parser, market_data, 
 from app.utils import clean_result, libelle_regime
 
 from . import theme
-from .charts import cashflow_chart_option
+from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option
 from .state import (
     PERCENT_FIELDS,
     default_dossier_meta_state,
@@ -61,6 +61,33 @@ def pct(v, digits: int = 2) -> str:
     if v is None:
         return "–"
     return f"{v * 100:.{digits}f} %".replace(".", ",")
+
+
+def champ(label: str, state: dict, cle: str, *, suffixe: str | None = None, aide: str | None = None, **kwargs):
+    """Champ numérique standard du formulaire, lié à `state[cle]`, avec unité
+    affichée à droite et icône d'aide facultative."""
+    field = (
+        ui.number(label, value=state[cle], suffix=suffixe, **kwargs)
+        .bind_value(state, cle)
+        .props("outlined dense")
+        .classes("w-full")
+    )
+    if aide:
+        with field.add_slot("append"):
+            theme.aide(aide)
+    return field
+
+
+def liste(options: dict, label: str, state: dict, cle: str, *, aide: str | None = None):
+    field = ui.select(options, label=label, value=state[cle]).bind_value(state, cle).props("outlined dense").classes("w-full")
+    if aide:
+        with field.add_slot("append"):
+            theme.aide(aide)
+    return field
+
+
+def plus_d_options(titre: str = "Plus d'options"):
+    return ui.expansion(titre, icon="tune").props("dense").classes("w-full text-sm")
 
 
 def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
@@ -189,7 +216,7 @@ def index_page() -> None:
         sombre = await ui.run_javascript("document.body.classList.contains('body--dark')")
         dark_mode.value = not sombre
 
-    with ui.column().classes("w-full max-w-4xl mx-auto gap-5 p-4"):
+    with ui.column().classes("w-full max-w-6xl mx-auto gap-5 p-4"):
         with ui.row().classes("w-full items-center justify-center relative mb-2"):
             ui.button(icon="dark_mode", on_click=basculer_theme).props(
                 "flat round dense"
@@ -204,7 +231,7 @@ def index_page() -> None:
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
                 ).classes("text-sm text-gray-500 dark:text-gray-400 text-center")
 
-        with ui.tabs().props("dense").classes("w-full") as profil_tabs:
+        with ui.tabs().props("dense").classes("w-full max-w-4xl mx-auto") as profil_tabs:
             tab_investisseur = ui.tab("Particulier / Investisseur")
             tab_agent = ui.tab("Agent immobilier")
 
@@ -212,7 +239,8 @@ def index_page() -> None:
             with ui.tab_panel(tab_investisseur).classes("p-0"):
                 _build_investor_view(profil_tabs, tab_agent)
             with ui.tab_panel(tab_agent).classes("p-0"):
-                _build_agent_view()
+                with ui.column().classes("w-full max-w-4xl mx-auto gap-5"):
+                    _build_agent_view()
 
         ui.label(
             "Sources marché : API Adresse (BAN), DVF géolocalisé (data.gouv.fr), Carte des loyers DHUP/ANIL. "
@@ -355,619 +383,917 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     ctx = {"last_market_result": None, "commune": None}
     refs: dict[str, ui.element] = {}
 
-    # -- En-tête persistant : type de projet & structure (pilote tout le reste) --
-    with theme.section_card():
-        ui.label("Type de projet").classes(theme.SECTION_TITLE_CLASSES)
-        with ui.row().classes("w-full gap-4"):
-            type_projet_select = (
-                ui.select(TYPE_PROJET_OPTIONS, label="Type de projet", value=sim_state["type_projet"])
-                .bind_value(sim_state, "type_projet")
-                .props("outlined dense")
-                .classes("flex-1 min-w-[220px]")
-            )
-            structure_select = (
-                ui.select(STRUCTURE_OPTIONS, label="Structure juridique", value=sim_state["structure_juridique"])
-                .bind_value(sim_state, "structure_juridique")
-                .props("outlined dense")
-                .classes("flex-1 min-w-[220px]")
-            )
-        structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
+    # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
+    # bandeau dépliable en bas de l'écran (mobile).
+    with ui.element("div").classes("w-full flex flex-col lg:flex-row gap-5 items-start"):
+        colonne_saisie = ui.column().classes("flex-1 min-w-0 w-full gap-5")
+        colonne_synthese = ui.element("div").classes("colonne-synthese w-80 shrink-0 sticky top-4 self-start")
 
-    # -- Barre d'onglets --
-    with ui.tabs().props("dense").classes("w-full") as tabs:
-        tab_marche = ui.tab("Marché")
-        tab_financement = ui.tab("Financement")
-        tab_exploitation = ui.tab("Exploitation")
-        tab_fiscalite = ui.tab("Fiscalité")
-        tab_resultats = ui.tab("Résultats")
-        tab_endettement = ui.tab("Taux d'endettement")
-        tab_dossier = ui.tab("Dossier")
+    with colonne_saisie:
+        # -- En-tête persistant : type de projet & structure (pilote tout le reste) --
+        with theme.section_card():
+            ui.label("Type de projet").classes(theme.SECTION_TITLE_CLASSES)
+            with ui.row().classes("w-full gap-4"):
+                type_projet_select = (
+                    ui.select(TYPE_PROJET_OPTIONS, label="Type de projet", value=sim_state["type_projet"])
+                    .bind_value(sim_state, "type_projet")
+                    .props("outlined dense")
+                    .classes("flex-1 min-w-[220px]")
+                )
+                structure_select = (
+                    ui.select(STRUCTURE_OPTIONS, label="Structure juridique", value=sim_state["structure_juridique"])
+                    .bind_value(sim_state, "structure_juridique")
+                    .props("outlined dense")
+                    .classes("flex-1 min-w-[220px]")
+                )
+            structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
 
-    tabs_ordre = [
-        tab_marche,
-        tab_financement,
-        tab_exploitation,
-        tab_fiscalite,
-        tab_resultats,
-        tab_endettement,
-        tab_dossier,
-    ]
+        # -- Barre d'onglets --
+        with ui.tabs().props("dense").classes("w-full") as tabs:
+            tab_marche = ui.tab("Marché")
+            tab_financement = ui.tab("Financement")
+            tab_exploitation = ui.tab("Exploitation")
+            tab_fiscalite = ui.tab("Fiscalité")
+            tab_resultats = ui.tab("Résultats")
+            tab_endettement = ui.tab("Endettement")
+            tab_dossier = ui.tab("Dossier")
 
-    def _bouton_onglet_suivant(tab_actuel) -> None:
-        """Bouton de navigation générique : passe au prochain onglet visible
-        (saute p. ex. Exploitation, masqué en achat-revente)."""
+        tabs_ordre = [
+            tab_marche,
+            tab_financement,
+            tab_exploitation,
+            tab_fiscalite,
+            tab_resultats,
+            tab_endettement,
+            tab_dossier,
+        ]
 
-        def _aller_suivant() -> None:
-            idx = tabs_ordre.index(tab_actuel)
-            for suivant in tabs_ordre[idx + 1 :]:
-                if suivant.visible:
-                    tab_panels.set_value(suivant)
-                    return
+        def _bouton_onglet_suivant(tab_actuel) -> None:
+            """Bouton de navigation générique : passe au prochain onglet visible
+            (saute p. ex. Exploitation, masqué en achat-revente)."""
 
-        with ui.row().classes("w-full justify-end mt-1"):
-            ui.button("Onglet suivant", icon="arrow_forward", on_click=_aller_suivant).props("outline")
+            def _aller_suivant() -> None:
+                idx = tabs_ordre.index(tab_actuel)
+                for suivant in tabs_ordre[idx + 1 :]:
+                    if suivant.visible:
+                        tab_panels.set_value(suivant)
+                        return
 
-    with ui.tab_panels(tabs, value=tab_marche).classes("w-full") as tab_panels:
-        # -----------------------------------------------------------------
-        # Onglet Marché
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_marche):
-            with theme.section_card():
-                ui.label("Étude de marché").classes(theme.SECTION_TITLE_CLASSES)
-                with ui.row().classes("w-full gap-3 items-end"):
-                    listing_input = (
-                        ui.input(
-                            "Lien d'une annonce (optionnel)",
-                            placeholder="https://www.orpi.com/annonce-... (portails majeurs souvent bloqués)",
+            with ui.row().classes("w-full justify-end mt-1"):
+                ui.button("Onglet suivant", icon="arrow_forward", on_click=_aller_suivant).props("outline")
+
+        with ui.tab_panels(tabs, value=tab_marche).classes("w-full") as tab_panels:
+            # -----------------------------------------------------------------
+            # Onglet Marché
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_marche):
+                with theme.section_card():
+                    ui.label("Étude de marché").classes(theme.SECTION_TITLE_CLASSES)
+                    with ui.row().classes("w-full gap-3 items-end"):
+                        listing_input = (
+                            ui.input(
+                                "Lien d'une annonce (optionnel)",
+                                placeholder="https://www.orpi.com/annonce-... (portails majeurs souvent bloqués)",
+                            )
+                            .bind_value(market_state, "listing_url")
+                            .props("outlined dense")
+                            .classes("flex-1 min-w-[260px]")
                         )
-                        .bind_value(market_state, "listing_url")
-                        .props("outlined dense")
-                        .classes("flex-1 min-w-[260px]")
-                    )
-                    btn_extraire = ui.button("Extraire les infos").props("outline")
-                extract_status = ui.label("").classes(theme.HINT_CLASSES)
+                        btn_extraire = ui.button("Extraire les infos").props("outline")
+                    extract_status = ui.label("").classes(theme.HINT_CLASSES)
 
-                with ui.row().classes(theme.GRID_CLASSES + " mt-2"):
-                    ms_adresse = (
-                        ui.input("Adresse du bien", placeholder="12 rue de la République, 69002 Lyon")
-                        .bind_value(market_state, "adresse")
-                        .props("outlined dense")
-                        .classes("w-full")
-                    )
-                    ms_type = (
-                        ui.select(TYPE_BIEN_OPTIONS, label="Type de bien", value=market_state["type_bien"])
-                        .bind_value(market_state, "type_bien")
-                        .props("outlined dense")
-                        .classes("w-full")
-                    )
-                    ms_surface = (
-                        ui.number("Surface (m²)", value=market_state["surface_m2"], min=1)
-                        .bind_value(market_state, "surface_m2")
-                        .props("outlined dense")
-                        .classes("w-full")
-                    )
-                    ms_rayon = (
-                        ui.number("Rayon de recherche (m)", value=market_state["rayon_metres"], min=100, step=100)
-                        .bind_value(market_state, "rayon_metres")
-                        .props("outlined dense")
-                        .classes("w-full")
-                    )
+                    with ui.row().classes(theme.GRID_CLASSES + " mt-2"):
+                        ms_adresse = (
+                            ui.input("Adresse du bien", placeholder="12 rue de la République, 69002 Lyon")
+                            .bind_value(market_state, "adresse")
+                            .props("outlined dense")
+                            .classes("w-full")
+                        )
+                        ms_type = (
+                            ui.select(TYPE_BIEN_OPTIONS, label="Type de bien", value=market_state["type_bien"])
+                            .bind_value(market_state, "type_bien")
+                            .props("outlined dense")
+                            .classes("w-full")
+                        )
+                        ms_surface = (
+                            ui.number("Surface (m²)", value=market_state["surface_m2"], min=1)
+                            .bind_value(market_state, "surface_m2")
+                            .props("outlined dense")
+                            .classes("w-full")
+                        )
+                        ms_rayon = (
+                            ui.number("Rayon de recherche (m)", value=market_state["rayon_metres"], min=100, step=100)
+                            .bind_value(market_state, "rayon_metres")
+                            .props("outlined dense")
+                            .classes("w-full")
+                        )
 
-                btn_market = ui.button("Analyser le marché").props("unelevated").classes("mt-3")
-                market_status = ui.label("").classes(theme.HINT_CLASSES)
+                    btn_market = ui.button("Analyser le marché").props("unelevated").classes("mt-3")
+                    market_status = ui.label("").classes(theme.HINT_CLASSES)
 
-                market_results = ui.column().classes("w-full gap-2 mt-2")
-                market_results.visible = False
-                with market_results:
-                    ui.label("Prix de vente au m² (transactions DVF comparables)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    market_results = ui.column().classes("w-full gap-2 mt-2")
+                    market_results.visible = False
+                    with market_results:
+                        ui.label("Prix de vente au m² (transactions DVF comparables)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            v_prix_bas = theme.stat_card("Bas (p10)")
+                            v_prix_moyen = theme.stat_card("Moyen (médiane)")
+                            v_prix_haut = theme.stat_card("Haut (p90)")
+                            v_nb_trans = theme.stat_card("Transactions trouvées")
+
+                        loyer_block = ui.column().classes("w-full gap-2")
+                        with loyer_block:
+                            ui.label("Loyer de marché au m² (secteur / commune)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                            with ui.row().classes(theme.GRID_CLASSES):
+                                v_loyer_bas = theme.stat_card("Mini")
+                                v_loyer_moyen = theme.stat_card("Moyen")
+                                v_loyer_haut = theme.stat_card("Maxi")
+                                v_fiabilite = theme.stat_card("Fiabilité (R²)")
+                        refs["ms_loyer_block"] = loyer_block
+
+                        nuitee_block = ui.column().classes("w-full gap-2")
+                        with nuitee_block:
+                            ui.label("Location courte durée — estimation (secteur / commune)").classes(
+                                theme.SUBSECTION_TITLE_CLASSES
+                            )
+                            ui.label(
+                                "Dérivée du loyer nu de la zone, faute de donnée ouverte sur les tarifs Airbnb : "
+                                "à ajuster selon l'attractivité touristique réelle."
+                            ).classes(theme.HINT_CLASSES)
+                            with ui.row().classes(theme.GRID_CLASSES):
+                                v_nuitee_bas = theme.stat_card("Prix/nuitée mini")
+                                v_nuitee_moyen = theme.stat_card("Prix/nuitée moyen")
+                                v_nuitee_haut = theme.stat_card("Prix/nuitée maxi")
+                            with ui.row().classes(theme.GRID_CLASSES):
+                                v_occupation_bas = theme.stat_card("Taux d'occupation mini")
+                                v_occupation_moyen = theme.stat_card("Taux d'occupation moyen")
+                                v_occupation_haut = theme.stat_card("Taux d'occupation maxi")
+                            with ui.row().classes("items-center gap-2"):
+                                btn_airbnb = ui.button(
+                                    "Comparer avec les annonces Airbnb du secteur", icon="open_in_new"
+                                ).props("flat dense no-caps")
+                                ui.label("pour vérifier l'estimation sur des annonces réelles").classes(theme.HINT_CLASSES)
+                        refs["ms_nuitee_block"] = nuitee_block
+
+                        market_note = ui.label("").classes(theme.HINT_CLASSES)
+                        btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
+
+                _bouton_onglet_suivant(tab_marche)
+
+            # -----------------------------------------------------------------
+            # Onglet Financement (le bien + emprunt + spécifique achat-revente)
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_financement):
+                with theme.section_card():
+                    theme.subsection_title("Le bien")
                     with ui.row().classes(theme.GRID_CLASSES):
-                        v_prix_bas = theme.stat_card("Bas (p10)")
-                        v_prix_moyen = theme.stat_card("Moyen (médiane)")
-                        v_prix_haut = theme.stat_card("Haut (p90)")
-                        v_nb_trans = theme.stat_card("Transactions trouvées")
-
-                    loyer_block = ui.column().classes("w-full gap-2")
-                    with loyer_block:
-                        ui.label("Loyer de marché au m² (secteur / commune)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                        with ui.row().classes(theme.GRID_CLASSES):
-                            v_loyer_bas = theme.stat_card("Mini")
-                            v_loyer_moyen = theme.stat_card("Moyen")
-                            v_loyer_haut = theme.stat_card("Maxi")
-                            v_fiabilite = theme.stat_card("Fiabilité (R²)")
-                    refs["ms_loyer_block"] = loyer_block
-
-                    nuitee_block = ui.column().classes("w-full gap-2")
-                    with nuitee_block:
-                        ui.label("Location courte durée — estimation (secteur / commune)").classes(
-                            theme.SUBSECTION_TITLE_CLASSES
+                        liste(TYPE_BIEN_OPTIONS, "Type de bien", sim_state, "type_bien")
+                        champ("Surface", sim_state, "surface_m2", suffixe="m²", min=1)
+                        prix_achat_input = champ("Prix d'achat", sim_state, "prix_achat", suffixe="€", min=1)
+                        frais_notaire_input = champ(
+                            "Frais de notaire",
+                            sim_state,
+                            "frais_notaire",
+                            suffixe="€",
+                            min=0,
+                            aide="Calculés automatiquement selon le barème officiel (droits de mutation, "
+                            "émoluments, débours). Tu peux les corriger.",
                         )
-                        ui.label(
-                            "Dérivée du loyer nu de la zone, faute de donnée ouverte sur les tarifs Airbnb : "
-                            "à ajuster selon l'attractivité touristique réelle."
-                        ).classes(theme.HINT_CLASSES)
-                        with ui.row().classes(theme.GRID_CLASSES):
-                            v_nuitee_bas = theme.stat_card("Prix/nuitée mini")
-                            v_nuitee_moyen = theme.stat_card("Prix/nuitée moyen")
-                            v_nuitee_haut = theme.stat_card("Prix/nuitée maxi")
-                        with ui.row().classes(theme.GRID_CLASSES):
-                            v_occupation_bas = theme.stat_card("Taux d'occupation mini")
-                            v_occupation_moyen = theme.stat_card("Taux d'occupation moyen")
-                            v_occupation_haut = theme.stat_card("Taux d'occupation maxi")
-                        with ui.row().classes("items-center gap-2"):
-                            btn_airbnb = ui.button(
-                                "Comparer avec les annonces Airbnb du secteur", icon="open_in_new"
-                            ).props("flat dense no-caps")
-                            ui.label("pour vérifier l'estimation sur des annonces réelles").classes(theme.HINT_CLASSES)
-                    refs["ms_nuitee_block"] = nuitee_block
-
-                    market_note = ui.label("").classes(theme.HINT_CLASSES)
-                    btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
-
-            _bouton_onglet_suivant(tab_marche)
-
-        # -----------------------------------------------------------------
-        # Onglet Financement (le bien + emprunt + spécifique achat-revente)
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_financement):
-            with theme.section_card():
-                theme.subsection_title("Le bien")
-                with ui.row().classes(theme.GRID_CLASSES):
-                    ui.select(TYPE_BIEN_OPTIONS, label="Type de bien", value=sim_state["type_bien"]).bind_value(
-                        sim_state, "type_bien"
-                    ).props("outlined dense").classes("w-full")
-                    ui.number("Surface (m²)", value=sim_state["surface_m2"], min=1).bind_value(
-                        sim_state, "surface_m2"
-                    ).props("outlined dense").classes("w-full")
-                    prix_achat_input = (
-                        ui.number("Prix d'achat (€)", value=sim_state["prix_achat"], min=1)
-                        .bind_value(sim_state, "prix_achat")
-                        .props("outlined dense")
-                        .classes("w-full")
-                    )
-                    bien_neuf_switch = ui.switch("Bien neuf / VEFA (< 5 ans)", value=sim_state["bien_neuf"]).bind_value(
+                        champ(
+                            "Travaux",
+                            sim_state,
+                            "montant_travaux",
+                            suffixe="€",
+                            min=0,
+                            aide="Travaux réalisés à l'achat. Amortissables en LMNP au réel et en SCI à l'IS.",
+                        )
+                        refs["field_mobilier"] = champ(
+                            "Mobilier",
+                            sim_state,
+                            "montant_mobilier",
+                            suffixe="€",
+                            min=0,
+                            aide="Meubles et équipements d'une location meublée, amortis sur la durée indiquée en Fiscalité.",
+                        )
+                        champ("Taxe foncière", sim_state, "taxe_fonciere_annuelle", suffixe="€/an", min=0)
+                        champ(
+                            "Assurance PNO",
+                            sim_state,
+                            "assurance_pno_annuelle",
+                            suffixe="€/an",
+                            min=0,
+                            aide="Assurance propriétaire non occupant, obligatoire en copropriété.",
+                        )
+                    bien_neuf_switch = ui.switch("Bien neuf / VEFA (moins de 5 ans)", value=sim_state["bien_neuf"]).bind_value(
                         sim_state, "bien_neuf"
                     )
-                    frais_notaire_input = (
-                        ui.number(
-                            "Frais de notaire (€) — calculé automatiquement, modifiable",
-                            value=sim_state["frais_notaire"],
-                            min=0,
-                        )
-                        .bind_value(sim_state, "frais_notaire")
-                        .props("outlined dense")
-                        .classes("w-full")
+
+                    theme.subsection_title("Financement")
+                    avec_credit_switch = ui.switch("Financement par crédit", value=sim_state["avec_credit"]).bind_value(
+                        sim_state, "avec_credit"
                     )
-                    ui.number("Montant travaux (€)", value=sim_state["montant_travaux"], min=0).bind_value(
-                        sim_state, "montant_travaux"
-                    ).props("outlined dense").classes("w-full")
-                    mobilier_field = ui.number(
-                        "Montant mobilier (€) — location meublée", value=sim_state["montant_mobilier"], min=0
-                    ).bind_value(sim_state, "montant_mobilier").props("outlined dense").classes("w-full")
-                    refs["field_mobilier"] = mobilier_field
-                    field_taxe_fonciere = ui.number(
-                        "Taxe foncière/an (€)", value=sim_state["taxe_fonciere_annuelle"], min=0
-                    ).bind_value(sim_state, "taxe_fonciere_annuelle").props("outlined dense").classes("w-full")
-                    field_assurance_pno = ui.number(
-                        "Assurance PNO/an (€)", value=sim_state["assurance_pno_annuelle"], min=0
-                    ).bind_value(sim_state, "assurance_pno_annuelle").props("outlined dense").classes("w-full")
+                    refs["note_fonds_propres"] = ui.label(
+                        "Bien financé intégralement en fonds propres : l'apport couvre la totalité du coût "
+                        "de l'opération, sans mensualité ni intérêts d'emprunt."
+                    ).classes(theme.HINT_CLASSES)
+                    with ui.column().classes("w-full gap-2") as fieldset_credit:
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            champ(
+                                "Apport personnel",
+                                sim_state,
+                                "apport",
+                                suffixe="€",
+                                min=0,
+                                aide="Somme que tu mets de ta poche ; le reste du coût total est emprunté.",
+                            )
+                            champ(
+                                "Taux du crédit",
+                                sim_state,
+                                "taux_credit_annuel",
+                                suffixe="%",
+                                min=0,
+                                max=20,
+                                aide="Taux nominal annuel, hors assurance.",
+                            )
+                            refs["field_duree_credit"] = champ(
+                                "Durée du crédit", sim_state, "duree_credit_annees", suffixe="ans", min=1, max=35
+                            )
+                        with plus_d_options("Plus d'options : assurance, différé, frais bancaires"):
+                            with ui.row().classes(theme.GRID_CLASSES + " pt-2"):
+                                champ(
+                                    "Assurance emprunteur",
+                                    sim_state,
+                                    "taux_assurance_emprunteur",
+                                    suffixe="%/an",
+                                    min=0,
+                                    max=2,
+                                    aide="En % du capital emprunté, par an.",
+                                )
+                                differe_type_field = liste(
+                                    DIFFERE_OPTIONS,
+                                    "Différé de crédit",
+                                    sim_state,
+                                    "differe_type",
+                                    aide="Début de prêt où l'on ne rembourse que les intérêts (partiel) ou rien "
+                                    "du tout (total, les intérêts s'ajoutent au capital).",
+                                )
+                                refs["field_differe_type"] = differe_type_field
+                                refs["field_differe_duree"] = champ(
+                                    "Durée du différé", sim_state, "differe_duree_mois", suffixe="mois", min=0, max=60
+                                )
+                                champ(
+                                    "Frais de garantie",
+                                    sim_state,
+                                    "taux_frais_garantie",
+                                    suffixe="% du prêt",
+                                    min=0,
+                                    max=5,
+                                    aide="Caution (type Crédit Logement) ou hypothèque : environ 1 à 1,5 % du prêt.",
+                                )
+                                champ(
+                                    "Frais de dossier bancaire",
+                                    sim_state,
+                                    "frais_dossier_bancaire",
+                                    suffixe="€",
+                                    min=0,
+                                    aide="Facturés par la banque, souvent 500 à 1 500 €.",
+                                )
+                                champ(
+                                    "Frais de courtage",
+                                    sim_state,
+                                    "frais_courtage",
+                                    suffixe="€",
+                                    min=0,
+                                    aide="Honoraires du courtier, s'il y en a un.",
+                                )
+                    refs["fieldset_credit"] = fieldset_credit
 
-                theme.subsection_title("Financement")
-                avec_credit_switch = ui.switch("Financement par crédit", value=sim_state["avec_credit"]).bind_value(
-                    sim_state, "avec_credit"
-                )
-                refs["note_fonds_propres"] = ui.label(
-                    "Bien financé intégralement en fonds propres : l'apport couvre la totalité du coût "
-                    "de l'opération, sans mensualité ni intérêts d'emprunt."
-                ).classes(theme.HINT_CLASSES)
-                with ui.row().classes(theme.GRID_CLASSES) as fieldset_credit:
-                    ui.number("Apport personnel (€)", value=sim_state["apport"], min=0).bind_value(
-                        sim_state, "apport"
-                    ).props("outlined dense").classes("w-full")
-                    ui.number(
-                        "Taux crédit annuel (%)", value=sim_state["taux_credit_annuel"], min=0, max=20
-                    ).bind_value(sim_state, "taux_credit_annuel").props("outlined dense").classes("w-full")
-                    duree_credit_field = ui.number(
-                        "Durée crédit (années)", value=sim_state["duree_credit_annees"], min=1, max=35
-                    ).bind_value(sim_state, "duree_credit_annees").props("outlined dense").classes("w-full")
-                    refs["field_duree_credit"] = duree_credit_field
-                    ui.number(
-                        "Assurance emprunteur (% capital/an)", value=sim_state["taux_assurance_emprunteur"], min=0, max=2
-                    ).bind_value(sim_state, "taux_assurance_emprunteur").props("outlined dense").classes("w-full")
-                    differe_type_field = (
-                        ui.select(DIFFERE_OPTIONS, label="Différé de crédit", value=sim_state["differe_type"])
-                        .bind_value(sim_state, "differe_type")
-                        .props("outlined dense")
-                        .classes("w-full")
-                    )
-                    refs["field_differe_type"] = differe_type_field
-                    differe_duree_field = ui.number(
-                        "Durée du différé (mois)", value=sim_state["differe_duree_mois"], min=0, max=60
-                    ).bind_value(sim_state, "differe_duree_mois").props("outlined dense").classes("w-full")
-                    refs["field_differe_duree"] = differe_duree_field
-                    ui.number(
-                        "Frais de garantie (% du prêt) — caution ou hypothèque",
-                        value=sim_state["taux_frais_garantie"],
-                        min=0,
-                        max=5,
-                    ).bind_value(sim_state, "taux_frais_garantie").props("outlined dense").classes("w-full")
-                    ui.number(
-                        "Frais de dossier bancaire (€)", value=sim_state["frais_dossier_bancaire"], min=0
-                    ).bind_value(sim_state, "frais_dossier_bancaire").props("outlined dense").classes("w-full")
-                    ui.number("Frais de courtage (€)", value=sim_state["frais_courtage"], min=0).bind_value(
-                        sim_state, "frais_courtage"
-                    ).props("outlined dense").classes("w-full")
-                refs["fieldset_credit"] = fieldset_credit
+                    fieldset_achat_revente = ui.column().classes("w-full gap-2")
+                    with fieldset_achat_revente:
+                        theme.subsection_title("Achat-revente")
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            champ(
+                                "Durée de portage",
+                                sim_state,
+                                "duree_portage_mois",
+                                suffixe="mois",
+                                min=1,
+                                max=60,
+                                aide="Du jour de l'achat au jour de la revente.",
+                            )
+                            champ(
+                                "Prix de revente visé",
+                                sim_state,
+                                "prix_revente_vise",
+                                suffixe="€",
+                                min=0,
+                                aide="Laisse vide pour l'estimer à partir de la revalorisation du bien. "
+                                "Nécessaire pour calculer le prix d'achat maximum.",
+                            )
+                            champ(
+                                "Frais d'agence à la revente",
+                                sim_state,
+                                "frais_agence_revente_pct",
+                                suffixe="% du prix",
+                                min=0,
+                                max=15,
+                            )
+                    refs["fieldset_achat_revente"] = fieldset_achat_revente
 
-                fieldset_achat_revente = ui.column().classes("w-full gap-2")
-                with fieldset_achat_revente:
-                    theme.subsection_title("Achat-revente")
+                _bouton_onglet_suivant(tab_financement)
+
+            # -----------------------------------------------------------------
+            # Onglet Exploitation
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_exploitation):
+                with theme.section_card():
+                    theme.subsection_title("Revenus et charges")
                     with ui.row().classes(theme.GRID_CLASSES):
-                        ui.number(
-                            "Durée de portage (mois)", value=sim_state["duree_portage_mois"], min=1, max=60
-                        ).bind_value(sim_state, "duree_portage_mois").props("outlined dense").classes("w-full")
-                        ui.number(
-                            "Prix de revente visé (€) — sinon estimé via revalorisation",
-                            value=sim_state["prix_revente_vise"],
+                        field_loyer = champ(
+                            "Loyer mensuel",
+                            sim_state,
+                            "loyer_mensuel_hors_charges",
+                            suffixe="€/mois",
                             min=0,
-                        ).bind_value(sim_state, "prix_revente_vise").props("outlined dense").classes("w-full")
-                        ui.number(
-                            "Frais d'agence à la revente (% du prix)",
-                            value=sim_state["frais_agence_revente_pct"],
+                            aide="Loyer hors charges récupérables sur le locataire.",
+                        )
+                        refs["field_loyer"] = field_loyer
+                        field_prix_nuitee = champ("Prix moyen par nuitée", sim_state, "prix_nuitee", suffixe="€", min=0)
+                        refs["field_prix_nuitee"] = field_prix_nuitee
+                        field_taux_occupation = champ(
+                            "Taux d'occupation",
+                            sim_state,
+                            "taux_occupation_pct",
+                            suffixe="%",
                             min=0,
-                            max=15,
-                        ).bind_value(sim_state, "frais_agence_revente_pct").props("outlined dense").classes("w-full")
-                refs["fieldset_achat_revente"] = fieldset_achat_revente
-
-            _bouton_onglet_suivant(tab_financement)
-
-        # -----------------------------------------------------------------
-        # Onglet Exploitation
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_exploitation):
-            with theme.section_card():
-                theme.subsection_title("Charges d'exploitation")
-                with ui.row().classes(theme.GRID_CLASSES):
-                    field_loyer = ui.number(
-                        "Loyer mensuel hors charges (€)", value=sim_state["loyer_mensuel_hors_charges"], min=0
-                    ).bind_value(sim_state, "loyer_mensuel_hors_charges").props("outlined dense").classes("w-full")
-                    refs["field_loyer"] = field_loyer
-                    field_prix_nuitee = ui.number(
-                        "Prix moyen par nuitée (€)", value=sim_state["prix_nuitee"], min=0
-                    ).bind_value(sim_state, "prix_nuitee").props("outlined dense").classes("w-full")
-                    refs["field_prix_nuitee"] = field_prix_nuitee
-                    field_taux_occupation = ui.number(
-                        "Taux d'occupation annuel (%)", value=sim_state["taux_occupation_pct"], min=0, max=100
-                    ).bind_value(sim_state, "taux_occupation_pct").props("outlined dense").classes("w-full")
-                    refs["field_taux_occupation"] = field_taux_occupation
-                    field_charges_copro = ui.number(
-                        "Charges copropriété/an (€)", value=sim_state["charges_copropriete_annuelles"], min=0
-                    ).bind_value(sim_state, "charges_copropriete_annuelles").props("outlined dense").classes("w-full")
-                    refs["field_charges_copro"] = field_charges_copro
-                    field_frais_gestion = ui.number(
-                        "Frais de gestion (% des loyers)", value=sim_state["frais_gestion_pct_loyers"], min=0, max=15
-                    ).bind_value(sim_state, "frais_gestion_pct_loyers").props("outlined dense").classes("w-full")
-                    refs["field_frais_gestion"] = field_frais_gestion
-                    field_vacance = ui.number(
-                        "Vacance locative (%)", value=sim_state["vacance_locative_pct"], min=0, max=90
-                    ).bind_value(sim_state, "vacance_locative_pct").props("outlined dense").classes("w-full")
-                    refs["field_vacance"] = field_vacance
-                    field_entretien = ui.number(
-                        "Entretien annuel (€)", value=sim_state["entretien_annuel"], min=0
-                    ).bind_value(sim_state, "entretien_annuel").props("outlined dense").classes("w-full")
-                    refs["field_entretien"] = field_entretien
-                    field_frais_comptable = ui.number(
-                        "Frais comptable/an (€) — réel BIC / SCI IS", value=sim_state["frais_comptable_annuel"], min=0
-                    ).bind_value(sim_state, "frais_comptable_annuel").props("outlined dense").classes("w-full")
-                    refs["field_frais_comptable"] = field_frais_comptable
-                    refs["field_cfe"] = ui.number(
-                        "CFE/an (€) — meublé, exonérée la 1re année", value=sim_state["cfe_annuelle"], min=0
-                    ).bind_value(sim_state, "cfe_annuelle").props("outlined dense").classes("w-full")
-                    refs["field_gli"] = ui.number(
-                        "Assurance loyers impayés (% des loyers)", value=sim_state["gli_pct_loyers"], min=0, max=10
-                    ).bind_value(sim_state, "gli_pct_loyers").props("outlined dense").classes("w-full")
-
-                fieldset_lcd = ui.column().classes("w-full gap-2")
-                with fieldset_lcd:
-                    theme.subsection_title("Location courte durée")
-                    with ui.row().classes(theme.GRID_CLASSES):
-                        ui.select(
-                            {True: "Classé (abattement 50 %)", False: "Non classé (abattement 30 %, plafond réduit)"},
-                            label="Meublé de tourisme classé",
-                            value=sim_state["meuble_tourisme_classe"],
-                        ).bind_value(sim_state, "meuble_tourisme_classe").props("outlined dense").classes("w-full")
-                        ui.number(
-                            "Commission plateforme (% des recettes)", value=sim_state["frais_plateforme_pct"], min=0, max=30
-                        ).bind_value(sim_state, "frais_plateforme_pct").props("outlined dense").classes("w-full")
-                        ui.number(
-                            "Ménage/blanchisserie annuel (€)", value=sim_state["frais_menage_annuel"], min=0
-                        ).bind_value(sim_state, "frais_menage_annuel").props("outlined dense").classes("w-full")
-                refs["fieldset_lcd"] = fieldset_lcd
-
-            _bouton_onglet_suivant(tab_exploitation)
-
-        # -----------------------------------------------------------------
-        # Onglet Fiscalité
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_fiscalite):
-            with theme.section_card():
-                fieldset_regime = ui.column().classes("w-full gap-2")
-                with fieldset_regime:
-                    theme.subsection_title("Régime locatif & fiscalité")
-                    with ui.row().classes(theme.GRID_CLASSES):
-                        field_regime_location = ui.select(
-                            REGIME_LOCATION_OPTIONS, label="Régime", value=sim_state["regime_location"]
-                        ).bind_value(sim_state, "regime_location").props("outlined dense").classes("w-full")
-                        refs["field_regime_location"] = field_regime_location
-                        field_tmi = ui.select(
-                            TMI_OPTIONS,
-                            label="Tranche marginale d'imposition (TMI) — personne physique / SCI IR",
-                            value=sim_state["taux_marginal_imposition"],
-                        ).bind_value(sim_state, "taux_marginal_imposition").props("outlined dense").classes("w-full")
-                        refs["field_tmi"] = field_tmi
-                refs["fieldset_regime"] = fieldset_regime
-
-                fieldset_amortissement = ui.column().classes("w-full gap-2")
-                with fieldset_amortissement:
-                    theme.subsection_title("Amortissement (LMNP réel / SCI à l'IS)")
-                    with ui.row().classes(theme.GRID_CLASSES):
-                        ui.number(
-                            "Part terrain (non amortissable, %)", value=sim_state["part_terrain_pct"], min=0, max=50
-                        ).bind_value(sim_state, "part_terrain_pct").props("outlined dense").classes("w-full")
-                        ui.number(
-                            "Durée amortissement bâti (années)",
-                            value=sim_state["duree_amortissement_bati_annees"],
-                            min=1,
-                            max=50,
-                        ).bind_value(sim_state, "duree_amortissement_bati_annees").props("outlined dense").classes("w-full")
-                        ui.number(
-                            "Durée amortissement travaux (années)",
-                            value=sim_state["duree_amortissement_travaux_annees"],
-                            min=1,
-                            max=50,
-                        ).bind_value(sim_state, "duree_amortissement_travaux_annees").props("outlined dense").classes(
-                            "w-full"
+                            max=100,
+                            aide="Part de l'année où le logement est loué (50 % ≈ 183 nuits).",
                         )
-                        ui.number(
-                            "Durée amortissement mobilier (années)",
-                            value=sim_state["duree_amortissement_mobilier_annees"],
-                            min=1,
-                            max=15,
-                        ).bind_value(sim_state, "duree_amortissement_mobilier_annees").props("outlined dense").classes(
-                            "w-full"
+                        refs["field_taux_occupation"] = field_taux_occupation
+                        refs["field_charges_copro"] = champ(
+                            "Charges de copropriété",
+                            sim_state,
+                            "charges_copropriete_annuelles",
+                            suffixe="€/an",
+                            min=0,
+                            aide="Part non récupérable sur le locataire.",
                         )
-                refs["fieldset_amortissement"] = fieldset_amortissement
+                        refs["field_vacance"] = champ(
+                            "Vacance locative",
+                            sim_state,
+                            "vacance_locative_pct",
+                            suffixe="%",
+                            min=0,
+                            max=90,
+                            aide="Part de l'année sans locataire (5 % ≈ 18 jours).",
+                        )
 
-                theme.subsection_title("Projection")
-                with ui.row().classes(theme.GRID_CLASSES):
-                    field_duree_projection = ui.number(
-                        "Durée de projection (années)", value=sim_state["duree_projection_annees"], min=1, max=35
-                    ).bind_value(sim_state, "duree_projection_annees").props("outlined dense").classes("w-full")
-                    refs["field_duree_projection"] = field_duree_projection
-                    ui.number(
-                        "Revalorisation du bien (%/an)", value=sim_state["taux_revalorisation_bien_annuel"], min=-5, max=10
-                    ).bind_value(sim_state, "taux_revalorisation_bien_annuel").props("outlined dense").classes("w-full")
-                    field_reval_loyers = ui.number(
-                        "Revalorisation des loyers (%/an)",
-                        value=sim_state["taux_revalorisation_loyers_annuel"],
-                        min=-5,
-                        max=10,
-                    ).bind_value(sim_state, "taux_revalorisation_loyers_annuel").props("outlined dense").classes("w-full")
-                    refs["field_reval_loyers"] = field_reval_loyers
-                    refs["field_reval_charges"] = ui.number(
-                        "Hausse des charges (%/an) — taxe foncière, copro...",
-                        value=sim_state["taux_revalorisation_charges_annuel"],
-                        min=-5,
-                        max=10,
-                    ).bind_value(sim_state, "taux_revalorisation_charges_annuel").props("outlined dense").classes("w-full")
-                    refs["field_objectif_cf"] = ui.number(
-                        "Objectif de cash-flow mensuel (€) — pour le prix d'achat max",
-                        value=sim_state["objectif_cashflow_mensuel"],
-                    ).bind_value(sim_state, "objectif_cashflow_mensuel").props("outlined dense").classes("w-full")
-                    refs["field_objectif_marge"] = ui.number(
-                        "Objectif de marge nette (€) — pour le prix d'achat max",
-                        value=sim_state["objectif_marge_nette"],
-                    ).bind_value(sim_state, "objectif_marge_nette").props("outlined dense").classes("w-full")
+                    fieldset_lcd = ui.column().classes("w-full gap-2")
+                    with fieldset_lcd:
+                        theme.subsection_title("Location courte durée")
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            liste(
+                                {True: "Classé (abattement 50 %)", False: "Non classé (abattement 30 %, plafond réduit)"},
+                                "Meublé de tourisme classé",
+                                sim_state,
+                                "meuble_tourisme_classe",
+                                aide="Le classement (1 à 5 étoiles) donne un abattement micro-BIC plus élevé.",
+                            )
+                            champ(
+                                "Commission plateforme",
+                                sim_state,
+                                "frais_plateforme_pct",
+                                suffixe="% des recettes",
+                                min=0,
+                                max=30,
+                                aide="Frais Airbnb/Booking côté hôte : environ 3 %, jusqu'à 15 % en formule tout compris.",
+                            )
+                            champ("Ménage / blanchisserie", sim_state, "frais_menage_annuel", suffixe="€/an", min=0)
+                    refs["fieldset_lcd"] = fieldset_lcd
 
-                field_marchand_pro = ui.select(
-                    {False: "Non (occasionnel)", True: "Oui (activité habituelle, régime BIC/IS)"},
-                    label="Marchand de biens professionnel",
-                    value=sim_state["marchand_de_biens_professionnel"],
-                ).bind_value(sim_state, "marchand_de_biens_professionnel").props("outlined dense").classes("w-full")
-                refs["field_marchand_pro"] = field_marchand_pro
+                    with plus_d_options("Plus d'options : gestion, entretien, comptable, CFE, loyers impayés"):
+                        with ui.row().classes(theme.GRID_CLASSES + " pt-2"):
+                            refs["field_frais_gestion"] = champ(
+                                "Frais de gestion",
+                                sim_state,
+                                "frais_gestion_pct_loyers",
+                                suffixe="% des loyers",
+                                min=0,
+                                max=15,
+                                aide="Agence de gestion locative : en général 6 à 10 % des loyers.",
+                            )
+                            refs["field_entretien"] = champ(
+                                "Entretien", sim_state, "entretien_annuel", suffixe="€/an", min=0,
+                                aide="Budget annuel de petites réparations.",
+                            )
+                            refs["field_frais_comptable"] = champ(
+                                "Frais comptable",
+                                sim_state,
+                                "frais_comptable_annuel",
+                                suffixe="€/an",
+                                min=0,
+                                aide="Expert-comptable en LMNP au réel ou SCI à l'IS (souvent 400 à 800 €/an), déductible.",
+                            )
+                            refs["field_cfe"] = champ(
+                                "CFE",
+                                sim_state,
+                                "cfe_annuelle",
+                                suffixe="€/an",
+                                min=0,
+                                aide="Cotisation foncière des entreprises, due en meublé. Exonérée l'année de début "
+                                "d'activité et sous 5 000 € de recettes annuelles.",
+                            )
+                            refs["field_gli"] = champ(
+                                "Assurance loyers impayés",
+                                sim_state,
+                                "gli_pct_loyers",
+                                suffixe="% des loyers",
+                                min=0,
+                                max=10,
+                                aide="Garantie loyers impayés (GLI), souvent 2,5 à 3,5 % des loyers. Facultative.",
+                            )
 
-            btn_simuler = ui.button("Calculer la rentabilité").props("unelevated").classes("mt-2")
+                _bouton_onglet_suivant(tab_exploitation)
 
-        # -----------------------------------------------------------------
-        # Onglet Résultats
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_resultats):
-            results_placeholder = ui.label(
-                "Renseigne le projet puis clique sur « Calculer la rentabilité » (onglet Fiscalité)."
-            ).classes(theme.HINT_CLASSES)
+            # -----------------------------------------------------------------
+            # Onglet Fiscalité
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_fiscalite):
+                with theme.section_card():
+                    fieldset_regime = ui.column().classes("w-full gap-2")
+                    with fieldset_regime:
+                        theme.subsection_title("Régime locatif & fiscalité")
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            field_regime_location = liste(
+                                REGIME_LOCATION_OPTIONS,
+                                "Régime",
+                                sim_state,
+                                "regime_location",
+                                aide="Location nue : revenus fonciers. Location meublée : LMNP, avec amortissement "
+                                "possible au réel.",
+                            )
+                            refs["field_regime_location"] = field_regime_location
+                            refs["field_tmi"] = liste(
+                                TMI_OPTIONS,
+                                "Tranche marginale d'imposition (TMI)",
+                                sim_state,
+                                "taux_marginal_imposition",
+                                aide="Taux de la dernière tranche d'impôt de ton foyer : les revenus locatifs "
+                                "sont imposés à ce taux.",
+                            )
+                    refs["fieldset_regime"] = fieldset_regime
 
-            verdict_box = ui.column().classes("w-full gap-1 rounded-xl p-4 border")
-            verdict_box.visible = False
-            with verdict_box:
-                verdict_titre = ui.label("").classes("text-lg font-bold")
-                verdict_detail = ui.label("").classes("text-sm")
-
-            results_location = ui.column().classes("w-full gap-3")
-            results_location.visible = False
-            with results_location:
-                with ui.row().classes(theme.GRID_CLASSES):
-                    v_cashflow = theme.stat_card("Cash-flow net mensuel (an 1)")
-                    v_effort = theme.stat_card("Effort d'épargne mensuel")
-                    v_enrichissement = theme.stat_card("Enrichissement net")
-                    v_rendement_brut = theme.stat_card("Rendement brut")
-                    v_rendement_net = theme.stat_card("Rendement net de charges")
-                    v_rendement_net_net = theme.stat_card("Rendement net-net (après impôts)")
-                    v_cout_total = theme.stat_card("Coût total d'acquisition")
-                    v_mensualite = theme.stat_card("Mensualité crédit")
-                    v_prix_max = theme.stat_card("Prix d'achat maximum")
-                detail_location = ui.label("").classes(theme.HINT_CLASSES)
-
-                avertissements_box = ui.column().classes("w-full gap-2")
-
-                ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                table_regimes = ui.table(
-                    columns=[
-                        {"name": "regime", "label": "Régime", "field": "regime", "align": "left"},
-                        {"name": "revenu", "label": "Revenu imposable", "field": "revenu", "align": "left"},
-                        {"name": "impot", "label": "Impôt total", "field": "impot", "align": "left"},
-                        {"name": "cashflow", "label": "Cash-flow mensuel net", "field": "cashflow", "align": "left"},
-                        {"name": "netnet", "label": "Rendement net-net", "field": "netnet", "align": "left"},
-                        {"name": "tri", "label": "TRI (avec revente)", "field": "tri", "align": "left"},
-                    ],
-                    rows=[],
-                    row_key="regime",
-                ).classes("w-full")
-
-                ui.label("Scénarios de stress (meilleur régime)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                table_stress = ui.table(
-                    columns=[
-                        {"name": "scenario", "label": "Scénario", "field": "scenario", "align": "left"},
-                        {"name": "cashflow", "label": "Cash-flow mensuel net (an 1)", "field": "cashflow", "align": "left"},
-                        {"name": "tri", "label": "TRI", "field": "tri", "align": "left"},
-                        {"name": "enrichissement", "label": "Enrichissement net", "field": "enrichissement", "align": "left"},
-                    ],
-                    rows=[],
-                    row_key="scenario",
-                ).classes("w-full")
-
-                ui.label("Cash-flow cumulé sur la durée de projection").classes(theme.SUBSECTION_TITLE_CLASSES)
-                chart_cashflow = (
-                    ui.echart(
-                        {"xAxis": {"type": "category", "data": []}, "yAxis": {"type": "value"}, "series": []}
+                    field_marchand_pro = liste(
+                        {False: "Non (occasionnel)", True: "Oui (activité habituelle, régime BIC/IS)"},
+                        "Marchand de biens professionnel",
+                        sim_state,
+                        "marchand_de_biens_professionnel",
                     )
-                    .props('id="cashflow-chart"')
-                    .classes("w-full h-72")
-                )
+                    refs["field_marchand_pro"] = field_marchand_pro
 
-                ui.label("Revente en fin de projection").classes(theme.SUBSECTION_TITLE_CLASSES)
-                table_revente = ui.table(
-                    columns=[
-                        {"name": "regime", "label": "Régime", "field": "regime", "align": "left"},
-                        {"name": "valeur", "label": "Valeur revente", "field": "valeur", "align": "left"},
-                        {"name": "plusvalue", "label": "Plus-value imposable", "field": "plusvalue", "align": "left"},
-                        {"name": "impot", "label": "Impôt total", "field": "impot", "align": "left"},
-                        {"name": "net", "label": "Net vendeur", "field": "net", "align": "left"},
-                        {"name": "enrichissement", "label": "Enrichissement net", "field": "enrichissement", "align": "left"},
-                    ],
-                    rows=[],
-                    row_key="regime",
-                ).classes("w-full")
-
-            results_achat_revente = ui.column().classes("w-full gap-3")
-            results_achat_revente.visible = False
-            with results_achat_revente:
-                with ui.row().classes(theme.GRID_CLASSES):
-                    v_ar_marge_nette = theme.stat_card("Marge nette")
-                    v_ar_rentabilite = theme.stat_card("Rentabilité de l'opération")
-                    v_ar_tri = theme.stat_card("TRI annualisé")
-                    v_ar_marge_brute = theme.stat_card("Marge brute avant impôt")
-                    v_ar_impot = theme.stat_card("Impôt total")
-                    v_ar_regime = theme.stat_card("Régime fiscal")
-                    v_ar_cash_final = theme.stat_card("Cash final investisseur")
-                    v_ar_portage = theme.stat_card("Frais de portage totaux")
-                    v_ar_prix_max = theme.stat_card("Prix d'achat maximum")
-                table_achat_revente = ui.table(
-                    columns=[
-                        {"name": "k", "label": "", "field": "k", "align": "left"},
-                        {"name": "v", "label": "", "field": "v", "align": "left"},
-                    ],
-                    rows=[],
-                    row_key="k",
-                ).props("hide-header").classes("w-full")
-
-                ui.label("Scénarios de stress").classes(theme.SUBSECTION_TITLE_CLASSES)
-                table_stress_ar = ui.table(
-                    columns=[
-                        {"name": "scenario", "label": "Scénario", "field": "scenario", "align": "left"},
-                        {"name": "marge", "label": "Marge nette", "field": "marge", "align": "left"},
-                        {"name": "rentabilite", "label": "Rentabilité de l'opération", "field": "rentabilite", "align": "left"},
-                    ],
-                    rows=[],
-                    row_key="scenario",
-                ).classes("w-full")
-
-            _bouton_onglet_suivant(tab_resultats)
-
-        # -----------------------------------------------------------------
-        # Onglet Taux d'endettement
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_endettement):
-            with theme.section_card():
-                ui.label(
-                    "Calcule le taux d'endettement du foyer à partir de la simulation (onglets précédents), "
-                    "indépendamment du calcul de rentabilité."
-                ).classes(theme.HINT_CLASSES + " mb-2")
-
-                with ui.row().classes(theme.GRID_CLASSES):
-                    ui.number(
-                        "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
-                    ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes("w-full")
-                    ui.number(
-                        "Autres revenus mensuels (€)", value=profil_state["autres_revenus_mensuels"], min=0
-                    ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full")
-                    ui.number(
-                        "Mensualités de crédits existants (€)",
-                        value=profil_state["mensualites_credits_existants"],
-                        min=0,
-                    ).bind_value(profil_state, "mensualites_credits_existants").props("outlined dense").classes("w-full")
-
-                with ui.row().classes("gap-3 mt-3"):
-                    btn_endettement = ui.button("Calculer le taux d'endettement").props("unelevated")
-                endettement_status = ui.label("").classes(theme.HINT_CLASSES)
-
-                endettement_results = ui.column().classes("w-full gap-2 mt-2")
-                endettement_results.visible = False
-                with endettement_results:
+                    refs["titre_projection"] = ui.label("Projection").classes(theme.SUBSECTION_TITLE_CLASSES)
                     with ui.row().classes(theme.GRID_CLASSES):
-                        v_end_revenus = theme.stat_card("Revenus considérés (dont 70 % des loyers)")
-                        v_end_mensualites = theme.stat_card("Mensualités totales")
-                        v_end_taux = theme.stat_card("Taux d'endettement")
-                        v_end_statut = theme.stat_card("Statut")
-                    end_marge_label = ui.label("").classes(theme.HINT_CLASSES)
+                        refs["field_duree_projection"] = champ(
+                            "Durée de détention",
+                            sim_state,
+                            "duree_projection_annees",
+                            suffixe="ans",
+                            min=1,
+                            max=35,
+                            aide="Nombre d'années avant la revente simulée.",
+                        )
 
-            _bouton_onglet_suivant(tab_endettement)
+                    fieldset_amortissement = plus_d_options("Plus d'options : amortissements (LMNP au réel / SCI à l'IS)")
+                    with fieldset_amortissement:
+                        with ui.row().classes(theme.GRID_CLASSES + " pt-2"):
+                            champ(
+                                "Part du terrain",
+                                sim_state,
+                                "part_terrain_pct",
+                                suffixe="%",
+                                min=0,
+                                max=50,
+                                aide="Le terrain ne s'amortit pas : en général 10 à 20 % du prix.",
+                            )
+                            champ("Amortissement du bâti", sim_state, "duree_amortissement_bati_annees", suffixe="ans", min=1, max=50)
+                            champ(
+                                "Amortissement des travaux", sim_state, "duree_amortissement_travaux_annees", suffixe="ans", min=1, max=50
+                            )
+                            champ(
+                                "Amortissement du mobilier", sim_state, "duree_amortissement_mobilier_annees", suffixe="ans", min=1, max=15
+                            )
+                    refs["fieldset_amortissement"] = fieldset_amortissement
 
-        # -----------------------------------------------------------------
-        # Onglet Dossier de financement
-        # -----------------------------------------------------------------
-        with ui.tab_panel(tab_dossier):
-            with theme.section_card():
-                ui.label(
-                    "Génère un dossier Word pour la banque à partir de la simulation. Commence par générer un "
-                    "aperçu pour vérifier les chiffres, puis télécharge le document."
-                ).classes(theme.HINT_CLASSES + " mb-2")
+                    with plus_d_options("Plus d'options : évolution des prix et objectifs"):
+                        with ui.row().classes(theme.GRID_CLASSES + " pt-2"):
+                            champ(
+                                "Revalorisation du bien",
+                                sim_state,
+                                "taux_revalorisation_bien_annuel",
+                                suffixe="%/an",
+                                min=-5,
+                                max=10,
+                            )
+                            refs["field_reval_loyers"] = champ(
+                                "Revalorisation des loyers",
+                                sim_state,
+                                "taux_revalorisation_loyers_annuel",
+                                suffixe="%/an",
+                                min=-5,
+                                max=10,
+                            )
+                            refs["field_reval_charges"] = champ(
+                                "Hausse des charges",
+                                sim_state,
+                                "taux_revalorisation_charges_annuel",
+                                suffixe="%/an",
+                                min=-5,
+                                max=10,
+                                aide="Taxe foncière, copropriété, assurance, entretien… Elles augmentent souvent "
+                                "plus vite que les loyers.",
+                            )
+                            refs["field_objectif_cf"] = champ(
+                                "Objectif de cash-flow",
+                                sim_state,
+                                "objectif_cashflow_mensuel",
+                                suffixe="€/mois",
+                                aide="Sert à calculer le prix d'achat maximum : le prix le plus élevé qui garde "
+                                "ce cash-flow en année 1.",
+                            )
+                            refs["field_objectif_marge"] = champ(
+                                "Objectif de marge nette",
+                                sim_state,
+                                "objectif_marge_nette",
+                                suffixe="€",
+                                aide="Sert à calculer le prix d'achat maximum : le prix le plus élevé qui garde "
+                                "cette marge nette.",
+                            )
 
-                with ui.row().classes(theme.GRID_CLASSES):
-                    refs["field_nom_emprunteur"] = ui.input(
-                        "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
-                    ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
-                    ui.input(
-                        "Adresse du bien (optionnel, sinon reprise de l'analyse de marché)",
-                        value=dossier_meta_state["adresse_bien"],
-                    ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
+                _bouton_onglet_suivant(tab_fiscalite)
 
-                with ui.row().classes("gap-3 mt-3"):
-                    btn_generer_dossier = ui.button("Générer l'aperçu du dossier").props("unelevated")
-                    btn_telecharger_dossier = ui.button("Télécharger le dossier (Word)").props("outline")
-                    btn_telecharger_dossier.visible = False
-                dossier_status = ui.label("").classes(theme.HINT_CLASSES)
+            # -----------------------------------------------------------------
+            # Onglet Résultats
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_resultats):
+                results_placeholder = ui.label("").classes(theme.HINT_CLASSES)
 
-                apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
-                apercu_dossier.visible = False
-                with apercu_dossier:
-                    theme.subsection_title("Aperçu des données du dossier")
-                    table_apercu_dossier = ui.table(
+                verdict_box = ui.column().classes("w-full gap-1 rounded-xl p-4 border")
+                verdict_box.visible = False
+                with verdict_box:
+                    verdict_titre = ui.label("").classes("text-lg font-bold")
+                    verdict_detail = ui.label("").classes("text-sm")
+
+                def colonne(nom: str, label: str, gauche: bool = False) -> dict:
+                    return {"name": nom, "label": label, "field": nom, "align": "left" if gauche else "right"}
+
+                results_location = ui.column().classes("w-full gap-3")
+                results_location.visible = False
+                with results_location:
+                    with ui.row().classes(theme.GRID_CLASSES):
+                        v_cashflow = theme.stat_card(
+                            "Cash-flow net mensuel (an 1)",
+                            grand=True,
+                            aide_texte="Ce qui reste chaque mois après loyers, charges, crédit et impôts.",
+                        )
+                        v_effort = theme.stat_card(
+                            "Effort d'épargne",
+                            grand=True,
+                            aide_texte="Ce que tu dois sortir de ta poche chaque mois quand le cash-flow est négatif.",
+                        )
+                        v_enrichissement = theme.stat_card(
+                            "Enrichissement net",
+                            grand=True,
+                            aide_texte="Gain total sur la durée : cash-flows après impôts + revente nette "
+                            "(impôts et capital restant dû déduits), moins l'apport.",
+                        )
+                    with ui.row().classes(theme.GRID_CLASSES):
+                        v_rendement_brut = theme.stat_card(
+                            "Rendement brut", aide_texte="Loyers annuels ÷ coût total de l'opération."
+                        )
+                        v_rendement_net = theme.stat_card(
+                            "Rendement net de charges", aide_texte="(Loyers − charges) ÷ coût total."
+                        )
+                        v_rendement_net_net = theme.stat_card(
+                            "Rendement net-net",
+                            aide_texte="(Loyers − charges − impôts) ÷ coût total. Peut dépasser le rendement net "
+                            "si le régime crée une économie d'impôt (déficit foncier).",
+                        )
+                        v_cout_total = theme.stat_card("Coût total d'acquisition")
+                        v_mensualite = theme.stat_card("Mensualité du crédit")
+                        v_prix_max = theme.stat_card(
+                            "Prix d'achat maximum",
+                            aide_texte="Prix le plus élevé qui respecte ton objectif de cash-flow "
+                            "(Fiscalité > Plus d'options). Utile pour négocier.",
+                        )
+                    detail_location = ui.label("").classes(theme.HINT_CLASSES)
+
+                    avertissements_box = ui.column().classes("w-full gap-2")
+
+                    ui.label("Où va ton loyer (mois moyen, année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    ui.echart({"series": []}).props('id="loyer-chart"').classes("w-full h-72")
+
+                    ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    table_regimes = ui.table(
                         columns=[
-                            {"name": "k", "label": "", "field": "k", "align": "left"},
-                            {"name": "v", "label": "", "field": "v", "align": "left"},
+                            colonne("regime", "Régime", gauche=True),
+                            colonne("revenu", "Revenu imposable"),
+                            colonne("impot", "Impôt total"),
+                            colonne("cashflow", "Cash-flow mensuel net"),
+                            colonne("netnet", "Rendement net-net"),
+                            colonne("tri", "TRI (avec revente)"),
                         ],
                         rows=[],
+                        row_key="regime",
+                    ).props("flat bordered").classes("w-full")
+
+                    ui.label("Scénarios de stress (meilleur régime)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    table_stress = ui.table(
+                        columns=[
+                            colonne("scenario", "Scénario", gauche=True),
+                            colonne("cashflow", "Cash-flow mensuel net (an 1)"),
+                            colonne("tri", "TRI"),
+                            colonne("enrichissement", "Enrichissement net"),
+                        ],
+                        rows=[],
+                        row_key="scenario",
+                    ).props("flat bordered").classes("w-full")
+
+                    ui.label("Évolution du patrimoine").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    ui.echart({"series": []}).props('id="patrimoine-chart"').classes("w-full h-80")
+
+                    ui.label("Cash-flow cumulé par régime").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    ui.echart({"series": []}).props('id="cashflow-chart"').classes("w-full h-72")
+
+                    ui.label("Revente en fin de détention").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    table_revente = ui.table(
+                        columns=[
+                            colonne("regime", "Régime", gauche=True),
+                            colonne("valeur", "Valeur revente"),
+                            colonne("plusvalue", "Plus-value imposable"),
+                            colonne("impot", "Impôt total"),
+                            colonne("net", "Net vendeur"),
+                            colonne("enrichissement", "Enrichissement net"),
+                        ],
+                        rows=[],
+                        row_key="regime",
+                    ).props("flat bordered").classes("w-full")
+
+                results_achat_revente = ui.column().classes("w-full gap-3")
+                results_achat_revente.visible = False
+                with results_achat_revente:
+                    with ui.row().classes(theme.GRID_CLASSES):
+                        v_ar_marge_nette = theme.stat_card("Marge nette", grand=True, aide_texte="Marge après frais et impôts.")
+                        v_ar_rentabilite = theme.stat_card(
+                            "Rentabilité de l'opération", grand=True, aide_texte="Marge nette ÷ apport investi."
+                        )
+                        v_ar_tri = theme.stat_card(
+                            "TRI annualisé", grand=True, aide_texte="Rentabilité ramenée à une base annuelle."
+                        )
+                    with ui.row().classes(theme.GRID_CLASSES):
+                        v_ar_marge_brute = theme.stat_card("Marge brute avant impôt")
+                        v_ar_impot = theme.stat_card("Impôt total")
+                        v_ar_regime = theme.stat_card("Régime fiscal")
+                        v_ar_cash_final = theme.stat_card("Cash final investisseur")
+                        v_ar_portage = theme.stat_card("Frais de portage totaux")
+                        v_ar_prix_max = theme.stat_card(
+                            "Prix d'achat maximum",
+                            aide_texte="Prix le plus élevé qui respecte ton objectif de marge nette "
+                            "(Fiscalité > Plus d'options). Nécessite un prix de revente visé.",
+                        )
+                    table_achat_revente = ui.table(
+                        columns=[colonne("k", "", gauche=True), colonne("v", "")],
+                        rows=[],
                         row_key="k",
-                    ).props("hide-header").classes("w-full")
+                    ).props("hide-header flat bordered").classes("w-full")
+
+                    ui.label("Scénarios de stress").classes(theme.SUBSECTION_TITLE_CLASSES)
+                    table_stress_ar = ui.table(
+                        columns=[
+                            colonne("scenario", "Scénario", gauche=True),
+                            colonne("marge", "Marge nette"),
+                            colonne("rentabilite", "Rentabilité de l'opération"),
+                        ],
+                        rows=[],
+                        row_key="scenario",
+                    ).props("flat bordered").classes("w-full")
+
+                _bouton_onglet_suivant(tab_resultats)
+
+            # -----------------------------------------------------------------
+            # Onglet Taux d'endettement
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_endettement):
+                with theme.section_card():
+                    ui.label(
+                        "Calcule le taux d'endettement du foyer à partir de la simulation (onglets précédents), "
+                        "indépendamment du calcul de rentabilité."
+                    ).classes(theme.HINT_CLASSES + " mb-2")
+
+                    with ui.row().classes(theme.GRID_CLASSES):
+                        ui.number(
+                            "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
+                        ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes("w-full")
+                        ui.number(
+                            "Autres revenus mensuels (€)", value=profil_state["autres_revenus_mensuels"], min=0
+                        ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full")
+                        ui.number(
+                            "Mensualités de crédits existants (€)",
+                            value=profil_state["mensualites_credits_existants"],
+                            min=0,
+                        ).bind_value(profil_state, "mensualites_credits_existants").props("outlined dense").classes("w-full")
+
+                    with ui.row().classes("gap-3 mt-3"):
+                        btn_endettement = ui.button("Calculer le taux d'endettement").props("unelevated")
+                    endettement_status = ui.label("").classes(theme.HINT_CLASSES)
+
+                    endettement_results = ui.column().classes("w-full gap-2 mt-2")
+                    endettement_results.visible = False
+                    with endettement_results:
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            v_end_revenus = theme.stat_card("Revenus considérés (dont 70 % des loyers)")
+                            v_end_mensualites = theme.stat_card("Mensualités totales")
+                            v_end_taux = theme.stat_card("Taux d'endettement")
+                            v_end_statut = theme.stat_card("Statut")
+                        end_marge_label = ui.label("").classes(theme.HINT_CLASSES)
+
+                _bouton_onglet_suivant(tab_endettement)
+
+            # -----------------------------------------------------------------
+            # Onglet Dossier de financement
+            # -----------------------------------------------------------------
+            with ui.tab_panel(tab_dossier):
+                with theme.section_card():
+                    ui.label(
+                        "Génère un dossier Word pour la banque à partir de la simulation. Commence par générer un "
+                        "aperçu pour vérifier les chiffres, puis télécharge le document."
+                    ).classes(theme.HINT_CLASSES + " mb-2")
+
+                    with ui.row().classes(theme.GRID_CLASSES):
+                        refs["field_nom_emprunteur"] = ui.input(
+                            "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
+                        ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
+                        ui.input(
+                            "Adresse du bien (optionnel, sinon reprise de l'analyse de marché)",
+                            value=dossier_meta_state["adresse_bien"],
+                        ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
+
+                    with ui.row().classes("gap-3 mt-3"):
+                        btn_generer_dossier = ui.button("Générer l'aperçu du dossier").props("unelevated")
+                        btn_telecharger_dossier = ui.button("Télécharger le dossier (Word)").props("outline")
+                        btn_telecharger_dossier.visible = False
+                    dossier_status = ui.label("").classes(theme.HINT_CLASSES)
+
+                    apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
+                    apercu_dossier.visible = False
+                    with apercu_dossier:
+                        theme.subsection_title("Aperçu des données du dossier")
+                        table_apercu_dossier = ui.table(
+                            columns=[
+                                {"name": "k", "label": "", "field": "k", "align": "left"},
+                                {"name": "v", "label": "", "field": "v", "align": "left"},
+                            ],
+                            rows=[],
+                            row_key="k",
+                        ).props("hide-header").classes("w-full")
+
+        ui.element("div").classes("espace-barre-mobile h-16")  # place pour le bandeau mobile
+
+    def onglet_actif(tab) -> bool:
+        # La valeur est l'onglet lui-même après un set_value(), son nom après un clic.
+        return tab_panels.value is tab or tab_panels.value == tab.props["name"]
+
+    # =====================================================================
+    # Synthèse en direct (colonne de droite + bandeau mobile)
+    # =====================================================================
+    COULEURS_VERDICT = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE}
+    syntheses: list[dict] = []
+
+    def voir_detail() -> None:
+        tab_panels.set_value(tab_resultats)
+        if barre_detail.visible:
+            basculer_barre()
+
+    def construire_synthese() -> None:
+        with ui.column().classes("w-full gap-2"):
+            boite = ui.column().classes("w-full gap-0 rounded-xl p-3 border")
+            with boite:
+                titre = ui.label("").classes("font-bold leading-tight")
+                detail = ui.label("").classes("text-xs mt-1")
+            principal_label = ui.label("").classes("text-xs text-gray-500 dark:text-gray-400 mt-1")
+            principal = ui.label("–").classes("text-3xl font-bold leading-none")
+            lignes = []
+            for _ in range(6):
+                with ui.row().classes("w-full justify-between items-baseline no-wrap synthese-ligne") as rangee:
+                    libelle = ui.label("").classes("text-sm text-gray-500 dark:text-gray-400")
+                    valeur = ui.label("").classes("text-sm font-semibold text-right")
+                lignes.append((rangee, libelle, valeur))
+            erreur = ui.label("").classes("text-sm").style(f"color: {theme.NEGATIVE}")
+            ui.button("Voir le détail", icon="arrow_forward", on_click=voir_detail).props("flat dense no-caps").classes(
+                "self-end"
+            )
+        syntheses.append(
+            {
+                "boite": boite,
+                "titre": titre,
+                "detail": detail,
+                "principal_label": principal_label,
+                "principal": principal,
+                "lignes": lignes,
+                "erreur": erreur,
+            }
+        )
+
+    def remplir_synthese(sy: dict, v: dict, principal: tuple[str, str, float], lignes: list[tuple[str, str]]) -> None:
+        couleur = COULEURS_VERDICT[v["niveau"]]
+        sy["boite"].style(f"background: color-mix(in srgb, {couleur} 12%, transparent); border-color: {couleur};")
+        sy["boite"].visible = True
+        sy["titre"].set_text(v["titre"])
+        sy["titre"].style(f"color: {couleur}")
+        sy["detail"].set_text(v["detail"])
+        sy["principal_label"].set_text(principal[0])
+        sy["principal"].set_text(principal[1])
+        theme.colorer(sy["principal"], principal[2])
+        for i, (rangee, libelle, valeur) in enumerate(sy["lignes"]):
+            rangee.visible = i < len(lignes)
+            if i < len(lignes):
+                libelle.set_text(lignes[i][0])
+                valeur.set_text(lignes[i][1])
+        sy["erreur"].set_text("")
+
+    def maj_syntheses(inp, resultat: dict) -> None:
+        v = analyse.verdict(inp, resultat)
+        if inp.type_projet == schemas.TypeProjet.achat_revente:
+            ar = resultat["achat_revente"]
+            principal = ("Marge nette", eur(ar["marge_nette"]), ar["marge_nette"])
+            lignes = [
+                ("Rentabilité de l'opération", pct(ar["rentabilite_operation_pct"], 1)),
+                ("TRI annualisé", pct(ar["tri_annualise"], 1) if ar["tri_annualise"] is not None else "n/a"),
+                ("Coût total", eur(ar["cout_total_acquisition"])),
+                ("Frais de portage", eur(ar["frais_portage_total"])),
+                ("Impôt", eur(ar["impot_total"])),
+            ]
+        else:
+            regime = resultat["meilleur_regime"]
+            effort = resultat["effort_epargne_mensuel"]
+            principal = (
+                "Cash-flow net mensuel (an 1)",
+                eur(resultat["cashflow_mensuel_an1"]) + "/mois",
+                resultat["cashflow_mensuel_an1"],
+            )
+            lignes = [
+                ("Effort d'épargne", eur(effort) + "/mois" if effort > 0 else "Aucun"),
+                ("Rendement brut", pct(resultat["rendement_brut"], 1)),
+                ("Rendement net-net", pct(resultat["rendement_net_net_par_regime"][regime], 1)),
+                (
+                    f"Enrichissement ({inp.duree_projection_annees} ans)",
+                    eur(resultat["enrichissement_par_regime"][regime]),
+                ),
+                ("Coût total", eur(resultat["cout_total_acquisition"])),
+                (
+                    "Mensualité du crédit",
+                    eur(resultat["mensualite_credit_hors_assurance"]) + "/mois"
+                    if resultat["montant_emprunte"] > 0
+                    else "Aucune",
+                ),
+            ]
+        for sy in syntheses:
+            remplir_synthese(sy, v, principal, lignes)
+        barre_pastille.style(f"background: {COULEURS_VERDICT[v['niveau']]}")
+        barre_titre.set_text(v["titre"])
+
+    def erreur_syntheses(message: str) -> None:
+        for sy in syntheses:
+            sy["boite"].visible = False
+            sy["principal_label"].set_text("")
+            sy["principal"].set_text("")
+            for rangee, _, _ in sy["lignes"]:
+                rangee.visible = False
+            sy["erreur"].set_text(message)
+        barre_pastille.style(f"background: {theme.NEGATIVE}")
+        barre_titre.set_text("Saisie à compléter")
+
+    with colonne_synthese:
+        with theme.section_card().classes("p-4"):
+            ui.label("Synthèse en direct").classes("text-base font-semibold")
+            construire_synthese()
+
+    with ui.element("div").classes(
+        "barre-synthese-mobile fixed bottom-0 inset-x-0 z-40 border-t shadow-lg"
+    ):
+        with ui.row().classes("w-full items-center gap-2 px-4 py-3 cursor-pointer no-wrap") as barre_entete:
+            barre_pastille = ui.element("div").classes("w-3 h-3 rounded-full shrink-0")
+            barre_titre = ui.label("").classes("text-sm font-semibold flex-1 truncate")
+            barre_chevron = ui.icon("expand_less")
+        barre_detail = ui.element("div").classes("px-4 pb-3 max-h-[60vh] overflow-y-auto")
+        barre_detail.visible = False
+        with barre_detail:
+            construire_synthese()
+
+    def basculer_barre() -> None:
+        barre_detail.visible = not barre_detail.visible
+        barre_chevron.set_name("expand_more" if barre_detail.visible else "expand_less")
+
+    barre_entete.on("click", basculer_barre)
 
     # =====================================================================
     # Logique : visibilité dynamique (champs + onglets) selon le projet
@@ -984,12 +1310,12 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         is_sci_is = structure == "sci_is"
 
         tab_exploitation.visible = not is_achat_revente
-        if is_achat_revente and tab_panels.value == tab_exploitation:
+        if is_achat_revente and onglet_actif(tab_exploitation):
             tab_panels.set_value(tab_financement)
 
         avec_credit = sim_state["avec_credit"]
         tab_endettement.visible = avec_credit
-        if not avec_credit and tab_panels.value == tab_endettement:
+        if not avec_credit and onglet_actif(tab_endettement):
             tab_panels.set_value(tab_dossier)
         libelle_nom = "Nom de l'emprunteur (optionnel)" if avec_credit else "Nom de l'investisseur (optionnel)"
         refs["field_nom_emprunteur"].props(f'label="{libelle_nom}"')
@@ -1002,6 +1328,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         refs["field_regime_location"].visible = not is_lcd
         refs["field_tmi"].visible = not is_sci_is
         refs["field_marchand_pro"].visible = is_achat_revente
+        refs["titre_projection"].visible = not is_achat_revente
 
         for key in (
             "field_charges_copro",
@@ -1242,9 +1569,28 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     btn_use_market.on_click(on_use_market)
 
     # =====================================================================
-    # Logique : simulateur
+    # Logique : simulateur (recalcul automatique, onglet Résultats)
     # =====================================================================
-    COULEURS_VERDICT = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE}
+    def maj_graphique(element_id: str, option: dict) -> None:
+        # `.options` n'a pas de setter dans cette version de NiceGUI et son
+        # wrapper n'applique pas les nouvelles options : on appelle setOption
+        # d'ECharts directement. Le composant s'initialise de façon asynchrone
+        # quand le panneau vient d'être affiché, d'où les nouvelles tentatives.
+        ui.run_javascript(
+            """
+            (function retry(n) {
+                var el = document.getElementById('%s');
+                var inst = el && window.echarts && echarts.getInstanceByDom(el);
+                if (!inst) { if (n > 0) { setTimeout(function () { retry(n - 1); }, 50); } return; }
+                var opt = %s;
+                var euros = function (v) { return Math.round(v).toLocaleString('fr-FR') + ' €'; };
+                if (opt.yAxis && opt.yAxis.axisLabel) { opt.yAxis.axisLabel.formatter = euros; }
+                if (opt.tooltip) { opt.tooltip.valueFormatter = euros; }
+                inst.setOption(opt, true);
+            })(30);
+            """
+            % (element_id, json.dumps(option))
+        )
 
     def render_verdict(v: dict) -> None:
         couleur = COULEURS_VERDICT[v["niveau"]]
@@ -1273,26 +1619,34 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         meilleur = resultat["meilleur_regime"]
         render_verdict(analyse.verdict(inp, resultat))
 
-        v_cout_total.set_text(eur(resultat["cout_total_acquisition"]))
+        v_cashflow.set_text(eur(resultat["cashflow_mensuel_an1"]) + "/mois")
+        theme.colorer(v_cashflow, resultat["cashflow_mensuel_an1"])
+        effort = resultat["effort_epargne_mensuel"]
+        v_effort.set_text(eur(effort) + "/mois" if effort > 0 else "Aucun")
+        theme.colorer(v_effort, effort, inverse=True)
+        enrichissement = resultat["enrichissement_par_regime"][meilleur]
+        v_enrichissement.set_text(eur(enrichissement))
+        theme.colorer(v_enrichissement, enrichissement)
         v_rendement_brut.set_text(pct(resultat["rendement_brut"], 1))
         v_rendement_net.set_text(pct(resultat["rendement_net_charges"], 1))
         v_rendement_net_net.set_text(pct(resultat["rendement_net_net_par_regime"][meilleur], 1))
-        v_cashflow.set_text(eur(resultat["cashflow_mensuel_an1"]) + "/mois")
-        v_effort.set_text(
-            eur(resultat["effort_epargne_mensuel"]) + "/mois" if resultat["effort_epargne_mensuel"] > 0 else "Aucun"
-        )
-        v_enrichissement.set_text(
-            f"{eur(resultat['enrichissement_par_regime'][meilleur])} sur {inp.duree_projection_annees} ans"
-        )
-        v_prix_max.set_text(texte_prix_max(analyse.prix_achat_maximum(inp), "cash-flow ≥"))
+        theme.colorer(v_rendement_net_net, resultat["rendement_net_net_par_regime"][meilleur])
+        v_cout_total.set_text(eur(resultat["cout_total_acquisition"]))
         v_mensualite.set_text(
-            eur(resultat["mensualite_credit_hors_assurance"]) + "/mois (hors assurance)"
+            eur(resultat["mensualite_credit_hors_assurance"]) + "/mois"
             if resultat["montant_emprunte"] > 0
             else "Aucune (fonds propres)"
         )
+        v_prix_max.set_text(
+            texte_prix_max(analyse.prix_achat_maximum(inp), "cash-flow ≥")
+            if inp.avec_credit
+            else "Sans objet sans crédit"
+        )
         detail_location.set_text(
-            f"Indicateurs calculés pour le régime le plus favorable : {libelle_regime(meilleur)}. "
-            f"Coût total = prix + notaire + travaux + mobilier + frais bancaires ({eur(resultat['frais_bancaires'])})."
+            f"Indicateurs calculés pour le régime le plus favorable : {libelle_regime(meilleur)}, "
+            f"enrichissement sur {inp.duree_projection_annees} ans. "
+            f"Coût total = prix + notaire + travaux + mobilier + frais bancaires ({eur(resultat['frais_bancaires'])}). "
+            "Mensualité hors assurance."
         )
 
         avertissements_box.clear()
@@ -1308,15 +1662,15 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         rows_regimes = []
         for regime in regimes:
             fiscal = annee1["fiscal"][regime]
-            cashflow_mensuel = annee1["cashflow_apres_impot"][regime] / 12
             tri = resultat["tri_par_regime"].get(regime)
+            marque = " ★" if regime == meilleur else ""
             eligible = "" if fiscal.get("eligible", True) else " ⚠️ non éligible"
             rows_regimes.append(
                 {
-                    "regime": libelle_regime(regime) + eligible,
+                    "regime": libelle_regime(regime) + marque + eligible,
                     "revenu": eur(fiscal["revenu_imposable"]),
                     "impot": eur(fiscal["total_prelevements"]),
-                    "cashflow": eur(cashflow_mensuel),
+                    "cashflow": eur(annee1["cashflow_apres_impot"][regime] / 12),
                     "netnet": pct(resultat["rendement_net_net_par_regime"][regime], 2),
                     "tri": pct(tri, 2) if tri is not None else "n/a",
                 }
@@ -1335,42 +1689,24 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         ]
         table_stress.update()
 
-        rows_revente = []
-        for regime in regimes:
-            rev = resultat["reventes"][regime]
-            rows_revente.append(
-                {
-                    "regime": libelle_regime(regime),
-                    "valeur": eur(rev["valeur_revente"]),
-                    "plusvalue": eur(rev["plus_value_imposable_ir"]),
-                    "impot": eur(rev["impot_plus_value_ir"] + rev["impot_plus_value_ps"] + rev["surtaxe"]),
-                    "net": eur(rev["net_vendeur"]),
-                    "enrichissement": eur(resultat["enrichissement_par_regime"][regime]),
-                }
-            )
-        table_revente.rows = rows_revente
+        table_revente.rows = [
+            {
+                "regime": libelle_regime(regime) + (" ★" if regime == meilleur else ""),
+                "valeur": eur(rev["valeur_revente"]),
+                "plusvalue": eur(rev["plus_value_imposable_ir"]),
+                "impot": eur(rev["impot_plus_value_ir"] + rev["impot_plus_value_ps"] + rev["surtaxe"]),
+                "net": eur(rev["net_vendeur"]),
+                "enrichissement": eur(resultat["enrichissement_par_regime"][regime]),
+            }
+            for regime, rev in ((r, resultat["reventes"][r]) for r in regimes)
+        ]
         table_revente.update()
 
-        option = cashflow_chart_option(resultat, regimes)
-        # `.options` has no setter in this nicegui version, and .update() /
-        # run_chart_method() go through nicegui's echart wrapper, which has a bug
-        # reading `this.chart.options?.series.length` and never actually applies
-        # the new option. Call ECharts' setOption directly via JS instead.
-        # Le panneau "Résultats" vient d'être (re)monté (changement d'onglet) :
-        # le composant ECharts s'initialise de façon asynchrone (setTimeout(0)
-        # avant echarts.init dans nicegui), donc on retente jusqu'à ce que
-        # l'instance existe plutôt que d'échouer sur un undefined.
-        ui.run_javascript(
-            """
-            (function retry(n) {
-                var el = document.getElementById('cashflow-chart');
-                var inst = el && window.echarts && echarts.getInstanceByDom(el);
-                if (inst) { inst.setOption(%s, true); }
-                else if (n > 0) { setTimeout(function () { retry(n - 1); }, 50); }
-            })(30);
-            """
-            % json.dumps(option)
+        maj_graphique("loyer-chart", repartition_loyer_option(resultat))
+        maj_graphique(
+            "patrimoine-chart", patrimoine_option(resultat, inp.prix_achat, inp.taux_revalorisation_bien_annuel)
         )
+        maj_graphique("cashflow-chart", cashflow_chart_option(resultat, regimes))
 
     def render_results_achat_revente(inp, resultat: dict) -> None:
         results_placeholder.visible = False
@@ -1379,20 +1715,24 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         ar = resultat["achat_revente"]
         render_verdict(analyse.verdict(inp, resultat))
 
+        v_ar_marge_nette.set_text(eur(ar["marge_nette"]))
+        theme.colorer(v_ar_marge_nette, ar["marge_nette"])
+        v_ar_rentabilite.set_text(pct(ar["rentabilite_operation_pct"], 1))
+        theme.colorer(v_ar_rentabilite, ar["rentabilite_operation_pct"])
+        v_ar_tri.set_text(pct(ar["tri_annualise"], 1) if ar["tri_annualise"] is not None else "n/a")
+        theme.colorer(v_ar_tri, ar["tri_annualise"])
         v_ar_marge_brute.set_text(eur(ar["marge_brute_avant_impot"]))
+        theme.colorer(v_ar_marge_brute, ar["marge_brute_avant_impot"])
         v_ar_regime.set_text(ar["regime_fiscal"])
         v_ar_impot.set_text(eur(ar["impot_total"]))
-        v_ar_marge_nette.set_text(eur(ar["marge_nette"]))
         v_ar_cash_final.set_text(eur(ar["cash_final_investisseur"]))
-        v_ar_rentabilite.set_text(pct(ar["rentabilite_operation_pct"], 1))
-        v_ar_tri.set_text(pct(ar["tri_annualise"], 1) if ar["tri_annualise"] is not None else "n/a")
         v_ar_portage.set_text(eur(ar["frais_portage_total"]))
         pm = analyse.prix_achat_maximum(inp)
         v_ar_prix_max.set_text(
             texte_prix_max(pm, "marge ≥") if pm is not None else "Renseigne un prix de revente visé"
         )
 
-        rows = [
+        table_achat_revente.rows = [
             {"k": "Coût total d'acquisition", "v": eur(ar["cout_total_acquisition"])},
             {"k": "dont frais bancaires (garantie, dossier, courtage)", "v": eur(ar["frais_bancaires"])},
             {"k": "Montant emprunté", "v": eur(ar["montant_emprunte"])},
@@ -1404,7 +1744,6 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             {"k": "Produit net de vente", "v": eur(ar["produit_net_vente"])},
             {"k": "Base imposable", "v": eur(ar["base_imposable"])},
         ]
-        table_achat_revente.rows = rows
         table_achat_revente.update()
 
         table_stress_ar.rows = [
@@ -1413,28 +1752,48 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         ]
         table_stress_ar.update()
 
-    def on_simuler() -> None:
-        try:
-            inp = build_simulation_input(sim_state)
-        except Exception as exc:  # noqa: BLE001
-            ui.notify(message_erreur(exc), type="negative", multi_line=True)
-            return
-        try:
-            resultat = clean_result(simulation.simuler(inp))
-        except Exception as exc:  # noqa: BLE001
-            ui.notify(f"Erreur de calcul : {exc}", type="negative")
-            return
-
-        # Basculer sur l'onglet Résultats avant de peupler le graphique : le
-        # panneau doit être monté dans le DOM pour que le JS de mise à jour
-        # d'ECharts trouve l'élément #cashflow-chart.
-        tab_panels.set_value(tab_resultats)
-        if resultat.get("type_projet") == "achat_revente":
+    def afficher_resultats(inp=None, resultat: dict | None = None) -> None:
+        if inp is None:
+            try:
+                inp = build_simulation_input(sim_state)
+                resultat = clean_result(simulation.simuler(inp))
+            except Exception as exc:  # noqa: BLE001
+                results_placeholder.set_text(message_erreur(exc))
+                results_placeholder.visible = True
+                for bloc in (verdict_box, results_location, results_achat_revente):
+                    bloc.visible = False
+                return
+        if resultat["type_projet"] == "achat_revente":
             render_results_achat_revente(inp, resultat)
         else:
             render_results_location(inp, resultat)
 
-    btn_simuler.on_click(on_simuler)
+    tab_panels.on_value_change(lambda e: afficher_resultats() if onglet_actif(tab_resultats) else None)
+
+    derniere_saisie = {"signature": None}
+
+    def recalculer() -> None:
+        """Appelée en continu : ne recalcule que si une saisie a changé. Le
+        calcul complet prend quelques millisecondes ; le prix max et les
+        scénarios de stress, plus lourds, ne sont calculés que si l'onglet
+        Résultats est affiché."""
+        signature = json.dumps(sim_state, sort_keys=True, default=str)
+        if signature == derniere_saisie["signature"]:
+            return
+        derniere_saisie["signature"] = signature
+        try:
+            inp = build_simulation_input(sim_state)
+            resultat = clean_result(simulation.simuler(inp))
+        except Exception as exc:  # noqa: BLE001
+            erreur_syntheses(message_erreur(exc))
+            if onglet_actif(tab_resultats):
+                afficher_resultats()
+            return
+        maj_syntheses(inp, resultat)
+        if onglet_actif(tab_resultats):
+            afficher_resultats(inp, resultat)
+
+    ui.timer(0.5, recalculer)
 
     # =====================================================================
     # Logique : dossier de financement (endettement + export Word)
