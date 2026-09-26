@@ -77,7 +77,15 @@ def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
         data[key] = int(data[key] or 0)
     if not data.get("prix_revente_vise"):
         data["prix_revente_vise"] = None
+    # Un champ numérique vidé par l'utilisateur renvoie None : on le traite comme 0.
+    for key, value in data.items():
+        if value is None and key != "prix_revente_vise":
+            data[key] = 0
     return schemas.SimulationInput(**data)
+
+
+def build_profil_input(profil_state: dict) -> schemas.ProfilEmprunteurInput:
+    return schemas.ProfilEmprunteurInput(**{k: v or 0 for k, v in profil_state.items()})
 
 
 @ui.page("/")
@@ -1167,7 +1175,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         else:
             mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
             loyers_mensuels = resultat["annees"][0].loyers_bruts / 12
-        profil = schemas.ProfilEmprunteurInput(**profil_state)
+        profil = build_profil_input(profil_state)
         r = endet_mod.calculer_taux_endettement(
             profil.revenus_nets_mensuels_foyer,
             profil.autres_revenus_mensuels,
@@ -1271,7 +1279,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             inp = build_simulation_input(sim_state)
             resultat = clean_result(simulation.simuler(inp))
             profil_rempli = any(v for v in profil_state.values())
-            profil = schemas.ProfilEmprunteurInput(**profil_state) if profil_rempli else None
+            profil = build_profil_input(profil_state) if profil_rempli else None
             lignes = _construire_apercu_dossier(inp, resultat, profil)
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(f"Erreur : {exc}")
@@ -1295,7 +1303,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
             inp = build_simulation_input(sim_state)
             profil_rempli = any(v for v in profil_state.values())
-            profil = schemas.ProfilEmprunteurInput(**profil_state) if profil_rempli else None
+            profil = build_profil_input(profil_state) if profil_rempli else None
             nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
             adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
             payload = schemas.ExportDossierInput(
