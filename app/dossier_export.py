@@ -790,6 +790,28 @@ def _ajouter_note(doc, texte: str) -> None:
     run.font.color.rgb = GRIS_COLOR
 
 
+def _section_loyer_mensuel(doc, resultat):
+    etapes = analyse.etapes_loyer_mensuel(resultat)
+    cashflow = sum(v for _, v in etapes)
+    effort = resultat["effort_epargne_mensuel"]
+    _tuiles(
+        doc,
+        [
+            ("Loyers encaissés / mois", _eur(etapes[0][1]), None),
+            ("Cash-flow net / mois", _eur(cashflow), cashflow >= 0),
+            ("Effort d'épargne / mois", _eur(effort) if effort > 0 else "Aucun", effort <= 0),
+        ],
+    )
+    lignes = [(libelle, ("+" if v >= 0 else "") + _eur(v)) for libelle, v in etapes]
+    lignes.append(("Cash-flow net mensuel", _eur(cashflow), "total"))
+    _ajouter_table_et_graphique(doc, lignes, _image_cascade_loyer(resultat))
+    _ajouter_note(
+        doc,
+        f"Moyenne mensuelle de la première année, régime {libelle_regime(resultat['meilleur_regime'])}. "
+        "Les charges comprennent copropriété, taxe foncière, assurances, entretien et frais de gestion.",
+    )
+
+
 def _section_patrimoine(doc, inp, resultat):
     evolution = analyse.evolution_patrimoine(resultat, inp.prix_achat, inp.taux_revalorisation_bien_annuel)
     n = len(evolution)
@@ -969,6 +991,13 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
                 "Recettes et charges annuelles",
                 "Ce que rapporte le bien et ce qu'il coûte chaque année.",
                 lambda d: _section_charges(d, inp, annee1, is_meublee, is_lcd),
+            )
+        )
+        sections.append(
+            (
+                "Où va le loyer chaque mois",
+                "Du loyer encaissé au cash-flow net : charges, crédit et impôts, mois par mois.",
+                lambda d: _section_loyer_mensuel(d, resultat),
             )
         )
         sections.append(
