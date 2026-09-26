@@ -352,7 +352,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     sim_state = default_sim_state()
     profil_state = default_profil_state()
     dossier_meta_state = default_dossier_meta_state()
-    ctx = {"last_market_result": None}
+    ctx = {"last_market_result": None, "commune": None}
     refs: dict[str, ui.element] = {}
 
     # -- En-tête persistant : type de projet & structure (pilote tout le reste) --
@@ -493,6 +493,11 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             v_occupation_bas = theme.stat_card("Taux d'occupation mini")
                             v_occupation_moyen = theme.stat_card("Taux d'occupation moyen")
                             v_occupation_haut = theme.stat_card("Taux d'occupation maxi")
+                        with ui.row().classes("items-center gap-2"):
+                            btn_airbnb = ui.button(
+                                "Comparer avec les annonces Airbnb du secteur", icon="open_in_new"
+                            ).props("flat dense no-caps")
+                            ui.label("pour vérifier l'estimation sur des annonces réelles").classes(theme.HINT_CLASSES)
                     refs["ms_nuitee_block"] = nuitee_block
 
                     market_note = ui.label("").classes(theme.HINT_CLASSES)
@@ -1159,6 +1164,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             "taux_occupation_estime": (nuitee or {}).get("taux_occupation_moyen"),
         }
 
+        ctx["commune"] = geo.get("commune")
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
         v_prix_bas.set_text(f"{eur(comparables.get('prix_m2_bas'))}/m²" if comparables.get("prix_m2_bas") else "–")
@@ -1195,6 +1201,20 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         market_results.visible = True
 
     btn_market.on_click(on_analyser_marche)
+
+    def on_ouvrir_airbnb() -> None:
+        from urllib.parse import quote
+
+        url = f"https://www.airbnb.fr/s/{quote((ctx['commune'] or '') + ', France')}/homes"
+        if app.native.main_window:
+            # Fenêtre native : ouvrir dans le navigateur de l'ordinateur.
+            import webbrowser
+
+            webbrowser.open(url)
+        else:
+            ui.navigate.to(url, new_tab=True)
+
+    btn_airbnb.on_click(on_ouvrir_airbnb)
 
     def on_use_market() -> None:
         result = ctx.get("last_market_result")
