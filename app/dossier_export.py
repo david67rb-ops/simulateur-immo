@@ -16,7 +16,7 @@ from . import charts_export as charts
 from . import endettement as endet_mod
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
-from .utils import clean_result
+from .utils import clean_result, libelle_regime
 
 POLICE = "Calibri"
 PRIMARY_COLOR = RGBColor(0x1D, 0x6F, 0x5C)
@@ -55,7 +55,7 @@ def _eur(v: float) -> str:
 
 
 def _pct(v: float, digits: int = 1) -> str:
-    return f"{v * 100:.{digits}f} %"
+    return f"{v * 100:.{digits}f} %".replace(".", ",")
 
 
 def _label_type_projet(v: str) -> str:
@@ -283,9 +283,8 @@ def _mensualite_et_loyers(inp, resultat: dict, is_achat_revente: bool) -> tuple[
     return resultat.get("mensualite_credit_hors_assurance", 0.0), resultat["annees"][0]["loyers_bruts"] / 12
 
 
-def _meilleur_regime(annee1: dict) -> str:
-    cfs = annee1["cashflow_apres_impot"]
-    return max(cfs, key=cfs.get)
+def _frais_bancaires(resultat: dict, is_achat_revente: bool) -> float:
+    return (resultat["achat_revente"] if is_achat_revente else resultat).get("frais_bancaires", 0.0)
 
 
 def _cout_apport_emprunt(resultat: dict, is_achat_revente: bool) -> tuple[float, float, float]:
@@ -409,7 +408,7 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente, meilleur_re
         )
     else:
         lignes += [
-            ("Régime fiscal le plus favorable (année 1)", meilleur_regime),
+            ("Régime fiscal le plus favorable (année 1)", libelle_regime(meilleur_regime)),
             ("Cash-flow net mensuel (ce régime)", _eur(annee1["cashflow_apres_impot"][meilleur_regime] / 12)),
             ("Rendement brut", _pct(resultat.get("rendement_brut", 0))),
             ("Rendement net de charges", _pct(resultat.get("rendement_net_charges", 0))),
@@ -459,6 +458,9 @@ def _section_presentation(doc, payload, inp, resultat, is_achat_revente):
     ]
     if inp.montant_mobilier:
         lignes.append(("Montant du mobilier", _eur(inp.montant_mobilier)))
+    frais_bancaires = _frais_bancaires(resultat, is_achat_revente)
+    if frais_bancaires > 0:
+        lignes.append(("Frais bancaires (garantie, dossier, courtage)", _eur(frais_bancaires)))
     cout_total, _apport, _emprunt = _cout_apport_emprunt(resultat, is_achat_revente)
     lignes.append(("Coût total de l'opération", _eur(cout_total)))
     if not is_achat_revente:
@@ -475,6 +477,8 @@ def _section_presentation(doc, payload, inp, resultat, is_achat_revente):
     ]
     if inp.montant_mobilier:
         composition.append(("Mobilier", inp.montant_mobilier))
+    if frais_bancaires > 0:
+        composition.append(("Frais bancaires", frais_bancaires))
     image = charts.chart_donut(
         [v for _, v in composition], [l for l, _ in composition], "Composition du coût d'acquisition"
     )
@@ -507,6 +511,7 @@ def _lignes_credit(inp, resultat, montant_emprunte, is_achat_revente) -> list[tu
         ("Montant emprunté", _eur(montant_emprunte)),
         ("Taux du crédit", _pct(inp.taux_credit_annuel, 2)),
         ("Durée du crédit", f"{inp.duree_credit_annees} ans"),
+        ("Frais bancaires (garantie, dossier, courtage)", _eur(_frais_bancaires(resultat, is_achat_revente))),
     ]
     if is_achat_revente:
         lignes.append(("Durée de portage retenue pour les intérêts", f"{inp.duree_portage_mois} mois"))
@@ -576,6 +581,7 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
         ("Entretien", inp.entretien_annuel),
         ("Gestion locative", frais_gestion),
     ]
+    gli = loyers_bruts_an1 * inp.gli_pct_loyers if not is_lcd else 0.0
     lignes = [
         ("Charges de copropriété", _eur(inp.charges_copropriete_annuelles)),
         ("Taxe foncière", _eur(inp.taxe_fonciere_annuelle)),
@@ -583,6 +589,9 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
         ("Entretien annuel", _eur(inp.entretien_annuel)),
         ("Frais de gestion locative", _eur(frais_gestion) + f" ({_pct(inp.frais_gestion_pct_loyers)})"),
     ]
+    if gli > 0:
+        charges_items.append(("Loyers impayés (GLI)", gli))
+        lignes.append(("Assurance loyers impayés (GLI)", _eur(gli) + f" ({_pct(inp.gli_pct_loyers)})"))
     if is_lcd:
         frais_plateforme = loyers_bruts_an1 * inp.frais_plateforme_pct
         charges_items.append(("Commission plateforme", frais_plateforme))
@@ -594,7 +603,10 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
     if is_meublee:
         charges_items.append(("Comptable", inp.frais_comptable_annuel))
         lignes.append(("Frais comptable annuel", _eur(inp.frais_comptable_annuel)))
+        if inp.cfe_annuelle > 0:
+            lignes.append(("CFE (due à partir de la 2e année)", _eur(inp.cfe_annuelle)))
     lignes.append(("Total des charges hors crédit (année 1)", _eur(annee1["charges_hors_credit"])))
+    lignes.append(("Hausse annuelle des charges retenue", _pct(inp.taux_revalorisation_charges_annuel)))
 
     # Le graphique inclut en plus le crédit (contrairement au tableau, exprimé
     # hors crédit) pour donner une vision complète de la rentabilité du projet.
@@ -724,7 +736,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     _ajouter_page_de_garde(doc, payload, inp)
 
     annee1 = None if is_achat_revente else resultat["annees"][0]
-    meilleur_regime = None if is_achat_revente else _meilleur_regime(annee1)
+    meilleur_regime = None if is_achat_revente else resultat["meilleur_regime"]
 
     sections: list[tuple[str, "callable"]] = [
         (

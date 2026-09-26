@@ -35,6 +35,9 @@ def default_sim_state() -> dict:
         "taux_assurance_emprunteur": 0.3,
         "differe_type": "aucun",
         "differe_duree_mois": 0,
+        "taux_frais_garantie": 1.0,
+        "frais_dossier_bancaire": 800.0,
+        "frais_courtage": 0.0,
         # Exploitation
         "loyer_mensuel_hors_charges": 750.0,
         "charges_copropriete_annuelles": 1200.0,
@@ -44,6 +47,8 @@ def default_sim_state() -> dict:
         "vacance_locative_pct": 5.0,
         "entretien_annuel": 300.0,
         "frais_comptable_annuel": 0.0,
+        "cfe_annuelle": 300.0,
+        "gli_pct_loyers": 0.0,
         # Location courte durée
         "prix_nuitee": 80.0,
         "taux_occupation_pct": 50.0,
@@ -62,6 +67,10 @@ def default_sim_state() -> dict:
         "duree_projection_annees": 20,
         "taux_revalorisation_bien_annuel": 1.0,
         "taux_revalorisation_loyers_annuel": 1.0,
+        "taux_revalorisation_charges_annuel": 2.0,
+        # Objectifs (prix d'achat maximum)
+        "objectif_cashflow_mensuel": 0.0,
+        "objectif_marge_nette": 0.0,
         # Achat-revente
         "duree_portage_mois": 9,
         "prix_revente_vise": None,
@@ -96,4 +105,7 @@ PERCENT_FIELDS = [
     "frais_plateforme_pct",
     "frais_agence_revente_pct",
     "taux_occupation_pct",
+    "taux_frais_garantie",
+    "gli_pct_loyers",
+    "taux_revalorisation_charges_annuel",
 ]

@@ -57,6 +57,11 @@ class SimulationInput(BaseModel):
     taux_assurance_emprunteur: float = Field(default=0.003, ge=0, le=0.02)
     differe_type: DiffereType = DiffereType.aucun
     differe_duree_mois: int = Field(default=0, ge=0, le=60)
+    taux_frais_garantie: float = Field(
+        default=0.0, ge=0, le=0.05, description="Caution (Crédit Logement...) ou hypothèque, en % du montant emprunté"
+    )
+    frais_dossier_bancaire: float = Field(default=0, ge=0)
+    frais_courtage: float = Field(default=0, ge=0)
 
     # --- Exploitation (location longue/courte durée) ---
     loyer_mensuel_hors_charges: float = Field(
@@ -75,6 +80,12 @@ class SimulationInput(BaseModel):
     entretien_annuel: float = Field(default=0, ge=0)
     frais_comptable_annuel: float = Field(
         default=0, ge=0, description="Utile pour le régime réel BIC / SCI à l'IS"
+    )
+    cfe_annuelle: float = Field(
+        default=0, ge=0, description="CFE (meublé) : exonérée la 1re année et si recettes < 5 000 €/an"
+    )
+    gli_pct_loyers: float = Field(
+        default=0.0, ge=0, le=0.1, description="Assurance loyers impayés (location longue durée), % des loyers"
     )
 
     # --- Spécifique location courte durée ---
@@ -106,6 +117,13 @@ class SimulationInput(BaseModel):
     duree_projection_annees: int = Field(default=20, gt=0, le=35)
     taux_revalorisation_bien_annuel: float = Field(default=0.01, ge=-0.05, le=0.1)
     taux_revalorisation_loyers_annuel: float = Field(default=0.01, ge=-0.05, le=0.1)
+    taux_revalorisation_charges_annuel: float = Field(
+        default=0.0, ge=-0.05, le=0.1, description="Hausse annuelle des charges fixes (taxe foncière, copro...)"
+    )
+
+    # --- Objectifs (calcul du prix d'achat maximum) ---
+    objectif_cashflow_mensuel: float = Field(default=0, description="Location : cash-flow net mensuel visé (année 1)")
+    objectif_marge_nette: float = Field(default=0, description="Achat-revente : marge nette visée")
 
     # --- Spécifique achat-revente ---
     duree_portage_mois: int = Field(default=9, gt=0, le=60)

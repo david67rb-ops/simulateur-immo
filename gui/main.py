@@ -17,8 +17,8 @@ import os
 from nicegui import app, native, ui
 from pydantic import ValidationError
 
-from app import endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
-from app.utils import clean_result
+from app import analyse, endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
+from app.utils import clean_result, libelle_regime
 
 from . import theme
 from .charts import cashflow_chart_option
@@ -53,13 +53,14 @@ TMI_OPTIONS = {0.0: "0 %", 0.11: "11 %", 0.30: "30 %", 0.41: "41 %", 0.45: "45 %
 def eur(v) -> str:
     if v is None:
         return "–"
+    v = 0.0 if round(v) == 0 else v  # évite « -0 € »
     return f"{v:,.0f} €".replace(",", " ")
 
 
 def pct(v, digits: int = 2) -> str:
     if v is None:
         return "–"
-    return f"{v * 100:.{digits}f} %"
+    return f"{v * 100:.{digits}f} %".replace(".", ",")
 
 
 def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
@@ -117,6 +118,12 @@ LIBELLES_CHAMPS = {
     "vacance_locative_pct": "Vacance locative (%)",
     "entretien_annuel": "Entretien annuel (€)",
     "frais_comptable_annuel": "Frais comptable/an (€)",
+    "cfe_annuelle": "CFE/an (€)",
+    "gli_pct_loyers": "Assurance loyers impayés (% des loyers)",
+    "taux_frais_garantie": "Frais de garantie (% du prêt)",
+    "frais_dossier_bancaire": "Frais de dossier bancaire (€)",
+    "frais_courtage": "Frais de courtage (€)",
+    "taux_revalorisation_charges_annuel": "Hausse des charges (%/an)",
     "frais_plateforme_pct": "Commission plateforme (% des recettes)",
     "frais_menage_annuel": "Ménage/blanchisserie annuel (€)",
     "taux_marginal_imposition": "Taux marginal d'imposition (%)",
@@ -572,6 +579,18 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         "Durée du différé (mois)", value=sim_state["differe_duree_mois"], min=0, max=60
                     ).bind_value(sim_state, "differe_duree_mois").props("outlined dense").classes("w-full")
                     refs["field_differe_duree"] = differe_duree_field
+                    ui.number(
+                        "Frais de garantie (% du prêt) — caution ou hypothèque",
+                        value=sim_state["taux_frais_garantie"],
+                        min=0,
+                        max=5,
+                    ).bind_value(sim_state, "taux_frais_garantie").props("outlined dense").classes("w-full")
+                    ui.number(
+                        "Frais de dossier bancaire (€)", value=sim_state["frais_dossier_bancaire"], min=0
+                    ).bind_value(sim_state, "frais_dossier_bancaire").props("outlined dense").classes("w-full")
+                    ui.number("Frais de courtage (€)", value=sim_state["frais_courtage"], min=0).bind_value(
+                        sim_state, "frais_courtage"
+                    ).props("outlined dense").classes("w-full")
                 refs["fieldset_credit"] = fieldset_credit
 
                 fieldset_achat_revente = ui.column().classes("w-full gap-2")
@@ -635,6 +654,12 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         "Frais comptable/an (€) — réel BIC / SCI IS", value=sim_state["frais_comptable_annuel"], min=0
                     ).bind_value(sim_state, "frais_comptable_annuel").props("outlined dense").classes("w-full")
                     refs["field_frais_comptable"] = field_frais_comptable
+                    refs["field_cfe"] = ui.number(
+                        "CFE/an (€) — meublé, exonérée la 1re année", value=sim_state["cfe_annuelle"], min=0
+                    ).bind_value(sim_state, "cfe_annuelle").props("outlined dense").classes("w-full")
+                    refs["field_gli"] = ui.number(
+                        "Assurance loyers impayés (% des loyers)", value=sim_state["gli_pct_loyers"], min=0, max=10
+                    ).bind_value(sim_state, "gli_pct_loyers").props("outlined dense").classes("w-full")
 
                 fieldset_lcd = ui.column().classes("w-full gap-2")
                 with fieldset_lcd:
@@ -723,6 +748,20 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         max=10,
                     ).bind_value(sim_state, "taux_revalorisation_loyers_annuel").props("outlined dense").classes("w-full")
                     refs["field_reval_loyers"] = field_reval_loyers
+                    refs["field_reval_charges"] = ui.number(
+                        "Hausse des charges (%/an) — taxe foncière, copro...",
+                        value=sim_state["taux_revalorisation_charges_annuel"],
+                        min=-5,
+                        max=10,
+                    ).bind_value(sim_state, "taux_revalorisation_charges_annuel").props("outlined dense").classes("w-full")
+                    refs["field_objectif_cf"] = ui.number(
+                        "Objectif de cash-flow mensuel (€) — pour le prix d'achat max",
+                        value=sim_state["objectif_cashflow_mensuel"],
+                    ).bind_value(sim_state, "objectif_cashflow_mensuel").props("outlined dense").classes("w-full")
+                    refs["field_objectif_marge"] = ui.number(
+                        "Objectif de marge nette (€) — pour le prix d'achat max",
+                        value=sim_state["objectif_marge_nette"],
+                    ).bind_value(sim_state, "objectif_marge_nette").props("outlined dense").classes("w-full")
 
                 field_marchand_pro = ui.select(
                     {False: "Non (occasionnel)", True: "Oui (activité habituelle, régime BIC/IS)"},
@@ -741,14 +780,26 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 "Renseigne le projet puis clique sur « Calculer la rentabilité » (onglet Fiscalité)."
             ).classes(theme.HINT_CLASSES)
 
+            verdict_box = ui.column().classes("w-full gap-1 rounded-xl p-4 border")
+            verdict_box.visible = False
+            with verdict_box:
+                verdict_titre = ui.label("").classes("text-lg font-bold")
+                verdict_detail = ui.label("").classes("text-sm")
+
             results_location = ui.column().classes("w-full gap-3")
             results_location.visible = False
             with results_location:
                 with ui.row().classes(theme.GRID_CLASSES):
-                    v_cout_total = theme.stat_card("Coût total d'acquisition")
+                    v_cashflow = theme.stat_card("Cash-flow net mensuel (an 1)")
+                    v_effort = theme.stat_card("Effort d'épargne mensuel")
+                    v_enrichissement = theme.stat_card("Enrichissement net")
                     v_rendement_brut = theme.stat_card("Rendement brut")
                     v_rendement_net = theme.stat_card("Rendement net de charges")
+                    v_rendement_net_net = theme.stat_card("Rendement net-net (après impôts)")
+                    v_cout_total = theme.stat_card("Coût total d'acquisition")
                     v_mensualite = theme.stat_card("Mensualité crédit")
+                    v_prix_max = theme.stat_card("Prix d'achat maximum")
+                detail_location = ui.label("").classes(theme.HINT_CLASSES)
 
                 avertissements_box = ui.column().classes("w-full gap-2")
 
@@ -759,10 +810,23 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         {"name": "revenu", "label": "Revenu imposable", "field": "revenu", "align": "left"},
                         {"name": "impot", "label": "Impôt total", "field": "impot", "align": "left"},
                         {"name": "cashflow", "label": "Cash-flow mensuel net", "field": "cashflow", "align": "left"},
+                        {"name": "netnet", "label": "Rendement net-net", "field": "netnet", "align": "left"},
                         {"name": "tri", "label": "TRI (avec revente)", "field": "tri", "align": "left"},
                     ],
                     rows=[],
                     row_key="regime",
+                ).classes("w-full")
+
+                ui.label("Scénarios de stress (meilleur régime)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                table_stress = ui.table(
+                    columns=[
+                        {"name": "scenario", "label": "Scénario", "field": "scenario", "align": "left"},
+                        {"name": "cashflow", "label": "Cash-flow mensuel net (an 1)", "field": "cashflow", "align": "left"},
+                        {"name": "tri", "label": "TRI", "field": "tri", "align": "left"},
+                        {"name": "enrichissement", "label": "Enrichissement net", "field": "enrichissement", "align": "left"},
+                    ],
+                    rows=[],
+                    row_key="scenario",
                 ).classes("w-full")
 
                 ui.label("Cash-flow cumulé sur la durée de projection").classes(theme.SUBSECTION_TITLE_CLASSES)
@@ -782,6 +846,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         {"name": "plusvalue", "label": "Plus-value imposable", "field": "plusvalue", "align": "left"},
                         {"name": "impot", "label": "Impôt total", "field": "impot", "align": "left"},
                         {"name": "net", "label": "Net vendeur", "field": "net", "align": "left"},
+                        {"name": "enrichissement", "label": "Enrichissement net", "field": "enrichissement", "align": "left"},
                     ],
                     rows=[],
                     row_key="regime",
@@ -791,15 +856,15 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             results_achat_revente.visible = False
             with results_achat_revente:
                 with ui.row().classes(theme.GRID_CLASSES):
-                    v_ar_marge_brute = theme.stat_card("Marge brute avant impôt")
-                    v_ar_regime = theme.stat_card("Régime fiscal")
-                    v_ar_impot = theme.stat_card("Impôt total")
                     v_ar_marge_nette = theme.stat_card("Marge nette")
-                with ui.row().classes(theme.GRID_CLASSES):
-                    v_ar_cash_final = theme.stat_card("Cash final investisseur")
                     v_ar_rentabilite = theme.stat_card("Rentabilité de l'opération")
                     v_ar_tri = theme.stat_card("TRI annualisé")
+                    v_ar_marge_brute = theme.stat_card("Marge brute avant impôt")
+                    v_ar_impot = theme.stat_card("Impôt total")
+                    v_ar_regime = theme.stat_card("Régime fiscal")
+                    v_ar_cash_final = theme.stat_card("Cash final investisseur")
                     v_ar_portage = theme.stat_card("Frais de portage totaux")
+                    v_ar_prix_max = theme.stat_card("Prix d'achat maximum")
                 table_achat_revente = ui.table(
                     columns=[
                         {"name": "k", "label": "", "field": "k", "align": "left"},
@@ -808,6 +873,17 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     rows=[],
                     row_key="k",
                 ).props("hide-header").classes("w-full")
+
+                ui.label("Scénarios de stress").classes(theme.SUBSECTION_TITLE_CLASSES)
+                table_stress_ar = ui.table(
+                    columns=[
+                        {"name": "scenario", "label": "Scénario", "field": "scenario", "align": "left"},
+                        {"name": "marge", "label": "Marge nette", "field": "marge", "align": "left"},
+                        {"name": "rentabilite", "label": "Rentabilité de l'opération", "field": "rentabilite", "align": "left"},
+                    ],
+                    rows=[],
+                    row_key="scenario",
+                ).classes("w-full")
 
             _bouton_onglet_suivant(tab_resultats)
 
@@ -938,6 +1014,11 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         refs["field_taux_occupation"].visible = is_lcd
         refs["field_frais_comptable"].visible = not is_achat_revente and (is_meublee or is_sci_is)
         refs["field_mobilier"].visible = not is_achat_revente and is_meublee
+        refs["field_cfe"].visible = not is_achat_revente and is_meublee
+        refs["field_gli"].visible = not is_achat_revente and not is_lcd
+        refs["field_reval_charges"].visible = not is_achat_revente
+        refs["field_objectif_cf"].visible = not is_achat_revente and sim_state["avec_credit"]
+        refs["field_objectif_marge"].visible = is_achat_revente
         refs["field_differe_duree"].visible = not is_achat_revente and differe_type != "aucun"
         refs["fieldset_credit"].visible = sim_state["avec_credit"]
         refs["note_fonds_propres"].visible = not sim_state["avec_credit"]
@@ -1143,18 +1224,55 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     # =====================================================================
     # Logique : simulateur
     # =====================================================================
-    def render_results_location(resultat: dict) -> None:
+    COULEURS_VERDICT = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE}
+
+    def render_verdict(v: dict) -> None:
+        couleur = COULEURS_VERDICT[v["niveau"]]
+        verdict_box.style(
+            f"background: color-mix(in srgb, {couleur} 12%, transparent); border-color: {couleur};"
+        )
+        verdict_titre.set_text(v["titre"])
+        verdict_titre.style(f"color: {couleur}")
+        verdict_detail.set_text(v["detail"])
+        verdict_box.visible = True
+
+    def texte_prix_max(pm: dict | None, objectif_libelle: str) -> str:
+        if pm is None:
+            return "–"
+        if pm["statut"] == "inatteignable":
+            return "Objectif inatteignable"
+        if pm["statut"] == "non_limitant":
+            return f"> {eur(pm['prix_max'])}"
+        return f"{eur(pm['prix_max'])} ({objectif_libelle} {eur(pm['objectif'])})"
+
+    def render_results_location(inp, resultat: dict) -> None:
         results_placeholder.visible = False
         results_location.visible = True
         results_achat_revente.visible = False
 
+        meilleur = resultat["meilleur_regime"]
+        render_verdict(analyse.verdict(inp, resultat))
+
         v_cout_total.set_text(eur(resultat["cout_total_acquisition"]))
         v_rendement_brut.set_text(pct(resultat["rendement_brut"], 1))
         v_rendement_net.set_text(pct(resultat["rendement_net_charges"], 1))
+        v_rendement_net_net.set_text(pct(resultat["rendement_net_net_par_regime"][meilleur], 1))
+        v_cashflow.set_text(eur(resultat["cashflow_mensuel_an1"]) + "/mois")
+        v_effort.set_text(
+            eur(resultat["effort_epargne_mensuel"]) + "/mois" if resultat["effort_epargne_mensuel"] > 0 else "Aucun"
+        )
+        v_enrichissement.set_text(
+            f"{eur(resultat['enrichissement_par_regime'][meilleur])} sur {inp.duree_projection_annees} ans"
+        )
+        v_prix_max.set_text(texte_prix_max(analyse.prix_achat_maximum(inp), "cash-flow ≥"))
         v_mensualite.set_text(
             eur(resultat["mensualite_credit_hors_assurance"]) + "/mois (hors assurance)"
             if resultat["montant_emprunte"] > 0
             else "Aucune (fonds propres)"
+        )
+        detail_location.set_text(
+            f"Indicateurs calculés pour le régime le plus favorable : {libelle_regime(meilleur)}. "
+            f"Coût total = prix + notaire + travaux + mobilier + frais bancaires ({eur(resultat['frais_bancaires'])})."
         )
 
         avertissements_box.clear()
@@ -1175,26 +1293,39 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             eligible = "" if fiscal.get("eligible", True) else " ⚠️ non éligible"
             rows_regimes.append(
                 {
-                    "regime": regime + eligible,
+                    "regime": libelle_regime(regime) + eligible,
                     "revenu": eur(fiscal["revenu_imposable"]),
                     "impot": eur(fiscal["total_prelevements"]),
                     "cashflow": eur(cashflow_mensuel),
+                    "netnet": pct(resultat["rendement_net_net_par_regime"][regime], 2),
                     "tri": pct(tri, 2) if tri is not None else "n/a",
                 }
             )
         table_regimes.rows = rows_regimes
         table_regimes.update()
 
+        table_stress.rows = [
+            {
+                "scenario": l["scenario"],
+                "cashflow": eur(l["cashflow_mensuel"]) + "/mois",
+                "tri": pct(l["tri"], 2) if l["tri"] is not None else "n/a",
+                "enrichissement": eur(l["enrichissement"]),
+            }
+            for l in analyse.scenarios_stress(inp)
+        ]
+        table_stress.update()
+
         rows_revente = []
         for regime in regimes:
             rev = resultat["reventes"][regime]
             rows_revente.append(
                 {
-                    "regime": regime,
+                    "regime": libelle_regime(regime),
                     "valeur": eur(rev["valeur_revente"]),
                     "plusvalue": eur(rev["plus_value_imposable_ir"]),
                     "impot": eur(rev["impot_plus_value_ir"] + rev["impot_plus_value_ps"] + rev["surtaxe"]),
                     "net": eur(rev["net_vendeur"]),
+                    "enrichissement": eur(resultat["enrichissement_par_regime"][regime]),
                 }
             )
         table_revente.rows = rows_revente
@@ -1221,11 +1352,12 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             % json.dumps(option)
         )
 
-    def render_results_achat_revente(resultat: dict) -> None:
+    def render_results_achat_revente(inp, resultat: dict) -> None:
         results_placeholder.visible = False
         results_location.visible = False
         results_achat_revente.visible = True
         ar = resultat["achat_revente"]
+        render_verdict(analyse.verdict(inp, resultat))
 
         v_ar_marge_brute.set_text(eur(ar["marge_brute_avant_impot"]))
         v_ar_regime.set_text(ar["regime_fiscal"])
@@ -1235,9 +1367,14 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         v_ar_rentabilite.set_text(pct(ar["rentabilite_operation_pct"], 1))
         v_ar_tri.set_text(pct(ar["tri_annualise"], 1) if ar["tri_annualise"] is not None else "n/a")
         v_ar_portage.set_text(eur(ar["frais_portage_total"]))
+        pm = analyse.prix_achat_maximum(inp)
+        v_ar_prix_max.set_text(
+            texte_prix_max(pm, "marge ≥") if pm is not None else "Renseigne un prix de revente visé"
+        )
 
         rows = [
             {"k": "Coût total d'acquisition", "v": eur(ar["cout_total_acquisition"])},
+            {"k": "dont frais bancaires (garantie, dossier, courtage)", "v": eur(ar["frais_bancaires"])},
             {"k": "Montant emprunté", "v": eur(ar["montant_emprunte"])},
             {"k": "Apport réel", "v": eur(ar["apport_reel"])},
             {"k": "Intérêts de portage (crédit relais)", "v": eur(ar["frais_portage_interets"])},
@@ -1249,6 +1386,12 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         ]
         table_achat_revente.rows = rows
         table_achat_revente.update()
+
+        table_stress_ar.rows = [
+            {"scenario": l["scenario"], "marge": eur(l["marge_nette"]), "rentabilite": pct(l["rentabilite"], 1)}
+            for l in analyse.scenarios_stress(inp)
+        ]
+        table_stress_ar.update()
 
     def on_simuler() -> None:
         try:
@@ -1267,9 +1410,9 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         # d'ECharts trouve l'élément #cashflow-chart.
         tab_panels.set_value(tab_resultats)
         if resultat.get("type_projet") == "achat_revente":
-            render_results_achat_revente(resultat)
+            render_results_achat_revente(inp, resultat)
         else:
-            render_results_location(resultat)
+            render_results_location(inp, resultat)
 
     btn_simuler.on_click(on_simuler)
 
@@ -1340,6 +1483,13 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             ("Frais de notaire", eur(inp.frais_notaire)),
             ("Montant des travaux", eur(inp.montant_travaux)),
         ]
+        frais_bancaires = (
+            resultat["achat_revente"]["frais_bancaires"]
+            if inp.type_projet == schemas.TypeProjet.achat_revente
+            else resultat["frais_bancaires"]
+        )
+        if frais_bancaires > 0:
+            lignes.append(("Frais bancaires (garantie, dossier, courtage)", eur(frais_bancaires)))
         if inp.type_projet == schemas.TypeProjet.achat_revente:
             ar = resultat["achat_revente"]
             mensualite_projet = ar["frais_portage_interets"] / inp.duree_portage_mois
@@ -1353,7 +1503,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             loyers_mensuels = 0.0
         else:
             annee1 = resultat["annees"][0]
-            meilleur = max(annee1["cashflow_apres_impot"], key=annee1["cashflow_apres_impot"].get)
+            meilleur = resultat["meilleur_regime"]
             mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
             loyers_mensuels_apercu = annee1["loyers_bruts"] / 12
             label_loyer = (
@@ -1366,7 +1516,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 ("Apport personnel", eur(resultat.get("apport_reel", 0))),
                 *_lignes_credit(resultat.get("montant_emprunte", 0), inp, "Mensualité du crédit", mensualite_projet),
                 (label_loyer, eur(loyers_mensuels_apercu) + "/mois"),
-                ("Régime fiscal le plus favorable", meilleur),
+                ("Régime fiscal le plus favorable", libelle_regime(meilleur)),
                 ("Cash-flow net mensuel", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),
                 ("Rendement brut", pct(resultat.get("rendement_brut", 0))),
                 ("Rendement net", pct(resultat.get("rendement_net_charges", 0))),

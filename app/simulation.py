@@ -90,35 +90,61 @@ def _amortissement_annee(montant: float, duree: int, annee: int) -> float:
     return montant / duree
 
 
-def _charges_hors_credit(inp: SimulationInput, loyers_bruts: float, is_meublee: bool) -> float:
-    frais_gestion = loyers_bruts * inp.frais_gestion_pct_loyers
-    frais_plateforme = (
-        loyers_bruts * inp.frais_plateforme_pct
-        if inp.type_projet == TypeProjet.location_courte_duree
-        else 0.0
-    )
-    frais_menage = (
-        inp.frais_menage_annuel if inp.type_projet == TypeProjet.location_courte_duree else 0.0
-    )
-    return (
+SEUIL_EXONERATION_CFE = 5_000  # recettes annuelles sous lesquelles aucune CFE n'est due
+
+
+def _charges_hors_credit(inp: SimulationInput, loyers_bruts: float, is_meublee: bool, annee: int = 1) -> float:
+    """Charges annuelles hors crédit. Les charges fixes suivent la hausse
+    annuelle des charges ; celles en % des loyers suivent déjà les loyers."""
+    is_lcd = inp.type_projet == TypeProjet.location_courte_duree
+    indexation = (1 + inp.taux_revalorisation_charges_annuel) ** (annee - 1)
+    # CFE : exonérée l'année de début d'activité et sous 5 000 € de recettes.
+    cfe = inp.cfe_annuelle if is_meublee and annee >= 2 and loyers_bruts >= SEUIL_EXONERATION_CFE else 0.0
+    charges_fixes = (
         inp.charges_copropriete_annuelles
         + inp.taxe_fonciere_annuelle
         + inp.assurance_pno_annuelle
         + inp.entretien_annuel
-        + frais_gestion
-        + frais_plateforme
-        + frais_menage
+        + (inp.frais_menage_annuel if is_lcd else 0.0)
         + (inp.frais_comptable_annuel if is_meublee else 0.0)
+        + cfe
     )
+    charges_proportionnelles = loyers_bruts * (
+        inp.frais_gestion_pct_loyers
+        + (inp.frais_plateforme_pct if is_lcd else 0.0)
+        + (inp.gli_pct_loyers if not is_lcd else 0.0)
+    )
+    return charges_fixes * indexation + charges_proportionnelles
+
+
+def financement(inp: SimulationInput, cout_hors_frais_bancaires: float) -> tuple[float, float]:
+    """Renvoie (montant emprunté, frais bancaires). Les frais bancaires sont
+    financés avec le reste ; la garantie étant un % du prêt qui l'inclut, le
+    montant emprunté se résout en E = (besoin + frais fixes) / (1 - taux)."""
+    if not inp.avec_credit:
+        return 0.0, 0.0
+    frais_fixes = inp.frais_dossier_bancaire + inp.frais_courtage
+    besoin = cout_hors_frais_bancaires + frais_fixes - inp.apport
+    if besoin <= 0:
+        return 0.0, 0.0
+    montant_emprunte = besoin / (1 - inp.taux_frais_garantie)
+    return montant_emprunte, frais_fixes + montant_emprunte * inp.taux_frais_garantie
+
+
+def _meilleur_regime(annee1: AnneeResultat) -> str:
+    """Régime au meilleur cash-flow net en année 1, parmi les régimes éligibles."""
+    eligibles = [r for r, f in annee1.fiscal.items() if getattr(f, "eligible", True)] or list(annee1.fiscal)
+    return max(eligibles, key=lambda r: annee1.cashflow_apres_impot[r])
 
 
 def _simuler_location(inp: SimulationInput) -> dict:
     """location_longue_duree ET location_courte_duree (même moteur pluriannuel ;
     seuls les paramètres de revenus/charges/fiscalité micro-BIC diffèrent)."""
-    cout_total_acquisition = (
+    cout_hors_frais_bancaires = (
         inp.prix_achat + inp.frais_notaire + inp.montant_travaux + inp.montant_mobilier
     )
-    montant_emprunte = max(cout_total_acquisition - inp.apport, 0.0) if inp.avec_credit else 0.0
+    montant_emprunte, frais_bancaires = financement(inp, cout_hors_frais_bancaires)
+    cout_total_acquisition = cout_hors_frais_bancaires + frais_bancaires
     apport_reel = cout_total_acquisition - montant_emprunte
 
     loan_schedule = tableau_amortissement_annuel(
@@ -178,7 +204,10 @@ def _simuler_location(inp: SimulationInput) -> dict:
     n = inp.duree_projection_annees
     for annee in range(1, n + 1):
         loyers_bruts = loyer_annuel_base * (1 + inp.taux_revalorisation_loyers_annuel) ** (annee - 1)
-        charges_hors_credit = _charges_hors_credit(inp, loyers_bruts, is_meublee)
+        charges_hors_credit = _charges_hors_credit(inp, loyers_bruts, is_meublee, annee)
+        # Frais d'emprunt (garantie, dossier, courtage) : payés à l'acquisition
+        # (inclus dans le coût total), déductibles l'année 1 aux régimes réels.
+        frais_emprunt_deductibles = frais_bancaires if annee == 1 else 0.0
         ly = loan_by_year.get(annee)
         interets = ly.interets if ly else 0.0
         capital_rembourse = ly.capital_rembourse if ly else 0.0
@@ -203,7 +232,7 @@ def _simuler_location(inp: SimulationInput) -> dict:
         )
 
         if is_sci_is:
-            charges_deductibles = charges_hors_credit + interets
+            charges_deductibles = charges_hors_credit + interets + frais_emprunt_deductibles
             r_is = fisc.sci_is(loyers_bruts, charges_deductibles, amortissement_dispo, deficit_is_report)
             deficit_is_report = r_is.deficit_reportable
             resultat_fiscal = fisc.ResultatFiscalAnnuel(
@@ -234,7 +263,7 @@ def _simuler_location(inp: SimulationInput) -> dict:
             r_reel = fisc.foncier_reel(
                 loyers_bruts,
                 charges_hors_credit,
-                interets,
+                interets + frais_emprunt_deductibles,
                 inp.taux_marginal_imposition,
                 deficit_foncier_report,
             )
@@ -254,7 +283,7 @@ def _simuler_location(inp: SimulationInput) -> dict:
                 cashflow_avant_impot - r_micro.total_prelevements
             )
 
-            charges_deductibles_reel = charges_hors_credit + interets
+            charges_deductibles_reel = charges_hors_credit + interets + frais_emprunt_deductibles
             r_reel = fisc.lmnp_reel(
                 loyers_bruts,
                 charges_deductibles_reel,
@@ -370,6 +399,15 @@ def _simuler_location(inp: SimulationInput) -> dict:
     rendement_brut = loyer_annuel_nominal / cout_total_acquisition
     charges_an1 = annees[0].charges_hors_credit
     rendement_net_charges = (loyer_annuel_nominal - charges_an1) / cout_total_acquisition
+    rendement_net_net_par_regime = {
+        r: (loyer_annuel_nominal - charges_an1 - annees[0].fiscal[r].total_prelevements) / cout_total_acquisition
+        for r in regimes_a_calculer
+    }
+    # Gain net total sur la projection : apport sorti, cash-flows après impôt,
+    # puis revente nette d'impôt et de capital restant dû.
+    enrichissement_par_regime = {r: sum(cfs) for r, cfs in cashflows_par_regime.items()}
+    meilleur_regime = _meilleur_regime(annees[0])
+    cashflow_mensuel_an1 = annees[0].cashflow_apres_impot[meilleur_regime] / 12
 
     avertissements = []
     if is_lcd and inp.structure_juridique == StructureJuridique.sci_ir:
@@ -390,8 +428,14 @@ def _simuler_location(inp: SimulationInput) -> dict:
     return {
         "type_projet": inp.type_projet.value,
         "cout_total_acquisition": cout_total_acquisition,
+        "frais_bancaires": frais_bancaires,
         "montant_emprunte": montant_emprunte,
         "apport_reel": apport_reel,
+        "meilleur_regime": meilleur_regime,
+        "cashflow_mensuel_an1": cashflow_mensuel_an1,
+        "effort_epargne_mensuel": max(-cashflow_mensuel_an1, 0.0),
+        "rendement_net_net_par_regime": rendement_net_net_par_regime,
+        "enrichissement_par_regime": enrichissement_par_regime,
         "mensualite_credit_hors_assurance": (
             max((ly.mensualite_hors_assurance for ly in loan_schedule), default=0.0) / 12
             if differe_actif
@@ -421,6 +465,7 @@ class ResultatAchatRevente:
     frais_portage_taxe_fonciere: float
     frais_portage_assurance: float
     frais_portage_total: float
+    frais_bancaires: float
     prix_revente: float
     frais_agence_revente: float
     produit_net_vente: float
@@ -435,8 +480,9 @@ class ResultatAchatRevente:
 
 
 def _simuler_achat_revente(inp: SimulationInput) -> dict:
-    cout_total_acquisition = inp.prix_achat + inp.frais_notaire + inp.montant_travaux
-    montant_emprunte = max(cout_total_acquisition - inp.apport, 0.0) if inp.avec_credit else 0.0
+    cout_hors_frais_bancaires = inp.prix_achat + inp.frais_notaire + inp.montant_travaux
+    montant_emprunte, frais_bancaires = financement(inp, cout_hors_frais_bancaires)
+    cout_total_acquisition = cout_hors_frais_bancaires + frais_bancaires
     apport_reel = cout_total_acquisition - montant_emprunte
 
     duree_annees = inp.duree_portage_mois / 12
@@ -466,9 +512,9 @@ def _simuler_achat_revente(inp: SimulationInput) -> dict:
             impot_total = 0.0
     else:
         regime_fiscal = "Plus-value immobilière des particuliers (occasionnel)"
-        # Frais financiers de portage non déductibles de la plus-value des
-        # particuliers (contrairement à un résultat professionnel/IS).
-        base_imposable = max(produit_net_vente - cout_total_acquisition, 0.0)
+        # Frais financiers (portage, frais bancaires) non déductibles de la
+        # plus-value des particuliers (contrairement à un résultat pro/IS).
+        base_imposable = max(produit_net_vente - cout_hors_frais_bancaires, 0.0)
         annees_detention = max(int(duree_annees), 0)
         abat_ir = abattement_ir_plus_value(annees_detention)
         abat_ps = abattement_ps_plus_value(annees_detention)
@@ -495,6 +541,7 @@ def _simuler_achat_revente(inp: SimulationInput) -> dict:
         frais_portage_taxe_fonciere=frais_portage_taxe_fonciere,
         frais_portage_assurance=frais_portage_assurance,
         frais_portage_total=frais_portage_total,
+        frais_bancaires=frais_bancaires,
         prix_revente=prix_revente,
         frais_agence_revente=frais_agence_revente,
         produit_net_vente=produit_net_vente,

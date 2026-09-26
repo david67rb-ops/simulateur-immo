@@ -3,6 +3,18 @@ from __future__ import annotations
 
 from dataclasses import asdict, is_dataclass
 
+LIBELLES_REGIMES = {
+    "micro-foncier": "Micro-foncier",
+    "foncier-reel": "Foncier réel",
+    "LMNP-reel": "LMNP au réel",
+    "SCI-IS": "SCI à l'IS",
+}
+
+
+def libelle_regime(regime: str) -> str:
+    """Nom lisible d'un régime (les régimes micro-BIC ont déjà un nom lisible)."""
+    return LIBELLES_REGIMES.get(regime, regime[:1].upper() + regime[1:])
+
 
 def clean_result(obj):
     """Convertit récursivement les dataclasses en dict et neutralise les NaN
