@@ -174,11 +174,17 @@ def message_erreur(exc: Exception) -> str:
 @ui.page("/")
 def index_page() -> None:
     theme.apply_theme()
-    dark_mode = ui.dark_mode(value=False)
+    # None = mode auto : suit le réglage clair/sombre de l'ordinateur ou du téléphone.
+    dark_mode = ui.dark_mode(value=None)
+
+    async def basculer_theme() -> None:
+        # En mode auto, seul le navigateur sait quel thème est affiché.
+        sombre = await ui.run_javascript("document.body.classList.contains('body--dark')")
+        dark_mode.value = not sombre
 
     with ui.column().classes("w-full max-w-4xl mx-auto gap-5 p-4"):
         with ui.row().classes("w-full items-center justify-center relative mb-2"):
-            ui.button(icon="dark_mode", on_click=lambda: dark_mode.toggle()).props(
+            ui.button(icon="dark_mode", on_click=basculer_theme).props(
                 "flat round dense"
             ).classes("absolute right-0")
             with ui.column().classes("items-center gap-0"):
