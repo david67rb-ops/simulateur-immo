@@ -13,6 +13,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+from matplotlib.ticker import MaxNLocator
 
 PRIMARY = "#1D6F5C"
 PRIMARY_LIGHT = "#6FAE9E"
@@ -210,42 +211,66 @@ def chart_recettes_charges(recette: float, charges_items: list[tuple[str, float]
     return _fig_to_png(fig)
 
 
-def chart_pont_marge(etapes: list[tuple[str, float, bool]]) -> bytes:
+def chart_pont_marge(etapes: list[tuple[str, float, bool]], titre: str = "Décomposition de la marge") -> bytes:
     """etapes : (libellé, valeur, est_un_total). Les valeurs non-totales sont
     des deltas (positifs ou négatifs) appliqués au cumul courant."""
     fig, ax = plt.subplots(figsize=(5.6, 3.9))
     cumul = 0.0
     for i, (label, valeur, est_total) in enumerate(etapes):
         if est_total:
-            bas, hauteur = 0.0, valeur
+            bas, haut = sorted((0.0, valeur))
             cumul = valeur
-            couleur = PRIMARY
+            couleur = PRIMARY if valeur >= 0 else NEGATIVE
+            texte = _eur(valeur)
         else:
-            nouveau_cumul = cumul + valeur
-            if valeur < 0:
-                bas, hauteur = nouveau_cumul, -valeur
-            else:
-                bas, hauteur = cumul, valeur
+            bas, haut = sorted((cumul, cumul + valeur))
+            cumul += valeur
             couleur = NEGATIVE if valeur < 0 else PRIMARY_LIGHT
-            cumul = nouveau_cumul
-        ax.bar(i, hauteur, bottom=bas, color=couleur, width=0.55)
+            texte = ("+" if valeur > 0 else "") + _eur(valeur)
+        ax.bar(i, haut - bas, bottom=bas, color=couleur, width=0.55)
+        # Montant au-dessus des barres positives, en dessous des négatives.
         ax.annotate(
-            _eur(valeur),
-            (i, bas + hauteur),
-            xytext=(0, 4),
+            texte,
+            (i, haut if valeur >= 0 else bas),
+            xytext=(0, 4 if valeur >= 0 else -4),
             textcoords="offset points",
             ha="center",
-            va="bottom",
+            va="bottom" if valeur >= 0 else "top",
             fontsize=9.5,
             color="#333333",
         )
     ax.set_xticks(range(len(etapes)))
     ax.set_xticklabels([e[0] for e in etapes], rotation=20, ha="right", fontsize=10)
     ax.axhline(0, color="#999999", linewidth=0.8)
-    ax.set_title("Décomposition de la marge", fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title(titre, fontsize=13, color=PRIMARY, pad=10)
     ax.margins(y=0.2)
+    bas_axe, haut_axe = ax.get_ylim()
+    ax.set_ylim(bas_axe - (haut_axe - bas_axe) * 0.08, haut_axe)
+    ax.tick_params(axis="x", length=0)
+    ax.spines["bottom"].set_visible(False)
     ax.set_yticks([])
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
     ax.spines["left"].set_visible(False)
+    return _fig_to_png(fig)
+
+
+def chart_patrimoine(lignes: list[dict]) -> bytes:
+    """Valeur du bien, capital restant dû et patrimoine net, année par année."""
+    annees = [l["annee"] for l in lignes]
+    fig, ax = plt.subplots(figsize=(5.8, 3.9))
+    ax.plot(annees, [l["valeur_bien"] for l in lignes], color="#4A7FB5", linewidth=2, label="Valeur du bien")
+    ax.plot(annees, [l["capital_restant_du"] for l in lignes], color=NEGATIVE, linewidth=2, label="Capital restant dû")
+    patrimoine = [l["patrimoine_net"] for l in lignes]
+    ax.plot(annees, patrimoine, color=PRIMARY, linewidth=2.4, label="Patrimoine net")
+    ax.fill_between(annees, patrimoine, 0, color=PRIMARY, alpha=0.12)
+    ax.axhline(0, color="#999999", linewidth=0.8)
+    ax.yaxis.set_major_formatter(lambda v, _pos: _eur(v))
+    ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+    ax.set_xlabel("Année", fontsize=9.5, color="#555555")
+    ax.set_title("Évolution du patrimoine", fontsize=13, color=PRIMARY, pad=10)
+    ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=3)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", color="#EEEEEE", linewidth=0.8)
     return _fig_to_png(fig)

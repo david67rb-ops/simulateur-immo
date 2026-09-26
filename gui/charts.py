@@ -1,6 +1,7 @@
 """Construction des options ECharts des graphiques de l'onglet Résultats."""
 from __future__ import annotations
 
+from app.analyse import etapes_loyer_mensuel, evolution_patrimoine
 from app.utils import libelle_regime
 
 SERIES_COLORS = ["#1d6f5c", "#c9822a"]
@@ -60,13 +61,7 @@ def repartition_loyer_option(resultat: dict) -> dict:
     le régime le plus favorable. Barres flottantes obtenues par empilement
     d'une base invisible ; les étapes qui traversent zéro sont coupées en une
     partie positive et une partie négative pour que l'empilement reste juste."""
-    annee1 = resultat["annees"][0]
-    regime = resultat["meilleur_regime"]
-    impots = annee1["fiscal"][regime]["total_prelevements"] / 12
-    etapes = [("Loyers encaissés", annee1["loyers_bruts"] / 12), ("Charges", -annee1["charges_hors_credit"] / 12)]
-    if annee1["mensualite_totale_credit"]:
-        etapes.append(("Crédit", -annee1["mensualite_totale_credit"] / 12))
-    etapes.append(("Économie d'impôt" if impots < 0 else "Impôts", -impots))
+    etapes = etapes_loyer_mensuel(resultat)
 
     categories, base, positif, negatif = [], [], [], []
     cumul = 0.0
@@ -140,17 +135,11 @@ def patrimoine_option(resultat: dict, prix_achat: float, taux_revalorisation_bie
     """Évolution annuelle : valeur du bien, capital restant dû et patrimoine net
     (valeur − capital restant dû + cash-flows cumulés − apport), avant impôt de
     revente, pour le régime le plus favorable."""
-    regime = resultat["meilleur_regime"]
-    apport = resultat["apport_reel"]
-    annees, valeurs, crd, patrimoine = [], [], [], []
-    cumul = 0.0
-    for a in resultat["annees"]:
-        cumul += a["cashflow_apres_impot"][regime]
-        valeur = prix_achat * (1 + taux_revalorisation_bien) ** a["annee"]
-        annees.append(f"Année {a['annee']}")
-        valeurs.append(round(valeur))
-        crd.append(round(a["capital_restant_du"]))
-        patrimoine.append(round(valeur - a["capital_restant_du"] + cumul - apport))
+    lignes = evolution_patrimoine(resultat, prix_achat, taux_revalorisation_bien)
+    annees = [f"Année {l['annee']}" for l in lignes]
+    valeurs = [round(l["valeur_bien"]) for l in lignes]
+    crd = [round(l["capital_restant_du"]) for l in lignes]
+    patrimoine = [round(l["patrimoine_net"]) for l in lignes]
     serie = {"type": "line", "smooth": True, "symbolSize": 4}
     return {
         "tooltip": {"trigger": "axis"},

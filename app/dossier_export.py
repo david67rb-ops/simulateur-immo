@@ -13,6 +13,7 @@ from docx.oxml import OxmlElement
 from docx.oxml.ns import qn
 
 from . import charts_export as charts
+from . import analyse
 from . import endettement as endet_mod
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
@@ -618,6 +619,54 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
     _ajouter_table_et_graphique(doc, lignes, image, largeur_table_cm=11.5, largeur_image_cm=13.2)
 
 
+def _ajouter_note(doc, texte: str) -> None:
+    p = doc.add_paragraph()
+    p.paragraph_format.space_before = Pt(6)
+    run = p.add_run(texte)
+    run.italic = True
+    run.font.size = Pt(9)
+    run.font.color.rgb = GRIS_COLOR
+
+
+def _section_loyer_mensuel(doc, resultat):
+    etapes = analyse.etapes_loyer_mensuel(resultat)
+    cashflow = sum(v for _, v in etapes)
+    lignes = [(libelle, ("+" if v >= 0 else "") + _eur(v)) for libelle, v in etapes]
+    lignes.append(("Cash-flow net mensuel", _eur(cashflow)))
+    image = charts.chart_pont_marge(
+        [(etapes[0][0], etapes[0][1], True)]
+        + [(libelle, v, False) for libelle, v in etapes[1:]]
+        + [("Cash-flow net", cashflow, True)],
+        titre="Où va le loyer chaque mois (année 1)",
+    )
+    _ajouter_table_et_graphique(doc, lignes, image)
+    _ajouter_note(
+        doc,
+        f"Moyenne mensuelle de la première année, régime {libelle_regime(resultat['meilleur_regime'])}. "
+        "Les charges comprennent copropriété, taxe foncière, assurances, entretien et frais de gestion.",
+    )
+
+
+def _section_patrimoine(doc, inp, resultat):
+    evolution = analyse.evolution_patrimoine(resultat, inp.prix_achat, inp.taux_revalorisation_bien_annuel)
+    n = len(evolution)
+    jalons = sorted({a for a in (1, 5, 10, 15, 20, 25, 30, n) if 1 <= a <= n})
+    lignes = [(f"Patrimoine net — année {a}", _eur(evolution[a - 1]["patrimoine_net"])) for a in jalons]
+    lignes.append((f"Valeur estimée du bien — année {n}", _eur(evolution[-1]["valeur_bien"])))
+    lignes.append(
+        (
+            f"Enrichissement net après revente ({n} ans)",
+            _eur(resultat["enrichissement_par_regime"][resultat["meilleur_regime"]]),
+        )
+    )
+    _ajouter_table_et_graphique(doc, lignes, charts.chart_patrimoine(evolution))
+    _ajouter_note(
+        doc,
+        "Patrimoine net = valeur du bien − capital restant dû + cash-flows cumulés − apport, avant impôt "
+        "de revente. L'enrichissement net après revente tient compte de l'impôt sur la plus-value.",
+    )
+
+
 def _section_achat_revente_detail(doc, inp, resultat):
     ar = resultat["achat_revente"]
     lignes = [
@@ -757,6 +806,8 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
         sections.append(
             ("Recettes et charges d'exploitation annuelles", lambda d: _section_charges(d, inp, annee1, is_meublee, is_lcd))
         )
+        sections.append(("Où va le loyer chaque mois", lambda d: _section_loyer_mensuel(d, resultat)))
+        sections.append(("Évolution du patrimoine", lambda d: _section_patrimoine(d, inp, resultat)))
     if payload.profil is not None:
         sections.append(
             ("Taux d'endettement (HCSF)", lambda d: _section_endettement(d, inp, payload, resultat, is_achat_revente))

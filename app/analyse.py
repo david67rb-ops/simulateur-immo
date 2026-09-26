@@ -143,3 +143,36 @@ def _eur(v: float) -> str:
 
 def _pct(v: float, digits: int = 1) -> str:
     return f"{v * 100:.{digits}f} %".replace(".", ",")
+
+
+def etapes_loyer_mensuel(resultat: dict) -> list[tuple[str, float]]:
+    """Du loyer encaissé au cash-flow net, en moyenne mensuelle de l'année 1,
+    pour le régime le plus favorable. `resultat` : sortie de clean_result."""
+    annee1 = resultat["annees"][0]
+    impots = annee1["fiscal"][resultat["meilleur_regime"]]["total_prelevements"] / 12
+    etapes = [("Loyers encaissés", annee1["loyers_bruts"] / 12), ("Charges", -annee1["charges_hors_credit"] / 12)]
+    if annee1["mensualite_totale_credit"]:
+        etapes.append(("Crédit", -annee1["mensualite_totale_credit"] / 12))
+    etapes.append(("Économie d'impôt" if impots < 0 else "Impôts", -impots))
+    return etapes
+
+
+def evolution_patrimoine(resultat: dict, prix_achat: float, taux_revalorisation_bien: float) -> list[dict]:
+    """Par année : valeur du bien, capital restant dû et patrimoine net
+    (valeur − capital restant dû + cash-flows cumulés − apport), avant impôt
+    de revente, pour le régime le plus favorable."""
+    regime = resultat["meilleur_regime"]
+    lignes = []
+    cumul = 0.0
+    for a in resultat["annees"]:
+        cumul += a["cashflow_apres_impot"][regime]
+        valeur = prix_achat * (1 + taux_revalorisation_bien) ** a["annee"]
+        lignes.append(
+            {
+                "annee": a["annee"],
+                "valeur_bien": valeur,
+                "capital_restant_du": a["capital_restant_du"],
+                "patrimoine_net": valeur - a["capital_restant_du"] + cumul - resultat["apport_reel"],
+            }
+        )
+    return lignes
