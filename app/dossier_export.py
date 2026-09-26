@@ -355,7 +355,7 @@ def _ajouter_page_de_garde(doc: Document, payload: ExportDossierInput, inp) -> N
     if payload.adresse_bien:
         lignes.append(("Bien concerné", payload.adresse_bien))
     if payload.nom_emprunteur:
-        lignes.append(("Emprunteur", payload.nom_emprunteur))
+        lignes.append(("Emprunteur" if inp.avec_credit else "Investisseur", payload.nom_emprunteur))
     lignes.append(("Date de génération", datetime.now().strftime("%d/%m/%Y")))
     _ajouter_table_kv_centree(doc, lignes)
 
@@ -706,6 +706,9 @@ def _section_mentions(doc):
 
 def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     inp = payload.simulation
+    if not inp.avec_credit:
+        # Sans crédit, pas d'emprunteur ni de taux d'endettement à présenter.
+        payload = payload.model_copy(update={"profil": None})
     resultat = clean_result(simuler(inp))
     is_achat_revente = inp.type_projet == TypeProjet.achat_revente
     is_lcd = inp.type_projet == TypeProjet.location_courte_duree

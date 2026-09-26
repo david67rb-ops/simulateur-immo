@@ -861,7 +861,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 ).classes(theme.HINT_CLASSES + " mb-2")
 
                 with ui.row().classes(theme.GRID_CLASSES):
-                    ui.input(
+                    refs["field_nom_emprunteur"] = ui.input(
                         "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
                     ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
                     ui.input(
@@ -905,6 +905,13 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         tab_exploitation.visible = not is_achat_revente
         if is_achat_revente and tab_panels.value == tab_exploitation:
             tab_panels.set_value(tab_financement)
+
+        avec_credit = sim_state["avec_credit"]
+        tab_endettement.visible = avec_credit
+        if not avec_credit and tab_panels.value == tab_endettement:
+            tab_panels.set_value(tab_dossier)
+        libelle_nom = "Nom de l'emprunteur (optionnel)" if avec_credit else "Nom de l'investisseur (optionnel)"
+        refs["field_nom_emprunteur"].props(f'label="{libelle_nom}"')
 
         refs["fieldset_lcd"].visible = is_lcd
         refs["fieldset_achat_revente"].visible = is_achat_revente
@@ -1388,7 +1395,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             inp = build_simulation_input(sim_state)
             resultat = clean_result(simulation.simuler(inp))
             profil_rempli = any(v for v in profil_state.values())
-            profil = build_profil_input(profil_state) if profil_rempli else None
+            profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
             lignes = _construire_apercu_dossier(inp, resultat, profil)
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
@@ -1412,7 +1419,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
             inp = build_simulation_input(sim_state)
             profil_rempli = any(v for v in profil_state.values())
-            profil = build_profil_input(profil_state) if profil_rempli else None
+            profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
             nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
             adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
             payload = schemas.ExportDossierInput(
@@ -1429,17 +1436,23 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             # utilisateur) : on passe par un vrai dialogue d'enregistrement.
             import webview
 
-            chemins = await app.native.main_window.create_file_dialog(
+            choix = await app.native.main_window.create_file_dialog(
                 dialog_type=webview.FileDialog.SAVE,
                 save_filename="dossier-financement.docx",
                 file_types=("Documents Word (*.docx)",),
             )
-            chemin = chemins[0] if chemins else None
+            # Sur macOS, le dialogue d'enregistrement renvoie un chemin (str),
+            # pas une liste comme le dialogue d'ouverture.
+            chemin = choix if isinstance(choix, str) else (choix[0] if choix else None)
             if not chemin:
                 dossier_status.set_text("Export annulé.")
                 return
-            with open(chemin, "wb") as f:
-                f.write(contenu)
+            try:
+                with open(chemin, "wb") as f:
+                    f.write(contenu)
+            except OSError as exc:
+                dossier_status.set_text(f"Erreur lors de l'enregistrement : {exc}")
+                return
             dossier_status.set_text(f"Dossier enregistré : {chemin}")
         else:
             ui.download(contenu, "dossier-financement.docx")
