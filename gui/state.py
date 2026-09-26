@@ -28,6 +28,7 @@ def default_sim_state() -> dict:
         "montant_travaux": 0.0,
         "montant_mobilier": 0.0,
         # Financement
+        "avec_credit": True,
         "apport": 20000.0,
         "taux_credit_annuel": 3.5,
         "duree_credit_annees": 20,

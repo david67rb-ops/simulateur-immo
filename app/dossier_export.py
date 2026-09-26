@@ -392,7 +392,9 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente, meilleur_re
         ("Structure juridique", _label_structure(inp.structure_juridique.value)),
         ("Coût total de l'opération", _eur(cout_total)),
         ("Apport personnel", _eur(apport)),
-        ("Montant emprunté", _eur(montant_emprunte)),
+        ("Montant emprunté", _eur(montant_emprunte))
+        if montant_emprunte > 0
+        else ("Financement", "100 % fonds propres (sans crédit)"),
     ]
     if is_achat_revente:
         ar = resultat["achat_revente"]
@@ -500,32 +502,42 @@ def _section_profil(doc, payload):
     _ajouter_table_et_graphique(doc, lignes, image)
 
 
-def _section_financement(doc, inp, resultat, is_achat_revente):
-    cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
+def _lignes_credit(inp, resultat, montant_emprunte, is_achat_revente) -> list[tuple[str, str]]:
     lignes = [
-        ("Coût total d'acquisition", _eur(cout_total)),
-        ("Apport personnel", _eur(apport)),
         ("Montant emprunté", _eur(montant_emprunte)),
         ("Taux du crédit", _pct(inp.taux_credit_annuel, 2)),
         ("Durée du crédit", f"{inp.duree_credit_annees} ans"),
     ]
     if is_achat_revente:
         lignes.append(("Durée de portage retenue pour les intérêts", f"{inp.duree_portage_mois} mois"))
+        return lignes
+    lignes.append(("Taux d'assurance emprunteur", _pct(inp.taux_assurance_emprunteur, 2)))
+    if inp.differe_type.value != "aucun":
+        libelle = LABELS_DIFFERE.get(inp.differe_type.value, inp.differe_type.value)
+        lignes.append(("Différé de crédit", f"{libelle} — {inp.differe_duree_mois} mois"))
+        lignes.append(
+            ("Mensualité 1ère année (hors assurance)", _eur(resultat.get("mensualite_annee1_hors_assurance", 0)) + "/mois")
+        )
+        lignes.append(
+            ("Mensualité en régime de croisière (hors assurance)", _eur(resultat.get("mensualite_credit_hors_assurance", 0)) + "/mois")
+        )
     else:
-        lignes.append(("Taux d'assurance emprunteur", _pct(inp.taux_assurance_emprunteur, 2)))
-        if inp.differe_type.value != "aucun":
-            libelle = LABELS_DIFFERE.get(inp.differe_type.value, inp.differe_type.value)
-            lignes.append(("Différé de crédit", f"{libelle} — {inp.differe_duree_mois} mois"))
-            lignes.append(
-                ("Mensualité 1ère année (hors assurance)", _eur(resultat.get("mensualite_annee1_hors_assurance", 0)) + "/mois")
-            )
-            lignes.append(
-                ("Mensualité en régime de croisière (hors assurance)", _eur(resultat.get("mensualite_credit_hors_assurance", 0)) + "/mois")
-            )
-        else:
-            lignes.append(
-                ("Mensualité du crédit (hors assurance)", _eur(resultat.get("mensualite_credit_hors_assurance", 0)) + "/mois")
-            )
+        lignes.append(
+            ("Mensualité du crédit (hors assurance)", _eur(resultat.get("mensualite_credit_hors_assurance", 0)) + "/mois")
+        )
+    return lignes
+
+
+def _section_financement(doc, inp, resultat, is_achat_revente):
+    cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
+    lignes = [
+        ("Coût total d'acquisition", _eur(cout_total)),
+        ("Apport personnel", _eur(apport)),
+    ]
+    if montant_emprunte > 0:
+        lignes += _lignes_credit(inp, resultat, montant_emprunte, is_achat_revente)
+    else:
+        lignes.append(("Mode de financement", "100 % fonds propres (sans crédit)"))
     image = charts.chart_donut([apport, montant_emprunte], ["Apport personnel", "Montant emprunté"], "Plan de financement", total_label="Coût total")
     _ajouter_table_et_graphique(doc, lignes, image)
 

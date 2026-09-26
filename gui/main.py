@@ -64,6 +64,12 @@ def pct(v, digits: int = 2) -> str:
 
 def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
     data = dict(sim_state)
+    if not data.get("avec_credit", True):
+        # Champs masqués sans crédit : on neutralise une éventuelle saisie
+        # invalide laissée dedans, elle ne doit pas bloquer la simulation.
+        defauts = default_sim_state()
+        for key in ("apport", "taux_credit_annuel", "duree_credit_annees", "taux_assurance_emprunteur", "differe_type", "differe_duree_mois"):
+            data[key] = defauts[key]
     for key in PERCENT_FIELDS:
         data[key] = (data[key] or 0) / 100
     for key in (
@@ -527,8 +533,15 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         "Assurance PNO/an (€)", value=sim_state["assurance_pno_annuelle"], min=0
                     ).bind_value(sim_state, "assurance_pno_annuelle").props("outlined dense").classes("w-full")
 
-                theme.subsection_title("Emprunt")
-                with ui.row().classes(theme.GRID_CLASSES):
+                theme.subsection_title("Financement")
+                avec_credit_switch = ui.switch("Financement par crédit", value=sim_state["avec_credit"]).bind_value(
+                    sim_state, "avec_credit"
+                )
+                refs["note_fonds_propres"] = ui.label(
+                    "Bien financé intégralement en fonds propres : l'apport couvre la totalité du coût "
+                    "de l'opération, sans mensualité ni intérêts d'emprunt."
+                ).classes(theme.HINT_CLASSES)
+                with ui.row().classes(theme.GRID_CLASSES) as fieldset_credit:
                     ui.number("Apport personnel (€)", value=sim_state["apport"], min=0).bind_value(
                         sim_state, "apport"
                     ).props("outlined dense").classes("w-full")
@@ -553,6 +566,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         "Durée du différé (mois)", value=sim_state["differe_duree_mois"], min=0, max=60
                     ).bind_value(sim_state, "differe_duree_mois").props("outlined dense").classes("w-full")
                     refs["field_differe_duree"] = differe_duree_field
+                refs["fieldset_credit"] = fieldset_credit
 
                 fieldset_achat_revente = ui.column().classes("w-full gap-2")
                 with fieldset_achat_revente:
@@ -912,6 +926,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         refs["field_frais_comptable"].visible = not is_achat_revente and (is_meublee or is_sci_is)
         refs["field_mobilier"].visible = not is_achat_revente and is_meublee
         refs["field_differe_duree"].visible = not is_achat_revente and differe_type != "aucun"
+        refs["fieldset_credit"].visible = sim_state["avec_credit"]
+        refs["note_fonds_propres"].visible = not sim_state["avec_credit"]
 
         refs["ms_loyer_block"].visible = type_projet == "location_longue_duree"
         refs["ms_nuitee_block"].visible = type_projet == "location_courte_duree"
@@ -936,6 +952,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     structure_select.on_value_change(lambda e: update_visibility())
     field_regime_location.on_value_change(lambda e: update_visibility())
     differe_type_field.on_value_change(lambda e: update_visibility())
+    avec_credit_switch.on_value_change(lambda e: update_visibility())
     update_visibility()
 
     # =====================================================================
@@ -1121,7 +1138,11 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         v_cout_total.set_text(eur(resultat["cout_total_acquisition"]))
         v_rendement_brut.set_text(pct(resultat["rendement_brut"], 1))
         v_rendement_net.set_text(pct(resultat["rendement_net_charges"], 1))
-        v_mensualite.set_text(eur(resultat["mensualite_credit_hors_assurance"]) + "/mois (hors assurance)")
+        v_mensualite.set_text(
+            eur(resultat["mensualite_credit_hors_assurance"]) + "/mois (hors assurance)"
+            if resultat["montant_emprunte"] > 0
+            else "Aucune (fonds propres)"
+        )
 
         avertissements_box.clear()
         for a in resultat.get("avertissements") or []:
@@ -1289,6 +1310,15 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     # =====================================================================
     # Logique : dossier Word (aperçu des données, puis téléchargement)
     # =====================================================================
+    def _lignes_credit(montant_emprunte, inp, libelle_mensualite, mensualite) -> list[tuple[str, str]]:
+        if montant_emprunte <= 0:
+            return [("Financement", "100 % fonds propres (sans crédit)")]
+        return [
+            ("Montant emprunté", eur(montant_emprunte)),
+            ("Taux du crédit", pct(inp.taux_credit_annuel)),
+            (libelle_mensualite, eur(mensualite) + "/mois"),
+        ]
+
     def _construire_apercu_dossier(inp, resultat, profil) -> list[tuple[str, str]]:
         lignes = [
             ("Type de projet", TYPE_PROJET_OPTIONS.get(inp.type_projet.value, inp.type_projet.value)),
@@ -1303,9 +1333,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             lignes += [
                 ("Coût total de l'opération", eur(ar["cout_total_acquisition"])),
                 ("Apport personnel", eur(ar["apport_reel"])),
-                ("Montant emprunté", eur(ar["montant_emprunte"])),
-                ("Taux du crédit", pct(inp.taux_credit_annuel)),
-                ("Mensualité (intérêts de portage)", eur(mensualite_projet) + "/mois"),
+                *_lignes_credit(ar["montant_emprunte"], inp, "Mensualité (intérêts de portage)", mensualite_projet),
                 ("Marge nette prévisionnelle", eur(ar["marge_nette"])),
                 ("Rentabilité de l'opération", pct(ar["rentabilite_operation_pct"])),
             ]
@@ -1323,9 +1351,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             lignes += [
                 ("Coût total de l'opération", eur(resultat.get("cout_total_acquisition", 0))),
                 ("Apport personnel", eur(resultat.get("apport_reel", 0))),
-                ("Montant emprunté", eur(resultat.get("montant_emprunte", 0))),
-                ("Taux du crédit", pct(inp.taux_credit_annuel)),
-                ("Mensualité du crédit", eur(mensualite_projet) + "/mois"),
+                *_lignes_credit(resultat.get("montant_emprunte", 0), inp, "Mensualité du crédit", mensualite_projet),
                 (label_loyer, eur(loyers_mensuels_apercu) + "/mois"),
                 ("Régime fiscal le plus favorable", meilleur),
                 ("Cash-flow net mensuel", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),

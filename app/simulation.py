@@ -118,7 +118,7 @@ def _simuler_location(inp: SimulationInput) -> dict:
     cout_total_acquisition = (
         inp.prix_achat + inp.frais_notaire + inp.montant_travaux + inp.montant_mobilier
     )
-    montant_emprunte = max(cout_total_acquisition - inp.apport, 0.0)
+    montant_emprunte = max(cout_total_acquisition - inp.apport, 0.0) if inp.avec_credit else 0.0
     apport_reel = cout_total_acquisition - montant_emprunte
 
     loan_schedule = tableau_amortissement_annuel(
@@ -378,7 +378,7 @@ def _simuler_location(inp: SimulationInput) -> dict:
             "principe requalifiée à l'IS par l'administration fiscale (sauf si les recettes "
             "meublées restent accessoires, < 10 % des recettes totales)."
         )
-    differe_actif = inp.differe_type != DiffereType.aucun and inp.differe_duree_mois > 0
+    differe_actif = inp.avec_credit and inp.differe_type != DiffereType.aucun and inp.differe_duree_mois > 0
     if differe_actif:
         libelle = "total (rien n'est payé, intérêts capitalisés)" if inp.differe_type == DiffereType.total else "partiel (intérêts seuls payés)"
         avertissements.append(
@@ -436,7 +436,7 @@ class ResultatAchatRevente:
 
 def _simuler_achat_revente(inp: SimulationInput) -> dict:
     cout_total_acquisition = inp.prix_achat + inp.frais_notaire + inp.montant_travaux
-    montant_emprunte = max(cout_total_acquisition - inp.apport, 0.0)
+    montant_emprunte = max(cout_total_acquisition - inp.apport, 0.0) if inp.avec_credit else 0.0
     apport_reel = cout_total_acquisition - montant_emprunte
 
     duree_annees = inp.duree_portage_mois / 12

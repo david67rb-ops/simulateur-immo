@@ -48,6 +48,9 @@ class SimulationInput(BaseModel):
     montant_mobilier: float = Field(default=0, ge=0, description="Utile si location meublée")
 
     # --- Financement ---
+    avec_credit: bool = Field(
+        default=True, description="False : bien financé intégralement en fonds propres (apport = coût total)"
+    )
     apport: float = Field(default=0, ge=0)
     taux_credit_annuel: float = Field(default=0.035, ge=0, le=0.2)
     duree_credit_annees: int = Field(default=20, gt=0, le=35)
