@@ -12,8 +12,9 @@ hébergée. Deux parcours, choisis via un onglet en haut de la page :
   courte durée, achat-revente) :
   1. **Marché** : étude de marché automatique (géocodage, comparables DVF,
      loyers DHUP/ANIL, extraction depuis un lien d'annonce), carte des ventes
-     comparables autour du bien et carte de rentabilité brute des communes
-     du département.
+     comparables autour du bien, carte de rentabilité brute des communes
+     du département, position du prix d'achat par rapport à la médiane des
+     ventes et liens pour recouper sur MeilleursAgents ou SeLoger.
   2. **Financement** : caractéristiques du bien, frais de notaire automatiques,
      emprunt (classique ou différé partiel/total), spécificités achat-revente.
   3. **Exploitation** : loyers et charges (masqué en achat-revente).

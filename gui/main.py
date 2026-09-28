@@ -92,6 +92,24 @@ def plus_d_options(titre: str = "Plus d'options"):
     return ui.expansion(titre, icon="tune").props("dense").classes("w-full text-sm")
 
 
+def ouvrir_lien_externe(url: str) -> None:
+    if app.native.main_window:
+        # Fenêtre native : ouvrir dans le navigateur de l'ordinateur.
+        import webbrowser
+
+        webbrowser.open(url)
+    else:
+        ui.navigate.to(url, new_tab=True)
+
+
+def recherche_site(site: str, commune: str, code_postal: str) -> str:
+    """Recherche web de la page de prix au m² d'un portail pour la commune :
+    leurs adresses de pages ne se devinent pas de façon fiable."""
+    from urllib.parse import quote_plus
+
+    return "https://www.google.com/search?q=" + quote_plus(f"prix m2 immobilier {commune} {code_postal} site:{site}")
+
+
 FIABILITE_PRIX = {
     "elevee": ("Fiabilité élevée", theme.POSITIVE),
     "moyenne": ("Fiabilité moyenne", theme.ACCENT),
@@ -129,6 +147,20 @@ class BlocPrixVentes:
             self.nb = theme.stat_card("Ventes comparables")
         self.fiabilite = ui.label("").classes("text-sm font-semibold")
         self.detail = ui.label("").classes(theme.HINT_CLASSES)
+        self.comparaison = ui.label("").classes("text-sm")
+        self.geo: dict = {}
+        self.mediane: float | None = None
+        with ui.row().classes("items-center gap-1") as self.liens:
+            ui.label("Recouper avec :").classes(theme.HINT_CLASSES)
+            for nom, site in (("MeilleursAgents", "meilleursagents.com"), ("SeLoger", "seloger.com")):
+                ui.button(
+                    nom,
+                    icon="open_in_new",
+                    on_click=lambda s=site: ouvrir_lien_externe(
+                        recherche_site(s, self.geo.get("commune") or "", self.geo.get("code_postal") or "")
+                    ),
+                ).props("flat dense no-caps")
+        self.liens.visible = False
         self.expansion = ui.expansion("Voir les ventes comparables", icon="list").props("dense").classes(
             "w-full text-sm"
         )
@@ -137,7 +169,30 @@ class BlocPrixVentes:
                 "dense flat"
             ).classes("w-full text-xs")
 
-    def afficher(self, comparables: dict) -> None:
+    def comparer(self, prix_achat: float | None, surface: float | None) -> None:
+        """Situe le prix d'achat saisi par rapport à la médiane des ventes."""
+        if not (self.mediane and prix_achat and surface):
+            self.comparaison.set_text("")
+            return
+        prix_m2 = prix_achat / surface
+        ecart = prix_m2 / self.mediane - 1
+        if abs(ecart) < 0.03:
+            position, couleur = "dans la médiane des ventes comparables", theme.PRIMARY
+        elif ecart < 0:
+            position, couleur = f"{-ecart * 100:.0f} % sous la médiane des ventes comparables", theme.POSITIVE
+        else:
+            position = f"{ecart * 100:.0f} % au-dessus de la médiane des ventes comparables"
+            couleur = theme.NEGATIVE if ecart >= 0.10 else theme.ACCENT
+        self.comparaison.set_text(
+            f"Prix d'achat du projet : {eur(prix_m2)}/m², {position} ({eur(self.mediane)}/m²)."
+        )
+        self.comparaison.style(f"color: {couleur}")
+
+    def afficher(self, comparables: dict, geo: dict | None = None) -> None:
+        self.geo = geo or {}
+        self.liens.visible = bool(self.geo.get("commune"))
+        self.mediane = comparables.get("prix_m2_moyen")
+
         def prix(cle: str) -> str:
             return f"{eur(comparables[cle])}/m²" if comparables.get(cle) else "–"
 
@@ -468,7 +523,7 @@ def _build_agent_view() -> None:
 
         status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
-        bloc_prix.afficher(comparables)
+        bloc_prix.afficher(comparables, geo)
 
         v_loyer_bas.set_text(f"{loyer['loyer_m2_bas']:.2f} €/m²" if loyer.get("loyer_m2_bas") else "–")
         v_loyer_moyen.set_text(f"{loyer['loyer_m2_moyen']:.2f} €/m²" if loyer.get("loyer_m2_moyen") else "Non disponible")
@@ -1699,7 +1754,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             appliquer_saisonnalite_region()
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
-        bloc_prix.afficher(comparables)
+        bloc_prix.afficher(comparables, geo)
+        bloc_prix.comparer(sim_state.get("prix_achat"), sim_state.get("surface_m2"))
 
         loyer = loyer or {}
         nuitee = nuitee or {}
@@ -1732,14 +1788,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     def on_ouvrir_airbnb() -> None:
         from urllib.parse import quote
 
-        url = f"https://www.airbnb.fr/s/{quote((ctx['commune'] or '') + ', France')}/homes"
-        if app.native.main_window:
-            # Fenêtre native : ouvrir dans le navigateur de l'ordinateur.
-            import webbrowser
-
-            webbrowser.open(url)
-        else:
-            ui.navigate.to(url, new_tab=True)
+        ouvrir_lien_externe(f"https://www.airbnb.fr/s/{quote((ctx['commune'] or '') + ', France')}/homes")
 
     btn_airbnb.on_click(on_ouvrir_airbnb)
 
@@ -2090,6 +2139,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         Résultats est affiché."""
         synchroniser_saisonnalite()
         signature = json.dumps(sim_state, sort_keys=True, default=str)
+        if signature != derniere_saisie["signature"]:
+            bloc_prix.comparer(sim_state.get("prix_achat"), sim_state.get("surface_m2"))
         if signature == derniere_saisie["signature"]:
             return
         derniere_saisie["signature"] = signature
