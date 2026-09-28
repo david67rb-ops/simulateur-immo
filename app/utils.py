@@ -11,6 +11,12 @@ LIBELLES_REGIMES = {
 }
 
 
+def libelle_rentabilite_ar(apport_reel: float) -> str:
+    """La rentabilité d'un achat-revente rapporte la marge à l'apport ; sans
+    apport, au coût total de l'opération."""
+    return "Rentabilité de l'apport" if apport_reel > 0 else "Rentabilité sur le coût total"
+
+
 def libelle_regime(regime: str) -> str:
     """Nom lisible d'un régime (les régimes micro-BIC ont déjà un nom lisible)."""
     return LIBELLES_REGIMES.get(regime, regime[:1].upper() + regime[1:])

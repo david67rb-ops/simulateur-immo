@@ -16,9 +16,7 @@ import time
 from functools import lru_cache
 from pathlib import Path
 
-import httpx
-
-from .market_data import CACHE_DIR, DEPARTEMENTS_SANS_DVF
+from .market_data import CACHE_DIR, DEPARTEMENTS_SANS_DVF, requete
 
 DATA_DIR = Path(__file__).parent / "data"
 FICHIER_COMMUNES = DATA_DIR / "communes_marche.parquet"
@@ -124,8 +122,8 @@ def periode_donnees() -> str | None:
     return None if table.empty else str(table["periode"].iloc[0])
 
 
-async def _get_json(client: httpx.AsyncClient, url: str, params: dict) -> dict:
-    resp = await client.get(url, params=params)
+async def _get_json(url: str, params: dict) -> dict:
+    resp = await requete(url, params)
     resp.raise_for_status()
     return resp.json()
 
@@ -137,18 +135,16 @@ async def contours_departement(dept: str) -> dict:
     if cache.exists() and (time.time() - cache.stat().st_mtime) / 86_400 < CACHE_CONTOURS_JOURS:
         return json.loads(cache.read_text())
     params = {"format": "geojson", "geometry": "contour", "fields": "code,nom"}
-    async with httpx.AsyncClient(timeout=30) as client:
-        communes = await _get_json(client, f"{GEO_API}/departements/{dept}/communes", params)
-        if dept in COMMUNES_A_ARRONDISSEMENTS:
-            arrondissements = await _get_json(
-                client,
-                f"{GEO_API}/communes",
-                {**params, "codeDepartement": dept, "type": "arrondissement-municipal"},
-            )
-            parent = COMMUNES_A_ARRONDISSEMENTS[dept]
-            communes["features"] = [
-                f for f in communes["features"] if f["properties"]["code"] != parent
-            ] + arrondissements["features"]
+    communes = await _get_json(f"{GEO_API}/departements/{dept}/communes", params)
+    if dept in COMMUNES_A_ARRONDISSEMENTS:
+        arrondissements = await _get_json(
+            f"{GEO_API}/communes",
+            {**params, "codeDepartement": dept, "type": "arrondissement-municipal"},
+        )
+        parent = COMMUNES_A_ARRONDISSEMENTS[dept]
+        communes["features"] = [
+            f for f in communes["features"] if f["properties"]["code"] != parent
+        ] + arrondissements["features"]
     for feature in communes["features"]:
         feature["geometry"]["coordinates"] = _arrondir(feature["geometry"]["coordinates"])
     cache.write_text(json.dumps(communes, separators=(",", ":")))

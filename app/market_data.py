@@ -11,6 +11,7 @@ rafraîchi périodiquement.
 """
 from __future__ import annotations
 
+import asyncio
 import gzip
 import io
 import os
@@ -82,11 +83,36 @@ def code_departement(code_insee: str) -> str:
     return code_insee[:3] if code_insee.startswith("97") else code_insee[:2]
 
 
+# Les API publiques (adresse, data.gouv.fr) renvoient parfois une erreur
+# passagère (504, délai dépassé) : on retente avant de l'afficher.
+TENTATIVES_HTTP = 3
+
+
+async def requete(url: str, params: dict | None = None, timeout: float = 30) -> httpx.Response:
+    """GET avec nouvelles tentatives sur erreur serveur (5xx) ou réseau.
+    Les autres réponses (dont 404) sont renvoyées telles quelles."""
+    for tentative in range(1, TENTATIVES_HTTP + 1):
+        try:
+            async with httpx.AsyncClient(timeout=timeout, follow_redirects=True) as client:
+                resp = await client.get(url, params=params)
+            if resp.status_code < 500 or tentative == TENTATIVES_HTTP:
+                return resp
+        except httpx.TransportError:
+            if tentative == TENTATIVES_HTTP:
+                raise
+        await asyncio.sleep(tentative)  # 1 s puis 2 s
+
+
 async def geocoder_adresse(adresse: str) -> dict:
-    async with httpx.AsyncClient(timeout=10) as client:
-        resp = await client.get(GEOCODE_URL, params={"q": adresse, "limit": 1})
+    try:
+        resp = await requete(GEOCODE_URL, {"q": adresse, "limit": 1}, timeout=10)
         resp.raise_for_status()
-        data = resp.json()
+    except httpx.HTTPError as exc:
+        raise MarketDataError(
+            "Le service de géocodage de l'État (api-adresse.data.gouv.fr) ne répond pas pour le moment, "
+            "réessaie dans quelques minutes."
+        ) from exc
+    data = resp.json()
     features = data.get("features") or []
     if not features:
         raise MarketDataError(f"Adresse introuvable : {adresse!r}")
@@ -177,8 +203,7 @@ async def _ventes_annee(dept: str, annee: int) -> pd.DataFrame | None:
 
     url = DVF_URL_TEMPLATE.format(annee=annee, dept=dept)
     try:
-        async with httpx.AsyncClient(timeout=60, follow_redirects=True) as client:
-            resp = await client.get(url)
+        resp = await requete(url, timeout=60)
         if resp.status_code == 404:
             absent.touch()
             return None
@@ -375,9 +400,8 @@ async def _charger_loyers(type_bien: str) -> pd.DataFrame:
         return pd.read_parquet(cache_path)
 
     url = LOYERS_URLS[type_bien]
-    async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
-        resp = await client.get(url)
-        resp.raise_for_status()
+    resp = await requete(url)
+    resp.raise_for_status()
     df = pd.read_csv(
         io.BytesIO(resp.content),
         sep=";",

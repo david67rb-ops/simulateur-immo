@@ -19,7 +19,7 @@ from . import saisonnalite
 from .chapitres_dossier import CHAPITRES_OBLIGATOIRES
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
-from .utils import clean_result, libelle_regime
+from .utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 POLICE = "Calibri"
 PRIMARY_COLOR = RGBColor(0x1D, 0x6F, 0x5C)
@@ -475,7 +475,7 @@ def _tuiles_couverture(inp, resultat: dict, is_achat_revente: bool) -> list[tupl
             ("Prix d'achat", _eur(inp.prix_achat), None),
             ("Prix de revente", _eur(ar["prix_revente"]), None),
             ("Marge nette", _eur(ar["marge_nette"]), ar["marge_nette"] >= 0),
-            ("Rentabilité", _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
+            (libelle_rentabilite_ar(ar["apport_reel"]), _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
         ]
     revenu = (
         ("Chiffre d'affaires mensuel", _eur(resultat["annees"][0]["loyers_bruts"] / 12))
@@ -594,8 +594,8 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
         tri = ar.get("tri_annualise")
         tuiles = [
             ("Marge nette", _eur(ar["marge_nette"]), ar["marge_nette"] >= 0),
-            ("Rentabilité", _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
-            ("TRI annualisé", _pct(tri) if tri is not None else "n/a", tri >= 0 if tri is not None else None),
+            (libelle_rentabilite_ar(ar["apport_reel"]), _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
+            ("TRI annualisé de l'apport", _pct(tri) if tri is not None else "n/a", tri >= 0 if tri is not None else None),
             ("Coût total", _eur(cout_total), None),
             ("Frais de portage", _eur(ar["frais_portage_total"]), None),
             tuile_endettement or ("Impôt", _eur(ar["impot_total"]), None),
@@ -697,6 +697,8 @@ def _ecart_marche(prix_m2: float, mediane: float) -> tuple[str, bool | None]:
     """Écart à la médiane (texte signé) et sens pour l'acheteur."""
     ecart = prix_m2 / mediane - 1
     favorable = True if ecart <= 0.03 else (False if ecart >= 0.10 else None)
+    if round(ecart * 100) == 0:
+        return "0 %", favorable
     return ("+" if ecart > 0 else "") + _pct(ecart, 0), favorable
 
 
@@ -1110,8 +1112,8 @@ def _section_achat_revente_detail(doc, inp, resultat):
         doc,
         [
             ("Marge nette", _eur(ar["marge_nette"]), ar["marge_nette"] >= 0),
-            ("Rentabilité de l'opération", _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
-            ("TRI annualisé", _pct(tri) if tri is not None else "n/a", tri >= 0 if tri is not None else None),
+            (libelle_rentabilite_ar(ar["apport_reel"]), _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
+            ("TRI annualisé de l'apport", _pct(tri) if tri is not None else "n/a", tri >= 0 if tri is not None else None),
         ],
     )
     lignes = [

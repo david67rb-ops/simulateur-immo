@@ -19,7 +19,7 @@ from pydantic import ValidationError
 
 from app import analyse, donnees_marche, endettement as endet_mod, listing_parser, market_data, notaire, saisonnalite, schemas, simulation
 from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, chapitres_disponibles
-from app.utils import clean_result, libelle_regime
+from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import theme
 from .cartes import CarteRentabilite, CarteVentes
@@ -1295,10 +1295,16 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     with ui.row().classes(theme.GRID_CLASSES):
                         v_ar_marge_nette = theme.stat_card("Marge nette", grand=True, aide_texte="Marge après frais et impôts.")
                         v_ar_rentabilite = theme.stat_card(
-                            "Rentabilité de l'opération", grand=True, aide_texte="Marge nette ÷ apport investi."
+                            "Rentabilité de l'apport",
+                            grand=True,
+                            aide_texte="Marge nette ÷ apport investi (÷ coût total de l'opération s'il n'y a pas d'apport). "
+                            "À ne pas confondre avec la marge rapportée au coût total, indiquée dans le verdict.",
                         )
                         v_ar_tri = theme.stat_card(
-                            "TRI annualisé", grand=True, aide_texte="Rentabilité ramenée à une base annuelle."
+                            "TRI annualisé de l'apport",
+                            grand=True,
+                            aide_texte="Rentabilité de l'apport ramenée à une base annuelle : élevée dès que l'opération "
+                            "est courte et l'apport faible.",
                         )
                     with ui.row().classes(theme.GRID_CLASSES):
                         v_ar_marge_brute = theme.stat_card("Marge brute avant impôt")
@@ -1322,7 +1328,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         columns=[
                             colonne("scenario", "Scénario", gauche=True),
                             colonne("marge", "Marge nette"),
-                            colonne("rentabilite", "Rentabilité de l'opération"),
+                            colonne("rentabilite", "Rentabilité de l'apport"),
                         ],
                         rows=[],
                         row_key="scenario",
@@ -1501,8 +1507,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             ar = resultat["achat_revente"]
             principal = ("Marge nette", eur(ar["marge_nette"]), ar["marge_nette"])
             lignes = [
-                ("Rentabilité de l'opération", pct(ar["rentabilite_operation_pct"], 1)),
-                ("TRI annualisé", pct(ar["tri_annualise"], 1) if ar["tri_annualise"] is not None else "n/a"),
+                (libelle_rentabilite_ar(ar["apport_reel"]), pct(ar["rentabilite_operation_pct"], 1)),
+                ("TRI annualisé de l'apport", pct(ar["tri_annualise"], 1) if ar["tri_annualise"] is not None else "n/a"),
                 ("Coût total", eur(ar["cout_total_acquisition"])),
                 ("Frais de portage", eur(ar["frais_portage_total"])),
                 ("Impôt", eur(ar["impot_total"])),
@@ -2262,7 +2268,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 ("Apport personnel", eur(ar["apport_reel"])),
                 *_lignes_credit(ar["montant_emprunte"], inp, "Mensualité (intérêts de portage)", mensualite_projet),
                 ("Marge nette prévisionnelle", eur(ar["marge_nette"])),
-                ("Rentabilité de l'opération", pct(ar["rentabilite_operation_pct"])),
+                (libelle_rentabilite_ar(ar["apport_reel"]), pct(ar["rentabilite_operation_pct"])),
             ]
             loyers_mensuels = 0.0
         else:
