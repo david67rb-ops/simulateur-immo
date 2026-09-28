@@ -17,11 +17,12 @@ import os
 from nicegui import app, native, ui
 from pydantic import ValidationError
 
-from app import analyse, endettement as endet_mod, listing_parser, market_data, notaire, saisonnalite, schemas, simulation
+from app import analyse, donnees_marche, endettement as endet_mod, listing_parser, market_data, notaire, saisonnalite, schemas, simulation
 from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, chapitres_disponibles
 from app.utils import clean_result, libelle_regime
 
 from . import theme
+from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
 from .state import (
     PERCENT_FIELDS,
@@ -238,9 +239,12 @@ def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
         data["prix_nuitee_mensuel"] = [v or 0 for v in data["prix_nuitee_mensuel"]]
     else:
         data["occupation_mensuelle"] = data["prix_nuitee_mensuel"] = None
+    if data.get("profil_saisonnalite") != saisonnalite.REGION:
+        data["coefs_occupation_region"] = data["coefs_prix_region"] = None
     # Un champ numérique vidé par l'utilisateur renvoie None : on le traite comme 0.
+    listes = ("occupation_mensuelle", "prix_nuitee_mensuel", "coefs_occupation_region", "coefs_prix_region")
     for key, value in data.items():
-        if value is None and key not in ("prix_revente_vise", "occupation_mensuelle", "prix_nuitee_mensuel"):
+        if value is None and key != "prix_revente_vise" and key not in listes:
             data[key] = 0
     return schemas.SimulationInput(**data)
 
@@ -421,6 +425,7 @@ def _build_agent_view() -> None:
         results.visible = False
         with results:
             bloc_prix = BlocPrixVentes()
+            carte_ventes = CarteVentes()
             ui.label("Loyer de marché au m²").classes(theme.SUBSECTION_TITLE_CLASSES)
             with ui.row().classes(theme.GRID_CLASSES):
                 v_loyer_bas = theme.stat_card("Mini")
@@ -431,6 +436,7 @@ def _build_agent_view() -> None:
                 v_prix_total = theme.stat_card("Prix total estimé pour la surface")
                 v_loyer_total = theme.stat_card("Loyer mensuel estimé pour la surface")
             note = ui.label("").classes(theme.HINT_CLASSES)
+            carte_rentabilite = CarteRentabilite()
 
     async def on_estimer() -> None:
         adresse = (state.get("adresse") or "").strip()
@@ -483,6 +489,8 @@ def _build_agent_view() -> None:
         note.set_text(msg)
 
         results.visible = True
+        carte_ventes.afficher(geo["lat"], geo["lon"], comparables)
+        await carte_rentabilite.afficher(geo["code_departement"], geo["lat"], geo["lon"], state["type_bien"])
 
     btn_estimer.on_click(on_estimer)
 
@@ -496,7 +504,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     profil_state = default_profil_state()
     dossier_meta_state = default_dossier_meta_state()
     chapitres_state = {cle: True for cle in CHAPITRES_OPTIONNELS}
-    ctx = {"last_market_result": None, "commune": None}
+    ctx = {"last_market_result": None, "commune": None, "dept": None}
     refs: dict[str, ui.element] = {}
 
     # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
@@ -616,6 +624,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     market_results.visible = False
                     with market_results:
                         bloc_prix = BlocPrixVentes()
+                        carte_ventes = CarteVentes()
 
                         loyer_block = ui.column().classes("w-full gap-2")
                         with loyer_block:
@@ -652,6 +661,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         refs["ms_nuitee_block"] = nuitee_block
 
                         market_note = ui.label("").classes(theme.HINT_CLASSES)
+                        carte_rentabilite = CarteRentabilite()
                         btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
 
                 _bouton_onglet_suivant(tab_marche)
@@ -890,8 +900,10 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                                 "Saisonnalité",
                                 sim_state,
                                 "profil_saisonnalite",
-                                aide="Répartit l'occupation et le prix moyens sur l'année (profils types indicatifs). "
-                                "Les recettes annuelles ne changent pas, seul leur calendrier change.",
+                                aide="Répartit l'occupation et le prix moyens sur l'année. Les recettes annuelles "
+                                "ne changent pas, seul leur calendrier change. « Réservations de la région » reprend "
+                                "les nuitées réellement réservées sur les plateformes (Eurostat) dans l'ancienne "
+                                "région du bien : une moyenne qui mélange villes et zones touristiques.",
                             )
                         with ui.expansion("Détail mois par mois : occupation et prix", icon="calendar_month").props(
                             "dense"
@@ -1682,6 +1694,9 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         }
 
         ctx["commune"] = geo.get("commune")
+        ctx["dept"] = geo.get("code_departement")
+        if sim_state["profil_saisonnalite"] == saisonnalite.REGION:
+            appliquer_saisonnalite_region()
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
         bloc_prix.afficher(comparables)
@@ -1709,6 +1724,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         market_note.set_text(note)
 
         market_results.visible = True
+        carte_ventes.afficher(geo["lat"], geo["lon"], comparables)
+        await carte_rentabilite.afficher(geo["code_departement"], geo["lat"], geo["lon"], market_state["type_bien"])
 
     btn_market.on_click(on_analyser_marche)
 
@@ -2009,7 +2026,28 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     for entree in entrees_occupation + entrees_prix:
         entree.on_value_change(on_saisie_mois)
 
+    def appliquer_saisonnalite_region() -> bool:
+        region = donnees_marche.saisonnalite_region(ctx["dept"]) if ctx.get("dept") else None
+        if not region:
+            sim_state["coefs_occupation_region"] = sim_state["coefs_prix_region"] = None
+            return False
+        sim_state["coefs_occupation_region"] = region["occupation"]
+        sim_state["coefs_prix_region"] = region["prix"]
+        ui.notify(
+            f"Saisonnalité des réservations en {region['region']} ({region['annee']}, Eurostat) appliquée.",
+            type="positive",
+        )
+        return True
+
     def on_profil_saisonnalite(e) -> None:
+        if e.value == saisonnalite.REGION:
+            if not appliquer_saisonnalite_region():
+                ui.notify(
+                    "Analyse d'abord l'adresse du bien dans l'onglet Marché pour connaître sa région.",
+                    type="warning",
+                )
+                select_saisonnalite.set_value("uniforme")
+            return
         if e.value == saisonnalite.PERSONNALISE:
             if not sim_state.get("occupation_mensuelle"):
                 occupation, prix = _valeurs_mois_affichees()

@@ -4,6 +4,5 @@ __pycache__/
 *.pyc
 .git/
 .claude/
-app/data_cache/*.parquet
-app/data_cache/*.absent
+app/data_cache/
 .DS_Store

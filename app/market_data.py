@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import gzip
 import io
+import os
 import sys
 import time
 from datetime import date
@@ -24,7 +25,11 @@ import httpx
 if TYPE_CHECKING:
     import pandas as pd
 
-if getattr(sys, "frozen", False):
+if os.environ.get("IMMO_CACHE_DIR"):
+    # Préparation des données (scripts/preparer_donnees.py) : cache hors du
+    # dossier du projet, synchronisé par iCloud.
+    CACHE_DIR = Path(os.environ["IMMO_CACHE_DIR"])
+elif getattr(sys, "frozen", False):
     # Application packagée (PyInstaller) : le dossier de l'app est en lecture
     # seule (ex. /Applications), le cache doit vivre dans le profil utilisateur.
     CACHE_DIR = Path.home() / "Library" / "Application Support" / "Simulateur Immobilier" / "data_cache"
@@ -61,8 +66,10 @@ NATURE_ANCIEN = "Vente"
 NATURE_NEUF = "Vente en l'état futur d'achèvement"
 TYPES_LOGEMENT = ("Appartement", "Maison")
 
-# Ancien format de cache (lignes DVF brutes), remplacé par les ventes agrégées.
-for _ancien in CACHE_DIR.glob("dvf_*.parquet"):
+# Format du cache des ventes agrégées : à incrémenter quand les colonnes
+# changent. Les caches d'un ancien format sont supprimés.
+VERSION_CACHE_VENTES = 2
+for _ancien in [*CACHE_DIR.glob("dvf_*.parquet"), *CACHE_DIR.glob("ventes_*")]:
     _ancien.unlink(missing_ok=True)
 
 
@@ -128,6 +135,7 @@ def _ventes_par_mutation(df: pd.DataFrame) -> pd.DataFrame:
         date=("date_mutation", "first"),
         nature=("nature_mutation", "first"),
         valeur=("valeur_fonciere", "first"),
+        code_commune=("code_commune", "first"),
         nom_commune=("nom_commune", "first"),
     )
     ventes = locaux.join(infos, how="inner").dropna(subset=["surface", "latitude", "longitude"])
@@ -138,7 +146,19 @@ def _ventes_par_mutation(df: pd.DataFrame) -> pd.DataFrame:
     numero = ventes["adresse_numero"].map(lambda n: "" if pd.isna(n) else f"{int(n)} ")
     ventes["adresse"] = (numero + ventes["adresse_nom_voie"].fillna("")).str.strip() + ", " + ventes["nom_commune"]
     return ventes[
-        ["date", "nature", "type_local", "surface", "pieces", "valeur", "prix_m2", "latitude", "longitude", "adresse"]
+        [
+            "date",
+            "nature",
+            "type_local",
+            "surface",
+            "pieces",
+            "valeur",
+            "prix_m2",
+            "latitude",
+            "longitude",
+            "adresse",
+            "code_commune",
+        ]
     ].reset_index(drop=True)
 
 
@@ -148,8 +168,8 @@ async def _ventes_annee(dept: str, annee: int) -> pd.DataFrame | None:
     réseau, on se rabat sur le cache même périmé."""
     import pandas as pd
 
-    cache = CACHE_DIR / f"ventes_{dept}_{annee}.parquet"
-    absent = CACHE_DIR / f"ventes_{dept}_{annee}.absent"
+    cache = CACHE_DIR / f"ventes{VERSION_CACHE_VENTES}_{dept}_{annee}.parquet"
+    absent = CACHE_DIR / f"ventes{VERSION_CACHE_VENTES}_{dept}_{annee}.absent"
     if cache.exists() and _age_jours(cache) < CACHE_DVF_JOURS:
         return pd.read_parquet(cache)
     if absent.exists() and _age_jours(absent) < CACHE_DVF_ABSENT_JOURS:
@@ -177,6 +197,7 @@ async def _ventes_annee(dept: str, annee: int) -> pd.DataFrame | None:
             "valeur_fonciere",
             "adresse_numero",
             "adresse_nom_voie",
+            "code_commune",
             "nom_commune",
             "id_parcelle",
             "type_local",
@@ -185,7 +206,7 @@ async def _ventes_annee(dept: str, annee: int) -> pd.DataFrame | None:
             "longitude",
             "latitude",
         ],
-        dtype={"id_parcelle": str, "adresse_nom_voie": str, "nom_commune": str},
+        dtype={"id_parcelle": str, "adresse_nom_voie": str, "code_commune": str, "nom_commune": str},
         low_memory=False,
     )
     ventes = _ventes_par_mutation(brut)
@@ -336,6 +357,8 @@ async def comparables_dvf(
                     "prix": round(float(v.valeur)),
                     "prix_m2": round(float(v.prix_m2)),
                     "distance_m": round(float(v.distance_m) / 10) * 10,
+                    "lat": round(float(v.latitude), 6),
+                    "lon": round(float(v.longitude), 6),
                 }
                 for v in liste.itertuples()
             ],

@@ -11,7 +11,9 @@ hébergée. Deux parcours, choisis via un onglet en haut de la page :
   s'adaptent au **type de projet** choisi (location longue durée, location
   courte durée, achat-revente) :
   1. **Marché** : étude de marché automatique (géocodage, comparables DVF,
-     loyers DHUP/ANIL, extraction depuis un lien d'annonce).
+     loyers DHUP/ANIL, extraction depuis un lien d'annonce), carte des ventes
+     comparables autour du bien et carte de rentabilité brute des communes
+     du département.
   2. **Financement** : caractéristiques du bien, frais de notaire automatiques,
      emprunt (classique ou différé partiel/total), spécificités achat-revente.
   3. **Exploitation** : loyers et charges (masqué en achat-revente).
@@ -251,6 +253,27 @@ ce cas. Ça fonctionne en revanche bien sur les sites des réseaux d'agences
 **Ceci reste un outil de simulation pédagogique.** Pour une décision réelle,
 faites valider les hypothèses fiscales par un professionnel (notaire,
 comptable, avocat fiscaliste, CGP).
+
+## Données préparées à l'avance
+
+`app/data/` contient des données calculées une fois pour toute la France et
+livrées avec l'application (carte de rentabilité, saisonnalité régionale) :
+
+- `communes_marche.parquet` : par commune (arrondissement à Paris, Lyon,
+  Marseille) et type de bien, prix médian au m² des ventes dans l'ancien sur
+  les 24 derniers mois publiés, loyer d'annonce au m² et rentabilité brute
+  (à partir de 10 ventes) ;
+- `saisonnalite_regions.json` : nuitées réservées sur les plateformes en
+  ligne, mois par mois, par région (Eurostat, `tour_ce_omn12`).
+
+Pour les mettre à jour (après chaque publication DVF, en avril et octobre) :
+
+```bash
+venv/bin/python scripts/preparer_donnees.py
+```
+
+puis committer `app/data/`. Les comparables autour d'une adresse restent
+téléchargés à la demande (trop volumineux pour être livrés).
 
 ## Limites connues de l'étude de marché
 

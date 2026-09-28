@@ -2,8 +2,7 @@ venv
 venv.nosync/
 __pycache__/
 *.pyc
-app/data_cache/*.parquet
-app/data_cache/*.absent
+app/data_cache/
 .DS_Store
 
 # Artefacts de build de l'app macOS (voir build_macos_app.sh) : générés à la

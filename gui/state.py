@@ -59,6 +59,8 @@ def default_sim_state() -> dict:
         "profil_saisonnalite": "uniforme",
         "occupation_mensuelle": None,  # profil personnalisé : 12 valeurs en %
         "prix_nuitee_mensuel": None,
+        "coefs_occupation_region": None,  # profil région (Eurostat), selon l'adresse analysée
+        "coefs_prix_region": None,
         # Régime locatif & fiscalité
         "regime_location": "nue",
         "taux_marginal_imposition": 0.30,

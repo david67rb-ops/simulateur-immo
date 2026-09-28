@@ -110,8 +110,14 @@ class SimulationInput(BaseModel):
     prix_nuitee_mensuel: list[float] | None = Field(
         default=None, description="Profil personnalisé : prix moyen par nuitée de chaque mois (12 valeurs)"
     )
+    coefs_occupation_region: list[float] | None = Field(
+        default=None, description="Profil région : coefficients mensuels d'occupation (Eurostat, moyenne 1)"
+    )
+    coefs_prix_region: list[float] | None = Field(
+        default=None, description="Profil région : coefficients mensuels de prix (moyenne 1)"
+    )
 
-    @field_validator("occupation_mensuelle", "prix_nuitee_mensuel")
+    @field_validator("occupation_mensuelle", "prix_nuitee_mensuel", "coefs_occupation_region", "coefs_prix_region")
     @classmethod
     def _douze_mois(cls, valeurs: list[float] | None, info) -> list[float] | None:
         if valeurs is None:

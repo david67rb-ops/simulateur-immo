@@ -39,8 +39,13 @@ PROFILS: dict[str, tuple[str, list[float], list[float]]] = {
         [0.85, 0.85, 0.90, 0.95, 1.00, 1.10, 1.25, 1.25, 1.00, 0.95, 0.85, 0.90],
     ),
 }
+REGION = "region"
 PERSONNALISE = "personnalise"
-LIBELLES_PROFILS = {cle: libelle for cle, (libelle, _, _) in PROFILS.items()} | {PERSONNALISE: "Personnalisé"}
+LIBELLES_PROFILS = (
+    {cle: libelle for cle, (libelle, _, _) in PROFILS.items()}
+    | {REGION: "Réservations de la région (Eurostat)"}
+    | {PERSONNALISE: "Personnalisé"}
+)
 
 
 def _repartir_occupation(taux: float, coefs: list[float]) -> list[float]:
@@ -68,7 +73,10 @@ def valeurs_mensuelles(inp: SimulationInput) -> list[tuple[float, float]]:
     """(taux d'occupation, prix par nuitée) de chaque mois de l'année 1."""
     if inp.profil_saisonnalite == PERSONNALISE and inp.occupation_mensuelle and inp.prix_nuitee_mensuel:
         return list(zip(inp.occupation_mensuelle, inp.prix_nuitee_mensuel))
-    _, coefs_occ, coefs_prix = PROFILS.get(inp.profil_saisonnalite, PROFILS["uniforme"])
+    if inp.profil_saisonnalite == REGION and inp.coefs_occupation_region and inp.coefs_prix_region:
+        coefs_occ, coefs_prix = inp.coefs_occupation_region, inp.coefs_prix_region
+    else:
+        _, coefs_occ, coefs_prix = PROFILS.get(inp.profil_saisonnalite, PROFILS["uniforme"])
     occupation = _repartir_occupation(inp.taux_occupation_pct, coefs_occ)
     nuits = [JOURS[m] * occupation[m] for m in range(12)]
     ponderation = sum(n * c for n, c in zip(nuits, coefs_prix))
