@@ -1,4 +1,4 @@
-# Simulateur de rentabilité immobilière
+# Fiabimmo — simulateur de rentabilité immobilière
 
 Application 100 % Python ([NiceGUI](https://nicegui.io) — plus de HTML/CSS/JS
 séparés), utilisable en fenêtre de bureau native ou en application web
@@ -32,10 +32,10 @@ hébergée. Deux parcours, choisis via un onglet en haut de la page :
 
 ### Au quotidien (macOS) : double-clic
 
-Une vraie application macOS autonome est disponible : **`Simulateur
-Immobilier.app`**, à la racine du projet. Aucune installation de Python ou de
-dépendances n'est nécessaire pour l'utiliser — double-clic, ou glisse-la dans
-le dossier Applications / le Dock.
+Une vraie application macOS autonome est disponible : **`Fiabimmo.app`**,
+installée dans /Applications par `./build_macos_app.sh`. Aucune installation
+de Python ou de dépendances n'est nécessaire pour l'utiliser — double-clic,
+ou glisse-la dans le Dock.
 
 Premier lancement uniquement : macOS affichera un avertissement (application
 non signée par un développeur identifié apple). Fais un clic droit sur l'app

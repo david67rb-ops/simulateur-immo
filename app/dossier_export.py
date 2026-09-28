@@ -433,13 +433,13 @@ def _configurer_entete_pied(doc: Document, libelle_projet: str) -> None:
 
     header_p = section.header.paragraphs[0]
     _taquet_a_droite(header_p)
-    _texte(header_p, "DOSSIER DE FINANCEMENT IMMOBILIER", 8, PRIMARY_COLOR, gras=True)
+    _texte(header_p, "FIABIMMO  ·  DOSSIER DE FINANCEMENT IMMOBILIER", 8, PRIMARY_COLOR, gras=True)
     _texte(header_p, "\t" + libelle_projet, 8, GRIS_COLOR)
     _add_bottom_border(header_p, color=LAITON_HEX, size=6)
 
     footer_p = section.footer.paragraphs[0]
     _taquet_a_droite(footer_p)
-    _texte(footer_p, "Estimation pédagogique — à faire valider par un professionnel", 8, GRIS_COLOR, italique=True)
+    _texte(footer_p, "Établi avec Fiabimmo — estimation pédagogique, à faire valider par un professionnel", 8, GRIS_COLOR, italique=True)
     _texte(footer_p, "\tPage ", 8, GRIS_COLOR)
     _add_field(footer_p, "PAGE")
     _texte(footer_p, " / ", 8, GRIS_COLOR)
@@ -518,7 +518,7 @@ def _ajouter_page_de_garde(doc: Document, payload: ExportDossierInput, inp, resu
     _cell_marges(cell_logo, haut=500, bas=500, gauche=400, droite=100)
     cell_logo.paragraphs[0].add_run().add_picture(io.BytesIO(charts.logo_png()), width=Cm(2.6))
     _cell_marges(cell_titre, haut=500, bas=500, gauche=200, droite=400)
-    _texte(cell_titre.paragraphs[0], "DOSSIER DE FINANCEMENT IMMOBILIER", 11, LAITON_CLAIR, gras=True)
+    _texte(cell_titre.paragraphs[0], "FIABIMMO  ·  DOSSIER DE FINANCEMENT IMMOBILIER", 11, LAITON_CLAIR, gras=True)
     p_titre = cell_titre.add_paragraph()
     p_titre.paragraph_format.space_before = Pt(4)
     _texte(p_titre, _titre_projet(payload, inp), 28, BLANC, gras=True)
@@ -546,7 +546,7 @@ def _ajouter_page_de_garde(doc: Document, payload: ExportDossierInput, inp, resu
     p_note.alignment = WD_ALIGN_PARAGRAPH.CENTER
     _texte(
         p_note,
-        "Document généré automatiquement — estimation pédagogique, à faire valider par un professionnel "
+        "Document établi avec Fiabimmo — estimation pédagogique, à faire valider par un professionnel "
         "avant toute décision.",
         9,
         GRIS_COLOR,

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Construit "Simulateur Immobilier.app", une application macOS autonome :
+# Construit "Fiabimmo.app", une application macOS autonome :
 # aucune installation de Python ni de dépendances n'est requise pour la
 # lancer, il suffit de double-cliquer dessus.
 #
@@ -40,22 +40,24 @@ DOCX_DIR="$(python3 -c 'import docx, os; print(os.path.dirname(docx.__file__))')
 
 echo "Construction en cours (plusieurs minutes, dépendances lourdes : pandas/pyarrow/matplotlib)..."
 python3 -m PyInstaller \
-    --name "Simulateur Immobilier" \
+    --name "Fiabimmo" \
     --windowed \
     --add-data "${NICEGUI_DIR}:nicegui" \
     --collect-data docx \
     --add-data "${DOCX_DIR}/parts/__init__.py:docx/parts" \
     --add-data "app/data:app/data" \
     --add-data "app/fonts:app/fonts" \
-    --osx-bundle-identifier com.davidlehmann.simulateurimmo \
+    --osx-bundle-identifier com.davidlehmann.fiabimmo \
     --distpath "$BUILD_DIR/dist" \
     --workpath "$BUILD_DIR/build" \
     --noconfirm \
     main.py
 
-INSTALL_PATH="/Applications/Simulateur Immobilier.app"
+INSTALL_PATH="/Applications/Fiabimmo.app"
+# Ancien nom de l'application (avant le passage à la marque Fiabimmo).
+rm -rf "/Applications/Simulateur Immobilier.app"
 rm -rf "$INSTALL_PATH"
-cp -R "$BUILD_DIR/dist/Simulateur Immobilier.app" "$INSTALL_PATH"
+cp -R "$BUILD_DIR/dist/Fiabimmo.app" "$INSTALL_PATH"
 xattr -cr "$INSTALL_PATH" || true
 
 echo

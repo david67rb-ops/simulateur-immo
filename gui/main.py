@@ -1,4 +1,4 @@
-"""Application NiceGUI : simulateur de rentabilité immobilière & étude de
+"""Fiabimmo, application NiceGUI : simulateur de rentabilité immobilière & étude de
 marché. Toute la logique métier vit dans le package `app` (inchangée) ;
 ce module ne fait que construire l'interface et appeler ces fonctions.
 
@@ -429,12 +429,14 @@ def index_page() -> None:
             with ui.column().classes("items-center gap-0"):
                 with ui.row().classes("items-center gap-2"):
                     ui.html(theme.LOGO_SVG).classes("shrink-0")
-                    ui.label("Simulateur de rentabilité immobilier").classes(
-                        "text-2xl font-bold text-center"
-                    )
+                    with ui.column().classes("gap-0"):
+                        ui.label("Fiabimmo").classes("text-2xl font-bold leading-tight")
+                        ui.label("Simulateur de rentabilité immobilière").classes(
+                            "text-xs uppercase tracking-wider text-[color:var(--c-laiton)] font-semibold"
+                        )
                 ui.label(
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
-                ).classes("text-sm text-gray-500 dark:text-gray-400 text-center")
+                ).classes("text-sm text-gray-500 dark:text-gray-400 text-center mt-1")
 
         with ui.tabs().props("dense").classes("w-full max-w-4xl mx-auto") as profil_tabs:
             tab_investisseur = ui.tab("Particulier / Investisseur")
@@ -2367,7 +2369,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
             choix = await app.native.main_window.create_file_dialog(
                 dialog_type=webview.FileDialog.SAVE,
-                save_filename="dossier-financement.docx",
+                save_filename="Fiabimmo - dossier de financement.docx",
                 file_types=("Documents Word (*.docx)",),
             )
             # Sur macOS, le dialogue d'enregistrement renvoie un chemin (str),
@@ -2384,14 +2386,14 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 return
             dossier_status.set_text(f"Dossier enregistré : {chemin}")
         else:
-            ui.download(contenu, "dossier-financement.docx")
+            ui.download(contenu, "Fiabimmo - dossier de financement.docx")
             dossier_status.set_text("Dossier téléchargé.")
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Simulateur de rentabilité immobilière")
+    parser = argparse.ArgumentParser(description="Fiabimmo, simulateur de rentabilité immobilière")
     parser.add_argument("--web", action="store_true", help="Lance dans le navigateur au lieu d'une fenêtre native")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--host", type=str, default=None)
@@ -2419,7 +2421,7 @@ def main() -> None:
     host = args.host or ("0.0.0.0" if web_mode else "localhost")
 
     ui.run(
-        title="Simulateur de rentabilité immobilière",
+        title="Fiabimmo",
         native=not web_mode,
         window_size=(1180, 900) if not web_mode else None,
         reload=False,
