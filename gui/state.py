@@ -11,6 +11,7 @@ def default_market_state() -> dict:
         "type_bien": "appartement",
         "surface_m2": 50.0,
         "rayon_metres": 500,
+        "bien_neuf": False,
     }
 
 

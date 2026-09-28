@@ -247,8 +247,17 @@ comptable, avocat fiscaliste, CGP).
 
 ## Limites connues de l'étude de marché
 
-- DVF ne couvre pas l'Alsace-Moselle (67, 68, 57) ni Mayotte, et les ventes
-  très récentes (< quelques mois) peuvent être absentes de l'export.
+- DVF ne couvre pas l'Alsace-Moselle (67, 68, 57) ni Mayotte (l'app le
+  signale), et les ventes très récentes (< 6 à 12 mois) sont absentes de
+  l'export, publié deux fois par an.
+- Prix au m² : ventes des 24 derniers mois publiés (années détectées
+  automatiquement, cache rafraîchi tous les 30 jours), une ligne par vente
+  d'un logement unique (les ventes en bloc, qui répètent le prix total sur
+  chaque lot, sont exclues), ancien ou VEFA selon le bien, surface à ±30 %.
+  Rayon puis tolérance de surface élargis (1 km, 2 km, ±50 %, toutes
+  surfaces) tant qu'il y a moins de 15 ventes ; la fiabilité affichée en
+  tient compte. Les caves et parkings vendus avec le logement restent inclus
+  dans le prix.
 - L'indicateur de loyer est un modèle statistique (annonces leboncoin/SeLoger)
   avec un intervalle de confiance ; il est peu fiable pour les communes ayant
   peu d'annonces (`nb_observations_commune` faible) — l'app affiche un

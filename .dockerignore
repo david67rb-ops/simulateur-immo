@@ -1,7 +1,9 @@
-venv/
+venv
+venv.nosync/
 __pycache__/
 *.pyc
 .git/
 .claude/
 app/data_cache/*.parquet
+app/data_cache/*.absent
 .DS_Store

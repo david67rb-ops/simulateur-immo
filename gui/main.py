@@ -90,6 +90,122 @@ def plus_d_options(titre: str = "Plus d'options"):
     return ui.expansion(titre, icon="tune").props("dense").classes("w-full text-sm")
 
 
+FIABILITE_PRIX = {
+    "elevee": ("Fiabilité élevée", theme.POSITIVE),
+    "moyenne": ("Fiabilité moyenne", theme.ACCENT),
+    "faible": ("Fiabilité faible", theme.NEGATIVE),
+}
+
+
+class BlocPrixVentes:
+    """Prix au m² des ventes comparables (DVF) : fourchette, fiabilité de
+    l'échantillon et liste des ventes retenues. Partagé par la vue agent et
+    l'onglet Marché."""
+
+    COLONNES = [
+        {"name": "date", "label": "Date", "field": "date", "align": "left"},
+        {
+            "name": "adresse",
+            "label": "Adresse",
+            "field": "adresse",
+            "align": "left",
+            "style": "white-space: normal; min-width: 160px",
+        },
+        {"name": "surface", "label": "Surface", "field": "surface_txt", "align": "right"},
+        {"name": "pieces", "label": "Pièces", "field": "pieces_txt", "align": "right"},
+        {"name": "prix", "label": "Prix", "field": "prix_txt", "align": "right"},
+        {"name": "prix_m2", "label": "Prix/m²", "field": "prix_m2_txt", "align": "right"},
+        {"name": "distance", "label": "Distance", "field": "distance_txt", "align": "right"},
+    ]
+
+    def __init__(self) -> None:
+        ui.label("Prix de vente au m² (ventes comparables DVF)").classes(theme.SUBSECTION_TITLE_CLASSES)
+        with ui.row().classes(theme.GRID_CLASSES):
+            self.bas = theme.stat_card("Bas (p10)")
+            self.moyen = theme.stat_card("Médiane")
+            self.haut = theme.stat_card("Haut (p90)")
+            self.nb = theme.stat_card("Ventes comparables")
+        self.fiabilite = ui.label("").classes("text-sm font-semibold")
+        self.detail = ui.label("").classes(theme.HINT_CLASSES)
+        self.expansion = ui.expansion("Voir les ventes comparables", icon="list").props("dense").classes(
+            "w-full text-sm"
+        )
+        with self.expansion:
+            self.table = ui.table(columns=self.COLONNES, rows=[], row_key="cle", pagination=10).props(
+                "dense flat"
+            ).classes("w-full text-xs")
+
+    def afficher(self, comparables: dict) -> None:
+        def prix(cle: str) -> str:
+            return f"{eur(comparables[cle])}/m²" if comparables.get(cle) else "–"
+
+        self.bas.set_text(prix("prix_m2_bas"))
+        if comparables.get("prix_m2_moyen"):
+            self.moyen.set_text(prix("prix_m2_moyen"))
+        else:
+            self.moyen.set_text("Non disponible" if comparables.get("indisponible") else "Pas assez de données")
+        self.haut.set_text(prix("prix_m2_haut"))
+        n = comparables.get("nb_transactions") or 0
+        self.nb.set_text(str(n))
+
+        ventes = comparables.get("ventes") or []
+        self.expansion.visible = bool(ventes)
+        self.expansion.text = (
+            f"Voir les {n} ventes comparables" if n <= len(ventes) else f"Voir les {len(ventes)} ventes les plus récentes"
+        )
+        self.table.rows = [
+            {
+                "cle": i,
+                "date": v["date"],
+                "adresse": v["adresse"],
+                "surface_txt": f"{v['surface']} m²",
+                "pieces_txt": v["pieces"] or "–",
+                "prix_txt": eur(v["prix"]),
+                "prix_m2_txt": eur(v["prix_m2"]),
+                "distance_txt": f"{v['distance_m']} m",
+            }
+            for i, v in enumerate(ventes)
+        ]
+        self.table.update()
+
+        if comparables.get("erreur"):
+            self.fiabilite.set_text("")
+            self.detail.set_text(f"⚠️ Ventes DVF indisponibles pour le moment : {comparables['erreur']}")
+            return
+        if comparables.get("indisponible"):
+            self.fiabilite.set_text("")
+            self.detail.set_text(f"⚠️ {comparables['indisponible']}")
+            return
+        if not n:
+            self.fiabilite.set_text("")
+            self.detail.set_text("⚠️ Aucune vente comparable trouvée dans un rayon de 2 km pour ce type de bien.")
+            return
+
+        libelle, couleur = FIABILITE_PRIX[comparables["fiabilite"]]
+        self.fiabilite.set_text(f"● {libelle}")
+        self.fiabilite.style(f"color: {couleur}")
+        rayon = comparables["rayon_utilise"]
+        rayon_txt = f"{rayon / 1000:g} km".replace(".", ",") if rayon >= 1000 else f"{rayon} m"
+        phrase = (
+            f"{n} vente{'s' if n > 1 else ''} "
+            + ("de logements neufs (VEFA)" if comparables.get("neuf") else "dans l'ancien")
+            + f" entre {comparables['periode_debut']} et {comparables['periode_fin']}, dans un rayon de {rayon_txt}"
+        )
+        if comparables.get("surface_min"):
+            phrase += f", surfaces de {comparables['surface_min']} à {comparables['surface_max']} m²"
+        else:
+            phrase += ", toutes surfaces"
+        morceaux = [phrase]
+        if rayon > comparables["rayon_demande"]:
+            morceaux.append(f"Rayon élargi automatiquement (moins de {market_data.MIN_VENTES} ventes plus près)")
+        if comparables.get("repli_ancien"):
+            morceaux.append("Aucune vente dans le neuf à proximité : prix de l'ancien, souvent 15 à 25 % plus bas")
+        morceaux.append(
+            "Ventes d'un seul logement uniquement (hors ventes en bloc) ; données publiées avec 6 à 12 mois de décalage"
+        )
+        self.detail.set_text(". ".join(morceaux) + ".")
+
+
 def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
     data = dict(sim_state)
     if not data.get("avec_credit", True):
@@ -286,6 +402,7 @@ def _build_agent_view() -> None:
                 .props("outlined dense")
                 .classes("w-full")
             )
+        ui.switch("Bien neuf (comparer aux ventes sur plan, VEFA)").bind_value(state, "bien_neuf")
 
         btn_estimer = ui.button("Estimer").props("unelevated").classes("mt-3")
         status = ui.label("").classes(theme.HINT_CLASSES)
@@ -293,12 +410,7 @@ def _build_agent_view() -> None:
         results = ui.column().classes("w-full gap-2 mt-2")
         results.visible = False
         with results:
-            ui.label("Prix de vente au m² (transactions DVF comparables)").classes(theme.SUBSECTION_TITLE_CLASSES)
-            with ui.row().classes(theme.GRID_CLASSES):
-                v_prix_bas = theme.stat_card("Bas (p10)")
-                v_prix_moyen = theme.stat_card("Moyen (médiane)")
-                v_prix_haut = theme.stat_card("Haut (p90)")
-                v_nb_trans = theme.stat_card("Transactions trouvées")
+            bloc_prix = BlocPrixVentes()
             ui.label("Loyer de marché au m²").classes(theme.SUBSECTION_TITLE_CLASSES)
             with ui.row().classes(theme.GRID_CLASSES):
                 v_loyer_bas = theme.stat_card("Mini")
@@ -326,8 +438,8 @@ def _build_agent_view() -> None:
 
         try:
             comparables = await market_data.comparables_dvf(
-                geo["code_insee"], geo["code_departement"], geo["lat"], geo["lon"],
-                state["type_bien"], int(state["rayon_metres"]),
+                geo["code_departement"], geo["lat"], geo["lon"], state["type_bien"],
+                int(state["rayon_metres"]), state.get("surface_m2"), bool(state.get("bien_neuf")),
             )
         except Exception as exc:  # noqa: BLE001
             comparables = {"erreur": str(exc)}
@@ -340,12 +452,7 @@ def _build_agent_view() -> None:
 
         status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
-        v_prix_bas.set_text(f"{eur(comparables.get('prix_m2_bas'))}/m²" if comparables.get("prix_m2_bas") else "–")
-        v_prix_moyen.set_text(
-            f"{eur(comparables.get('prix_m2_moyen'))}/m²" if comparables.get("prix_m2_moyen") else "Pas assez de données"
-        )
-        v_prix_haut.set_text(f"{eur(comparables.get('prix_m2_haut'))}/m²" if comparables.get("prix_m2_haut") else "–")
-        v_nb_trans.set_text(str(comparables.get("nb_transactions") or 0))
+        bloc_prix.afficher(comparables)
 
         v_loyer_bas.set_text(f"{loyer['loyer_m2_bas']:.2f} €/m²" if loyer.get("loyer_m2_bas") else "–")
         v_loyer_moyen.set_text(f"{loyer['loyer_m2_moyen']:.2f} €/m²" if loyer.get("loyer_m2_moyen") else "Non disponible")
@@ -363,8 +470,6 @@ def _build_agent_view() -> None:
         msg = ""
         if loyer.get("nb_observations_commune") is not None and loyer["nb_observations_commune"] < 30:
             msg += "⚠️ Peu d'observations pour cette commune : indicateur de loyer peu fiable. "
-        if not comparables.get("nb_transactions"):
-            msg += "⚠️ Aucune transaction DVF trouvée dans ce rayon/commune pour ce type de bien."
         note.set_text(msg)
 
         results.visible = True
@@ -491,6 +596,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             .props("outlined dense")
                             .classes("w-full")
                         )
+                    ui.switch("Bien neuf (comparer aux ventes sur plan, VEFA)").bind_value(market_state, "bien_neuf")
 
                     btn_market = ui.button("Analyser le marché").props("unelevated").classes("mt-3")
                     market_status = ui.label("").classes(theme.HINT_CLASSES)
@@ -498,12 +604,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     market_results = ui.column().classes("w-full gap-2 mt-2")
                     market_results.visible = False
                     with market_results:
-                        ui.label("Prix de vente au m² (transactions DVF comparables)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                        with ui.row().classes(theme.GRID_CLASSES):
-                            v_prix_bas = theme.stat_card("Bas (p10)")
-                            v_prix_moyen = theme.stat_card("Moyen (médiane)")
-                            v_prix_haut = theme.stat_card("Haut (p90)")
-                            v_nb_trans = theme.stat_card("Transactions trouvées")
+                        bloc_prix = BlocPrixVentes()
 
                         loyer_block = ui.column().classes("w-full gap-2")
                         with loyer_block:
@@ -1454,12 +1555,13 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
         try:
             comparables = await market_data.comparables_dvf(
-                geo["code_insee"],
                 geo["code_departement"],
                 geo["lat"],
                 geo["lon"],
                 market_state["type_bien"],
                 int(market_state["rayon_metres"]),
+                market_state.get("surface_m2"),
+                bool(market_state.get("bien_neuf")),
             )
         except Exception as exc:  # noqa: BLE001
             comparables = {"erreur": str(exc)}
@@ -1493,12 +1595,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         ctx["commune"] = geo.get("commune")
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
-        v_prix_bas.set_text(f"{eur(comparables.get('prix_m2_bas'))}/m²" if comparables.get("prix_m2_bas") else "–")
-        v_prix_moyen.set_text(
-            f"{eur(comparables.get('prix_m2_moyen'))}/m²" if comparables.get("prix_m2_moyen") else "Pas assez de données"
-        )
-        v_prix_haut.set_text(f"{eur(comparables.get('prix_m2_haut'))}/m²" if comparables.get("prix_m2_haut") else "–")
-        v_nb_trans.set_text(str(comparables.get("nb_transactions") or 0))
+        bloc_prix.afficher(comparables)
 
         loyer = loyer or {}
         nuitee = nuitee or {}
@@ -1518,8 +1615,6 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         note = ""
         if not is_lcd and loyer.get("nb_observations_commune") is not None and loyer["nb_observations_commune"] < 30:
             note += "⚠️ Peu d'observations pour cette commune : indicateur de loyer peu fiable. "
-        if not comparables.get("nb_transactions"):
-            note += "⚠️ Aucune transaction DVF trouvée dans ce rayon/commune pour ce type de bien. "
         if is_lcd and nuitee:
             note += "⚠️ Prix/nuitée et occupation estimés à partir du loyer nu, faute de donnée ouverte sur les tarifs Airbnb — à ajuster selon l'attractivité touristique réelle de la zone."
         market_note.set_text(note)
@@ -1548,6 +1643,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             return
         sim_state["type_bien"] = market_state["type_bien"]
         sim_state["surface_m2"] = market_state["surface_m2"]
+        sim_state["bien_neuf"] = bool(market_state.get("bien_neuf"))
         if result.get("prix_marche_estime"):
             sim_state["prix_achat"] = result["prix_marche_estime"]
             prix_achat_input.set_value(sim_state["prix_achat"])
