@@ -197,6 +197,10 @@ class ExportDossierInput(BaseModel):
     profil: ProfilEmprunteurInput | None = None
     nom_emprunteur: str | None = None
     adresse_bien: str | None = None
+    marche: dict | None = Field(
+        default=None,
+        description="Étude de marché de l'onglet Marché (comparables DVF, loyer de marché, indicateurs de la commune)",
+    )
     chapitres: list[str] | None = Field(
         default=None, description="Chapitres optionnels à inclure (None : tous). Voir dossier_export.CHAPITRES_OPTIONNELS"
     )

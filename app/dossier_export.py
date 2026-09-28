@@ -690,6 +690,111 @@ def _section_presentation(doc, payload, inp, resultat, is_achat_revente):
     _ajouter_table_et_graphique(doc, lignes, image)
 
 
+FIABILITE_LIBELLES = {"elevee": "élevée", "moyenne": "moyenne", "faible": "faible"}
+
+
+def _ecart_marche(prix_m2: float, mediane: float) -> tuple[str, bool | None]:
+    """Écart à la médiane (texte signé) et sens pour l'acheteur."""
+    ecart = prix_m2 / mediane - 1
+    favorable = True if ecart <= 0.03 else (False if ecart >= 0.10 else None)
+    return ("+" if ecart > 0 else "") + _pct(ecart, 0), favorable
+
+
+def _section_marche(doc, inp, marche: dict, is_achat_revente: bool):
+    comp = marche["comparables"]
+    mediane = comp["prix_m2_moyen"]
+    prix_projet_m2 = inp.prix_achat / inp.surface_m2
+    ecart_txt, ecart_favorable = _ecart_marche(prix_projet_m2, mediane)
+    tuiles = [
+        ("Prix d'achat du projet", f"{_eur(prix_projet_m2)}/m²", None),
+        (f"Médiane de {comp['nb_transactions']} ventes", f"{_eur(mediane)}/m²", None),
+        ("Écart au marché", ecart_txt, ecart_favorable),
+    ]
+    loyer = marche.get("loyer") or {}
+    if is_achat_revente and inp.prix_revente_vise:
+        revente_m2 = inp.prix_revente_vise / inp.surface_m2
+        # Revendre au-dessus de la fourchette haute est un pari : signalé en rouge.
+        tuiles.append(("Revente visée", f"{_eur(revente_m2)}/m²", revente_m2 <= comp["prix_m2_haut"]))
+    elif inp.type_projet == TypeProjet.location_longue_duree and loyer.get("loyer_m2_moyen"):
+        loyer_projet_m2 = inp.loyer_mensuel_hors_charges / inp.surface_m2
+        tuiles.append(
+            (
+                "Loyer projet / marché",
+                f"{loyer_projet_m2:.1f} / {loyer['loyer_m2_moyen']:.1f} €/m²".replace(".", ","),
+                loyer_projet_m2 <= loyer["loyer_m2_moyen"] * 1.05,
+            )
+        )
+    else:
+        tuiles.append(("Fiabilité de l'échantillon", FIABILITE_LIBELLES[comp["fiabilite"]].capitalize(), comp["fiabilite"] != "faible"))
+    _tuiles(doc, tuiles)
+
+    largeur_table, largeur_image = 13.2, 11.5
+    conteneur = doc.add_table(rows=1, cols=2)
+    conteneur.autofit = False
+    conteneur.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _supprimer_bordures(conteneur)
+    conteneur.columns[0].width = Cm(largeur_table)
+    conteneur.columns[1].width = Cm(largeur_image)
+    cell_table, cell_image = conteneur.rows[0].cells
+    cell_table.width = Cm(largeur_table)
+    cell_image.width = Cm(largeur_image)
+
+    # Les ventes les plus proches du bien parmi les plus récentes.
+    ventes = sorted(comp["ventes"], key=lambda v: v["distance_m"])[:10]
+    _ajouter_table_colonnes(
+        cell_table,
+        ["Date", "Adresse", "Surface", "Prix", "Prix / m²", "Distance"],
+        [
+            [
+                v["date"],
+                v["adresse"].split(",")[0].title(),
+                f"{v['surface']} m²",
+                _eur(v["prix"]),
+                _eur(v["prix_m2"]),
+                f"{v['distance_m']} m",
+            ]
+            for v in ventes
+        ],
+        [1.9, 4.6, 1.5, 2.1, 1.8, 1.3],
+        colonnes_texte=2,
+    )
+    image = charts.chart_marche(
+        [v["prix_m2"] for v in comp["ventes"]],
+        comp["prix_m2_bas"],
+        mediane,
+        comp["prix_m2_haut"],
+        prix_projet_m2,
+        inp.prix_revente_vise / inp.surface_m2 if is_achat_revente and inp.prix_revente_vise else None,
+    )
+    p_image = cell_image.paragraphs[0]
+    p_image.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_image.paragraph_format.space_after = Pt(0)
+    hauteur_max = HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM
+    p_image.add_run().add_picture(io.BytesIO(image), width=Cm(min(largeur_image - 0.5, hauteur_max * _proportions_png(image))))
+
+    rayon = comp["rayon_utilise"]
+    rayon_txt = f"{rayon / 1000:g} km".replace(".", ",") if rayon >= 1000 else f"{rayon} m"
+    surfaces = (
+        f"surfaces de {comp['surface_min']} à {comp['surface_max']} m²" if comp.get("surface_min") else "toutes surfaces"
+    )
+    phrases = [
+        f"{comp['nb_transactions']} ventes réelles "
+        + ("de logements neufs (VEFA)" if comp.get("neuf") else "dans l'ancien")
+        + f" entre {comp['periode_debut']} et {comp['periode_fin']}, dans un rayon de {rayon_txt} autour du bien, "
+        f"{surfaces} (fiabilité {FIABILITE_LIBELLES[comp['fiabilite']]}). Fourchette de 80 % des ventes : "
+        f"{_eur(comp['prix_m2_bas'])} à {_eur(comp['prix_m2_haut'])}/m²."
+    ]
+    commune = marche.get("commune_indicateurs") or {}
+    if commune.get("rendement_brut"):
+        loyer_commune = f"{commune['loyer_m2']:.1f}".replace(".", ",")
+        phrases.append(
+            f"Commune : prix médian {_eur(commune['prix_m2'])}/m², loyer d'annonce {loyer_commune} €/m², "
+            f"rentabilité brute moyenne {_pct(commune['rendement_brut'])}."
+        )
+    phrases.append("Sources : DVF (DGFiP, data.gouv.fr), carte des loyers (ANIL). Ventes en bloc exclues.")
+    _ajouter_note(doc, " ".join(phrases))
+
+
 def _section_profil(doc, payload):
     p = payload.profil
     _tuiles(
@@ -875,9 +980,12 @@ def _section_loyer_mensuel(doc, resultat):
     )
 
 
-def _ajouter_table_colonnes(container, entetes: list[str], lignes: list[list[str]], largeurs_cm: list[float]) -> None:
+def _ajouter_table_colonnes(
+    container, entetes: list[str], lignes: list[list[str]], largeurs_cm: list[float], colonnes_texte: int = 1
+) -> None:
     """Tableau à plusieurs colonnes (en-tête, zébrage, montants négatifs en
-    rouge), serré pour tenir sur la page."""
+    rouge), serré pour tenir sur la page. Les `colonnes_texte` premières
+    colonnes sont alignées à gauche, les suivantes (montants) à droite."""
     taille, _, marge = STYLE_DENSITE["serre"]
     table = container.add_table(rows=0, cols=len(entetes))
     table.style = "Normal Table"
@@ -887,7 +995,7 @@ def _ajouter_table_colonnes(container, entetes: list[str], lignes: list[list[str
         for j, (cell, valeur) in enumerate(zip(row.cells, valeurs)):
             cell.width = Cm(largeurs_cm[j])
             p = cell.paragraphs[0]
-            p.alignment = WD_ALIGN_PARAGRAPH.LEFT if j == 0 else WD_ALIGN_PARAGRAPH.RIGHT
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT if j < colonnes_texte else WD_ALIGN_PARAGRAPH.RIGHT
             if i == 0:
                 _texte(p, valeur, taille - 0.5, BLANC, gras=True)
                 _set_cell_background(cell, VERT_HEX)
@@ -1124,6 +1232,16 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
             lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
         ),
     ]
+    marche = payload.marche
+    if marche and (marche.get("comparables") or {}).get("prix_m2_moyen"):
+        sections.append(
+            (
+                "marche",
+                "Étude de marché",
+                "Le prix d'achat comparé aux ventes réelles de biens similaires autour du bien.",
+                lambda d: _section_marche(d, inp, marche, is_achat_revente),
+            )
+        )
     if payload.profil is not None:
         sections.append(
             (

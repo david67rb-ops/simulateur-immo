@@ -22,7 +22,9 @@ hébergée. Deux parcours, choisis via un onglet en haut de la page :
      l'IS), régime locatif, amortissement, projection, TRI et plus-value.
   5. **Résultats** : cash-flow, comparatif des régimes, graphique, revente.
   6. **Dossier de financement** : taux d'endettement du foyer et export Word
-     du dossier à présenter en banque, chapitre par chapitre au choix
+     du dossier à présenter en banque (dont un chapitre « Étude de marché » :
+     prix d'achat face aux ventes réelles voisines, pour justifier le prix),
+     chapitre par chapitre au choix
      (formules Complet, Banque, Personnel ; synthèse, points d'attention et
      mentions toujours inclus).
 

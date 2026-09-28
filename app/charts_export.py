@@ -300,6 +300,49 @@ def chart_saisonnalite(lignes: list[dict]) -> bytes:
     return _fig_to_png(fig)
 
 
+def chart_marche(
+    prix_m2_ventes: list[float],
+    bas: float,
+    mediane: float,
+    haut: float,
+    prix_projet: float,
+    prix_revente: float | None = None,
+) -> bytes:
+    """Prix au m² de chaque vente comparable (points), fourchette p10–p90
+    (bande), médiane, prix d'achat du projet (losange) et, en achat-revente,
+    prix de revente visé (triangle)."""
+    import random
+
+    aleatoire = random.Random(0)  # dispersion verticale reproductible
+    fig, ax = plt.subplots(figsize=(5.8, 3.4))
+    ax.axvspan(bas, haut, color=PRIMARY, alpha=0.10, label="80 % des ventes (p10 – p90)")
+    ax.scatter(
+        prix_m2_ventes,
+        [aleatoire.uniform(-0.35, 0.35) for _ in prix_m2_ventes],
+        s=22,
+        color="#8A8A8A",
+        alpha=0.75,
+        edgecolors="none",
+        label="Ventes comparables",
+    )
+    ax.axvline(mediane, color=PRIMARY, linewidth=2, label=f"Médiane : {_eur(mediane)}/m²")
+    couleur_projet = PRIMARY if prix_projet <= mediane * 1.03 else (ACCENT if prix_projet < mediane * 1.10 else NEGATIVE)
+    ax.scatter([prix_projet], [0], marker="D", s=140, color=couleur_projet, edgecolors="white", linewidths=1.5,
+               zorder=5, label=f"Achat : {_eur(prix_projet)}/m²" if prix_revente else f"Projet : {_eur(prix_projet)}/m²")
+    if prix_revente:
+        ax.scatter([prix_revente], [0], marker="^", s=150, color=RECETTE, edgecolors="white", linewidths=1.5,
+                   zorder=5, label=f"Revente visée : {_eur(prix_revente)}/m²")
+    ax.set_ylim(-0.8, 0.8)
+    ax.set_yticks([])
+    ax.xaxis.set_major_formatter(lambda v, _pos: _eur(v))
+    ax.tick_params(axis="x", labelsize=9)
+    ax.set_title("Prix au m² : le projet face aux ventes réelles", fontsize=13, color=PRIMARY, pad=10)
+    ax.legend(frameon=False, fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=2)
+    for cote in ("top", "right", "left"):
+        ax.spines[cote].set_visible(False)
+    return _fig_to_png(fig)
+
+
 def logo_png() -> bytes:
     """Logo de l'application (maison + courbe ascendante), mêmes proportions
     que le SVG de l'interface (repère 64 × 64)."""

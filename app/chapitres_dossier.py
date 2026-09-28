@@ -6,6 +6,7 @@ from __future__ import annotations
 # l'ordre du dossier, et formules prêtes à l'emploi.
 CHAPITRES_OPTIONNELS = {
     "presentation": "Le bien et le projet",
+    "marche": "Étude de marché",
     "profil": "Profil de l'emprunteur",
     "financement": "Plan de financement",
     "achat_revente": "L'opération d'achat-revente",
@@ -20,11 +21,21 @@ FORMULES_DOSSIER = {
     "complet": ("Complet", set(CHAPITRES_OPTIONNELS)),
     "banque": (
         "Banque",
-        {"presentation", "profil", "financement", "achat_revente", "charges", "loyer_mensuel", "saisonnalite", "endettement"},
+        {
+            "presentation",
+            "marche",
+            "profil",
+            "financement",
+            "achat_revente",
+            "charges",
+            "loyer_mensuel",
+            "saisonnalite",
+            "endettement",
+        },
     ),
     "personnel": (
         "Personnel",
-        {"presentation", "financement", "achat_revente", "charges", "loyer_mensuel", "saisonnalite", "patrimoine"},
+        {"presentation", "marche", "financement", "achat_revente", "charges", "loyer_mensuel", "saisonnalite", "patrimoine"},
     ),
 }
 

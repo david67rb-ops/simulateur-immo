@@ -102,6 +102,26 @@ def ouvrir_lien_externe(url: str) -> None:
         ui.navigate.to(url, new_tab=True)
 
 
+def _marche_pour_dossier(geo: dict, comparables: dict, loyer: dict | None, type_bien: str) -> dict | None:
+    """Étude de marché telle qu'elle est reprise dans le dossier Word."""
+    if not comparables.get("prix_m2_moyen"):
+        return None
+    commune = donnees_marche.indicateurs_communes(geo["code_departement"], type_bien).get(geo["code_insee"]) or {}
+    rendement = commune.get("rendement_brut")
+    return {
+        "adresse": geo.get("label"),
+        "comparables": comparables,
+        "loyer": loyer if loyer and not loyer.get("erreur") else None,
+        "commune_indicateurs": {
+            "prix_m2": float(commune["prix_m2"]),
+            "loyer_m2": float(commune["loyer_m2"]),
+            "rendement_brut": float(rendement),
+        }
+        if commune and rendement == rendement and rendement is not None
+        else None,
+    }
+
+
 def recherche_site(site: str, commune: str, code_postal: str) -> str:
     """Recherche web de la page de prix au m² d'un portail pour la commune :
     leurs adresses de pages ne se devinent pas de façon fiable."""
@@ -559,7 +579,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     profil_state = default_profil_state()
     dossier_meta_state = default_dossier_meta_state()
     chapitres_state = {cle: True for cle in CHAPITRES_OPTIONNELS}
-    ctx = {"last_market_result": None, "commune": None, "dept": None}
+    ctx = {"last_market_result": None, "commune": None, "dept": None, "marche_dossier": None}
     refs: dict[str, ui.element] = {}
 
     # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
@@ -1371,7 +1391,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     theme.subsection_title("Contenu du rapport")
                     ui.label(
                         "La page de garde, la synthèse, les points d'attention et les mentions sont toujours inclus. "
-                        "Chaque chapitre tient sur une page."
+                        "Chaque chapitre tient sur une page. L'étude de marché reprend l'analyse de l'onglet Marché "
+                        "(lancée automatiquement si l'adresse est renseignée)."
                     ).classes(theme.HINT_CLASSES)
                     with ui.row().classes("items-center gap-2 mt-1"):
                         ui.label("Formule :").classes("text-sm")
@@ -1750,6 +1771,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
         ctx["commune"] = geo.get("commune")
         ctx["dept"] = geo.get("code_departement")
+        ctx["marche_dossier"] = _marche_pour_dossier(geo, comparables, loyer, market_state["type_bien"])
         if sim_state["profil_saisonnalite"] == saisonnalite.REGION:
             appliquer_saisonnalite_region()
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
@@ -2312,6 +2334,10 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             inp = build_simulation_input(sim_state)
             profil_rempli = any(v for v in profil_state.values())
             profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
+            if chapitres_state.get("marche") and not ctx.get("marche_dossier") and market_state.get("adresse"):
+                # Chapitre demandé mais marché pas encore analysé : on lance l'analyse.
+                await on_analyser_marche()
+                dossier_status.set_text("Génération du dossier Word…")
             nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
             adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
             payload = schemas.ExportDossierInput(
@@ -2319,6 +2345,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 profil=profil,
                 nom_emprunteur=nom_emprunteur,
                 adresse_bien=adresse_bien,
+                marche=ctx.get("marche_dossier"),
                 chapitres=[cle for cle, inclus in chapitres_state.items() if inclus],
             )
             contenu = dossier_export.generer_dossier_word(payload)
