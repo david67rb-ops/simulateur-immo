@@ -17,24 +17,32 @@ from . import analyse
 from . import endettement as endet_mod
 from . import saisonnalite
 from .chapitres_dossier import CHAPITRES_OBLIGATOIRES
+from .polices_word import integrer_polices
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
 from .utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
-POLICE = "Calibri"
-PRIMARY_COLOR = RGBColor(0x1D, 0x6F, 0x5C)
-GRIS_COLOR = RGBColor(0x99, 0x99, 0x99)
-GRIS_LIBELLE = RGBColor(0x5A, 0x5A, 0x5A)
-TEXTE_FONCE = RGBColor(0x22, 0x2A, 0x27)
-ZEBRA_HEX = "F2F7F5"
-BORDURE_HEX = "E2E2E2"
+# Charte « bleu notaire & laiton » ; polices intégrées au document (polices_word).
+POLICE = "Public Sans"
+POLICE_GRAS = "Public Sans SemiBold"
+POLICE_TITRE_GRAS = "Sora SemiBold"  # titres et grands chiffres
+PRIMARY_COLOR = RGBColor(0x1B, 0x33, 0x58)  # bleu notaire
+GRIS_COLOR = RGBColor(0x96, 0x9E, 0xA8)
+GRIS_LIBELLE = RGBColor(0x5B, 0x66, 0x72)
+TEXTE_FONCE = RGBColor(0x1F, 0x28, 0x33)
+ZEBRA_HEX = "F4F6FA"
+BORDURE_HEX = "E1E6EC"
 BLANC = RGBColor(0xFF, 0xFF, 0xFF)
-ROUGE = RGBColor(0xC6, 0x3F, 0x35)
-VERT_HEX = "1D6F5C"
-ROUGE_HEX = "C63F35"
-FOND_TUILE_HEX = "EEF6F3"
+ROUGE = RGBColor(0xB2, 0x3A, 0x32)
+VERT = RGBColor(0x2D, 0x6A, 0x4F)
+LAITON_CLAIR = RGBColor(0xE9, 0xD8, 0xB0)
+MARQUE_HEX = "1B3358"
+LAITON_HEX = "A8823B"
+VERT_HEX = "2D6A4F"
+ROUGE_HEX = "B23A32"
+FOND_TUILE_HEX = "EEF2F7"
 # (couleur du filet et du titre, fond) selon le niveau du verdict
-COULEURS_VERDICT = {"vert": ("1D6F5C", "E8F3EF"), "orange": ("B8761F", "FAF0E2"), "rouge": ("C63F35", "FBE9E7")}
+COULEURS_VERDICT = {"vert": ("2D6A4F", "E9F2ED"), "orange": ("B7791F", "FBF3E6"), "rouge": ("B23A32", "F8E9E7")}
 
 # Page A4 paysage : plus de largeur pour les mises en page tableau + graphique.
 LARGEUR_PAGE_CM = 29.7
@@ -193,7 +201,7 @@ def _ajouter_table_kv(container, lignes: list[tuple], densite: str = "normal", l
 
         for cell in (cell_cle, cell_valeur):
             _cell_marges(cell, haut=marge, bas=marge)
-            _bordure_bas_cellule(cell, color=VERT_HEX if est_total else BORDURE_HEX, size=8 if est_total else 4)
+            _bordure_bas_cellule(cell, color=MARQUE_HEX if est_total else BORDURE_HEX, size=8 if est_total else 4)
             if est_total:
                 _set_cell_background(cell, FOND_TUILE_HEX)
             elif i % 2 == 1:
@@ -209,10 +217,14 @@ def _texte(paragraphe, texte: str, taille: float, couleur=None, gras: bool = Fal
     paragraphe.paragraph_format.space_after = Pt(0)
     paragraphe.paragraph_format.line_spacing = 1.0
     run = paragraphe.add_run(texte)
-    run.font.name = POLICE
+    # Le gras passe par les familles demi-grasses incorporées (voir polices_word).
+    if gras:
+        run.font.name = POLICE_TITRE_GRAS if taille >= 14 else POLICE_GRAS
+    else:
+        run.font.name = POLICE
     run.font.size = Pt(taille)
     run.font.color.rgb = couleur or TEXTE_FONCE
-    run.bold = gras
+    run.bold = False
     run.italic = italique
     return run
 
@@ -257,11 +269,11 @@ def _tuiles(container, tuiles: list[tuple[str, str, bool | None]], largeur_cm: f
         cell.width = Cm(largeur)
         cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         _set_cell_background(cell, FOND_TUILE_HEX)
-        accent = ROUGE_HEX if favorable is False else VERT_HEX
+        accent = ROUGE_HEX if favorable is False else (VERT_HEX if favorable else MARQUE_HEX)
         _bordures_cellule(cell, left=(accent, 24), right=("FFFFFF", 48) if i < len(tuiles) - 1 else None)
         _cell_marges(cell, haut=110, bas=130, gauche=200, droite=120)
         _texte(cell.paragraphs[0], libelle.upper(), 7.5, GRIS_LIBELLE, gras=True)
-        couleur = PRIMARY_COLOR if favorable else (ROUGE if favorable is False else TEXTE_FONCE)
+        couleur = VERT if favorable else (ROUGE if favorable is False else PRIMARY_COLOR)
         p_valeur = cell.add_paragraph()
         p_valeur.paragraph_format.space_before = Pt(2)
         _texte(p_valeur, valeur, taille_valeur, couleur, gras=True)
@@ -297,13 +309,13 @@ def _entete_chapitre(doc, numero: int, titre: str, description: str | None) -> N
         table.columns[i].width = Cm(largeur)
         cell.width = Cm(largeur)
         cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-    _set_cell_background(cell_num, VERT_HEX)
+    _set_cell_background(cell_num, MARQUE_HEX)
     _cell_marges(cell_num, haut=80, bas=80, gauche=60, droite=60)
     p_num = cell_num.paragraphs[0]
     p_num.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _texte(p_num, f"{numero:02d}", 22, BLANC, gras=True)
+    _texte(p_num, f"{numero:02d}", 22, LAITON_CLAIR, gras=True)
     _cell_marges(cell_titre, haut=40, bas=60, gauche=260, droite=60)
-    _bordures_cellule(cell_titre, bottom=(VERT_HEX, 12))
+    _bordures_cellule(cell_titre, bottom=(MARQUE_HEX, 12))
     _texte(cell_titre.paragraphs[0], titre, 20, TEXTE_FONCE, gras=True)
     if description:
         p = cell_titre.add_paragraph()
@@ -423,7 +435,7 @@ def _configurer_entete_pied(doc: Document, libelle_projet: str) -> None:
     _taquet_a_droite(header_p)
     _texte(header_p, "DOSSIER DE FINANCEMENT IMMOBILIER", 8, PRIMARY_COLOR, gras=True)
     _texte(header_p, "\t" + libelle_projet, 8, GRIS_COLOR)
-    _add_bottom_border(header_p, color=VERT_HEX, size=6)
+    _add_bottom_border(header_p, color=LAITON_HEX, size=6)
 
     footer_p = section.footer.paragraphs[0]
     _taquet_a_droite(footer_p)
@@ -492,7 +504,7 @@ def _tuiles_couverture(inp, resultat: dict, is_achat_revente: bool) -> list[tupl
 
 
 def _ajouter_page_de_garde(doc: Document, payload: ExportDossierInput, inp, resultat: dict, is_achat_revente: bool) -> None:
-    # Bandeau vert : logo à gauche, titre du dossier et du projet à droite.
+    # Bandeau bleu notaire : logo à gauche, titre du dossier et du projet à droite.
     bandeau = doc.add_table(rows=1, cols=2)
     bandeau.autofit = False
     _supprimer_bordures(bandeau)
@@ -502,11 +514,11 @@ def _ajouter_page_de_garde(doc: Document, payload: ExportDossierInput, inp, resu
         bandeau.columns[i].width = Cm(largeur)
         cell.width = Cm(largeur)
         cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-        _set_cell_background(cell, VERT_HEX)
+        _set_cell_background(cell, MARQUE_HEX)
     _cell_marges(cell_logo, haut=500, bas=500, gauche=400, droite=100)
     cell_logo.paragraphs[0].add_run().add_picture(io.BytesIO(charts.logo_png()), width=Cm(2.6))
     _cell_marges(cell_titre, haut=500, bas=500, gauche=200, droite=400)
-    _texte(cell_titre.paragraphs[0], "DOSSIER DE FINANCEMENT IMMOBILIER", 11, RGBColor(0xCF, 0xE6, 0xDE), gras=True)
+    _texte(cell_titre.paragraphs[0], "DOSSIER DE FINANCEMENT IMMOBILIER", 11, LAITON_CLAIR, gras=True)
     p_titre = cell_titre.add_paragraph()
     p_titre.paragraph_format.space_before = Pt(4)
     _texte(p_titre, _titre_projet(payload, inp), 28, BLANC, gras=True)
@@ -1000,7 +1012,7 @@ def _ajouter_table_colonnes(
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT if j < colonnes_texte else WD_ALIGN_PARAGRAPH.RIGHT
             if i == 0:
                 _texte(p, valeur, taille - 0.5, BLANC, gras=True)
-                _set_cell_background(cell, VERT_HEX)
+                _set_cell_background(cell, MARQUE_HEX)
             else:
                 negatif = valeur.lstrip().startswith(("-", "−"))
                 _texte(p, valeur, taille, ROUGE if negatif else (GRIS_LIBELLE if j == 0 else TEXTE_FONCE), gras=j > 0)
@@ -1340,6 +1352,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
         _entete_chapitre(doc, i, titre, description)
         fn(doc)
 
+    integrer_polices(doc)
     buffer = io.BytesIO()
     doc.save(buffer)
     return buffer.getvalue()

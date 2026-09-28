@@ -34,13 +34,13 @@ MIN_VENTES_CARTE = 10
 # Rentabilité brute : bornes et couleurs de la légende (du plus faible au
 # plus élevé), comme la carte Horiz.io (≤ 3 % … ≥ 9 %).
 ECHELLE_RENDEMENT = [
-    (0.03, "#c63f35", "≤ 3 %"),
+    (0.03, "#b23a32", "≤ 3 %"),
     (0.04, "#e07b4f", "3 à 4 %"),
     (0.05, "#e9b35a", "4 à 5 %"),
     (0.06, "#d7d36a", "5 à 6 %"),
     (0.07, "#9cc27a", "6 à 7 %"),
-    (0.09, "#4f9c78", "7 à 9 %"),
-    (float("inf"), "#1d6f5c", "≥ 9 %"),
+    (0.09, "#4f8f6c", "7 à 9 %"),
+    (float("inf"), "#2d6a4f", "≥ 9 %"),
 ]
 COULEUR_SANS_DONNEE = "#b8bec4"
 

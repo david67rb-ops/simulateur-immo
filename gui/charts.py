@@ -4,10 +4,14 @@ from __future__ import annotations
 from app.analyse import etapes_loyer_mensuel, evolution_patrimoine
 from app.utils import libelle_regime
 
-SERIES_COLORS = ["#1d6f5c", "#c9822a"]
-POSITIF = "#1d6f5c"
-NEGATIF = "#d1453b"
-TOTAL = "#c9822a"
+# Bleu acier plutôt que bleu notaire pour les tracés : lisible sur fond clair
+# comme sur fond sombre.
+BLEU = "#3a649e"
+LAITON = "#a8823b"
+SERIES_COLORS = [BLEU, LAITON]
+POSITIF = BLEU
+NEGATIF = "#b23a32"
+TOTAL = LAITON
 TEXTE = "#8a8f98"  # lisible sur fond clair comme sombre
 
 _AXES_TEXTE = {"color": TEXTE}
@@ -148,7 +152,7 @@ def patrimoine_option(resultat: dict, prix_achat: float, taux_revalorisation_bie
         "xAxis": {"type": "category", "data": annees, "axisLabel": {"rotate": 45, "fontSize": 10, **_AXES_TEXTE}},
         "yAxis": {"type": "value", "axisLabel": {"formatter": "{value} €", **_AXES_TEXTE}},
         "series": [
-            {**serie, "name": "Valeur du bien", "data": valeurs, "itemStyle": {"color": "#4a7fb5"}},
+            {**serie, "name": "Valeur du bien", "data": valeurs, "itemStyle": {"color": "#8aa4c8"}},
             {**serie, "name": "Capital restant dû", "data": crd, "itemStyle": {"color": NEGATIF}},
             {
                 **serie,

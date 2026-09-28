@@ -46,6 +46,7 @@ python3 -m PyInstaller \
     --collect-data docx \
     --add-data "${DOCX_DIR}/parts/__init__.py:docx/parts" \
     --add-data "app/data:app/data" \
+    --add-data "app/fonts:app/fonts" \
     --osx-bundle-identifier com.davidlehmann.simulateurimmo \
     --distpath "$BUILD_DIR/dist" \
     --workpath "$BUILD_DIR/build" \

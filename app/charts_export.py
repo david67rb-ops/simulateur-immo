@@ -7,6 +7,7 @@ proche de leur taille finale pour rester lisibles une fois insérées.
 from __future__ import annotations
 
 import io
+from pathlib import Path
 from typing import Callable
 
 import matplotlib
@@ -15,25 +16,35 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
 
-PRIMARY = "#1D6F5C"
-PRIMARY_LIGHT = "#6FAE9E"
-ACCENT = "#B0862A"
-NEGATIVE = "#B0442A"
-RECETTE = "#2E6F9E"
-PALETTE = [PRIMARY, ACCENT, "#4A7FB5", "#8A5FB5", "#8A8A8A"]
+from matplotlib import font_manager
+
+# Charte « bleu notaire & laiton ».
+PRIMARY = "#1B3358"  # bleu notaire
+PRIMARY_LIGHT = "#8AA4C8"
+ACCENT = "#A8823B"  # laiton
+NEGATIVE = "#B23A32"
+POSITIVE = "#2D6A4F"
+RECETTE = "#3A649E"  # bleu acier
+PALETTE = [PRIMARY, ACCENT, "#3A649E", "#8AA4C8", "#C9B48A"]
 PALETTE_CHARGES = [
-    "#B0862A",  # or
-    "#B0442A",  # terracotta
-    "#8A5FB5",  # violet
-    "#5C8A3A",  # olive
-    "#C97B3D",  # orange
-    "#A65A8A",  # mauve
-    "#6B4E9E",  # indigo
-    "#8A8A8A",  # gris
+    "#A8823B",  # laiton
+    "#B23A32",  # brique
+    "#3A649E",  # acier
+    "#6E8B74",  # sauge
+    "#C9B48A",  # sable
+    "#7A5C8A",  # prune
+    "#1B3358",  # bleu notaire
+    "#9AA3AD",  # gris
 ]
+
+# Polices de la charte, livrées avec l'application (app/fonts).
+for _police in (Path(__file__).parent / "fonts").glob("*.ttf"):
+    font_manager.fontManager.addfont(str(_police))
+TITRE = "Sora"
 
 plt.rcParams.update(
     {
+        "font.family": "Public Sans",
         "font.size": 10.5,
         "axes.edgecolor": "#CCCCCC",
         "axes.linewidth": 0.8,
@@ -86,7 +97,7 @@ def chart_donut(valeurs: list[float], labels: list[str], titre: str, total_label
         frameon=False,
         fontsize=10,
     )
-    ax.set_title(titre, fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title(titre, fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     ax.axis("equal")
     return _fig_to_png(fig)
 
@@ -143,7 +154,7 @@ def chart_barres(
         )
 
     ax.axvline(0, color="#999999", linewidth=0.8)
-    ax.set_title(titre, fontsize=13, color=PRIMARY, pad=24 if seuil is not None else 10)
+    ax.set_title(titre, fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=24 if seuil is not None else 10)
     ax.set_xticks([])
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -207,7 +218,7 @@ def chart_recettes_charges(recette: float, charges_items: list[tuple[str, float]
             handlelength=1.2,
             columnspacing=1.2,
         )
-    ax.set_title(titre, fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title(titre, fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     return _fig_to_png(fig)
 
 
@@ -242,7 +253,7 @@ def chart_pont_marge(etapes: list[tuple[str, float, bool]], titre: str = "Décom
     ax.set_xticks(range(len(etapes)))
     ax.set_xticklabels([e[0] for e in etapes], rotation=20, ha="right", fontsize=10)
     ax.axhline(0, color="#999999", linewidth=0.8)
-    ax.set_title(titre, fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title(titre, fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     ax.margins(y=0.2)
     bas_axe, haut_axe = ax.get_ylim()
     ax.set_ylim(bas_axe - (haut_axe - bas_axe) * 0.08, haut_axe)
@@ -268,7 +279,7 @@ def chart_patrimoine(lignes: list[dict]) -> bytes:
     ax.yaxis.set_major_formatter(lambda v, _pos: _eur(v))
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xlabel("Année", fontsize=9.5, color="#555555")
-    ax.set_title("Évolution du patrimoine", fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title("Évolution du patrimoine", fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=3)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -292,7 +303,7 @@ def chart_saisonnalite(lignes: list[dict]) -> bytes:
     ax.set_xticks(list(x))
     ax.set_xticklabels(mois, fontsize=8.5, rotation=45)
     ax.yaxis.set_major_formatter(lambda v, _pos: _eur(v))
-    ax.set_title("Cash-flow mois par mois (année 1)", fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title("Cash-flow mois par mois (année 1)", fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
@@ -326,7 +337,7 @@ def chart_marche(
         label="Ventes comparables",
     )
     ax.axvline(mediane, color=PRIMARY, linewidth=2, label=f"Médiane : {_eur(mediane)}/m²")
-    couleur_projet = PRIMARY if prix_projet <= mediane * 1.03 else (ACCENT if prix_projet < mediane * 1.10 else NEGATIVE)
+    couleur_projet = POSITIVE if prix_projet <= mediane * 1.03 else (ACCENT if prix_projet < mediane * 1.10 else NEGATIVE)
     ax.scatter([prix_projet], [0], marker="D", s=140, color=couleur_projet, edgecolors="white", linewidths=1.5,
                zorder=5, label=f"Achat : {_eur(prix_projet)}/m²" if prix_revente else f"Projet : {_eur(prix_projet)}/m²")
     if prix_revente:
@@ -336,7 +347,7 @@ def chart_marche(
     ax.set_yticks([])
     ax.xaxis.set_major_formatter(lambda v, _pos: _eur(v))
     ax.tick_params(axis="x", labelsize=9)
-    ax.set_title("Prix au m² : le projet face aux ventes réelles", fontsize=13, color=PRIMARY, pad=10)
+    ax.set_title("Prix au m² : le projet face aux ventes réelles", fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     ax.legend(frameon=False, fontsize=8.5, loc="upper center", bbox_to_anchor=(0.5, -0.14), ncol=2)
     for cote in ("top", "right", "left"):
         ax.spines[cote].set_visible(False)
@@ -356,8 +367,8 @@ def logo_png() -> bytes:
     ax.add_patch(FancyBboxPatch((0, 0), 64, 64, boxstyle="round,pad=0,rounding_size=16", fc=PRIMARY, ec="none"))
     ax.add_patch(Polygon([(32, 13), (49, 27.5), (49, 47), (15, 47), (15, 27.5)], closed=True, fc="white", ec="none"))
     ax.add_patch(Rectangle((27, 35), 10, 12, fc=PRIMARY, ec="none"))
-    ax.plot([13, 24, 32, 47], [42, 29, 34, 16], color="#C9822A", linewidth=3.8, solid_capstyle="round", solid_joinstyle="round")
-    ax.add_patch(Polygon([(47, 16), (39, 17.5), (45.5, 23)], closed=True, fc="#C9822A", ec="none"))
+    ax.plot([13, 24, 32, 47], [42, 29, 34, 16], color=ACCENT, linewidth=3.8, solid_capstyle="round", solid_joinstyle="round")
+    ax.add_patch(Polygon([(47, 16), (39, 17.5), (45.5, 23)], closed=True, fc=ACCENT, ec="none"))
     buf = io.BytesIO()
     fig.savefig(buf, format="png", dpi=300, transparent=True)
     plt.close(fig)

@@ -257,6 +257,19 @@ ce cas. Ça fonctionne en revanche bien sur les sites des réseaux d'agences
 faites valider les hypothèses fiscales par un professionnel (notaire,
 comptable, avocat fiscaliste, CGP).
 
+## Charte graphique
+
+Charte « bleu notaire & laiton » : bleu notaire `#1B3358` (structure),
+laiton `#A8823B` (détails), encre `#13243F` ; signaux favorable `#2D6A4F`,
+vigilance `#B7791F`, défavorable `#B23A32`. Titres et chiffres en Sora, texte
+en Public Sans, angles arrondis. Les polices (licence SIL OFL 1.1, voir
+`app/fonts/OFL-*.txt`) sont livrées avec l'application : servies localement
+par le site (aucun appel à Google Fonts) et incorporées dans les dossiers
+Word (`app/polices_word.py`) pour s'afficher à l'identique chez le banquier.
+Word n'utilisant que la version normale d'une police incorporée, les
+demi-gras sont déclarés comme familles à part (« Sora SemiBold », « Public
+Sans SemiBold »).
+
 ## Données préparées à l'avance
 
 `app/data/` contient des données calculées une fois pour toute la France et
