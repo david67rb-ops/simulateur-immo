@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 
 from . import fiscalite as fisc
 from .finance import irr, tableau_amortissement_annuel
+from .saisonnalite import recettes_annuelles
 from .schemas import DiffereType, RegimeLocation, StructureJuridique, SimulationInput, TypeProjet
 
 TAUX_IR_PLUS_VALUE = 0.19
@@ -194,10 +195,11 @@ def _simuler_location(inp: SimulationInput) -> dict:
     cashflows_par_regime: dict[str, list[float]] = {r: [-apport_reel] for r in regimes_a_calculer}
 
     # En courte durée, le loyer se pilote par prix/nuitée x taux d'occupation
-    # (plus fiable à estimer qu'un loyer mensuel) ; la vacance locative n'a
-    # alors plus de sens, l'occupation en tient déjà lieu.
+    # (plus fiable à estimer qu'un loyer mensuel), mois par mois selon le profil
+    # de saisonnalité ; la vacance locative n'a alors plus de sens,
+    # l'occupation en tient déjà lieu.
     loyer_annuel_base = (
-        inp.prix_nuitee * 365 * inp.taux_occupation_pct
+        recettes_annuelles(inp)
         if is_lcd
         else inp.loyer_mensuel_hors_charges * 12 * (1 - inp.vacance_locative_pct)
     )

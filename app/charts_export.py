@@ -276,6 +276,30 @@ def chart_patrimoine(lignes: list[dict]) -> bytes:
     return _fig_to_png(fig)
 
 
+def chart_saisonnalite(lignes: list[dict]) -> bytes:
+    """Recettes et dépenses de chaque mois (barres), cash-flow avant impôt
+    (courbe), année 1, location courte durée."""
+    mois = [l["mois"] for l in lignes]
+    x = range(len(mois))
+    fig, ax = plt.subplots(figsize=(5.8, 3.9))
+    largeur = 0.38
+    ax.bar([i - largeur / 2 for i in x], [l["recettes"] for l in lignes], largeur, color=PRIMARY, label="Recettes")
+    ax.bar([i + largeur / 2 for i in x], [l["depenses"] for l in lignes], largeur, color="#B8BEC4", label="Charges + crédit")
+    cashflows = [l["cashflow"] for l in lignes]
+    ax.plot(list(x), cashflows, color=ACCENT, linewidth=2, zorder=3, label="Cash-flow avant impôt")
+    ax.scatter(list(x), cashflows, color=[PRIMARY if c >= 0 else NEGATIVE for c in cashflows], s=22, zorder=4)
+    ax.axhline(0, color="#999999", linewidth=0.8)
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(mois, fontsize=8.5, rotation=45)
+    ax.yaxis.set_major_formatter(lambda v, _pos: _eur(v))
+    ax.set_title("Cash-flow mois par mois (année 1)", fontsize=13, color=PRIMARY, pad=10)
+    ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3)
+    ax.spines["top"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.grid(axis="y", color="#EEEEEE", linewidth=0.8)
+    return _fig_to_png(fig)
+
+
 def logo_png() -> bytes:
     """Logo de l'application (maison + courbe ascendante), mêmes proportions
     que le SVG de l'interface (repère 64 × 64)."""

@@ -159,3 +159,50 @@ def patrimoine_option(resultat: dict, prix_achat: float, taux_revalorisation_bie
             },
         ],
     }
+
+
+def saisonnalite_option(saison: dict) -> dict:
+    """Recettes et dépenses de chaque mois (barres) et cash-flow avant impôt
+    (courbe), année 1, location courte durée."""
+    lignes = saison["lignes"]
+    mois = [l["mois"] for l in lignes]
+    return {
+        "tooltip": {"trigger": "axis"},
+        "legend": {"bottom": 0, "textStyle": _AXES_TEXTE},
+        "grid": {"left": 10, "right": 20, "top": 20, "bottom": 40, "containLabel": True},
+        "xAxis": {"type": "category", "data": mois, "axisLabel": {"interval": 0, "fontSize": 10, **_AXES_TEXTE}},
+        "yAxis": {"type": "value", "axisLabel": {"formatter": "{value} €", **_AXES_TEXTE}},
+        "series": [
+            {
+                "name": "Recettes",
+                "type": "bar",
+                "data": [round(l["recettes"]) for l in lignes],
+                "itemStyle": {"color": POSITIF},
+                "barGap": "10%",
+            },
+            {
+                "name": "Charges + crédit",
+                "type": "bar",
+                "data": [round(l["depenses"]) for l in lignes],
+                "itemStyle": {"color": "#9aa3ad"},
+            },
+            {
+                "name": "Cash-flow avant impôt",
+                "type": "line",
+                "data": [
+                    {"value": round(l["cashflow"]), "itemStyle": {"color": POSITIF if l["cashflow"] >= 0 else NEGATIF}}
+                    for l in lignes
+                ],
+                "symbolSize": 7,
+                "lineStyle": {"color": TOTAL, "width": 2},
+                "itemStyle": {"color": TOTAL},
+                "markLine": {
+                    "silent": True,
+                    "symbol": "none",
+                    "data": [{"yAxis": 0}],
+                    "lineStyle": {"color": TEXTE, "type": "dashed"},
+                    "label": {"show": False},
+                },
+            },
+        ],
+    }

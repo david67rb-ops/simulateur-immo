@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class TypeBien(str, Enum):
@@ -100,6 +100,28 @@ class SimulationInput(BaseModel):
         default=0.0, ge=0, le=0.3, description="Commission Airbnb/Booking (% des recettes)"
     )
     frais_menage_annuel: float = Field(default=0, ge=0)
+    profil_saisonnalite: str = Field(
+        default="uniforme",
+        description="Profil de saisonnalité (uniforme, ville, littoral, montagne, campagne, personnalise)",
+    )
+    occupation_mensuelle: list[float] | None = Field(
+        default=None, description="Profil personnalisé : taux d'occupation de chaque mois (12 valeurs, 0 à 1)"
+    )
+    prix_nuitee_mensuel: list[float] | None = Field(
+        default=None, description="Profil personnalisé : prix moyen par nuitée de chaque mois (12 valeurs)"
+    )
+
+    @field_validator("occupation_mensuelle", "prix_nuitee_mensuel")
+    @classmethod
+    def _douze_mois(cls, valeurs: list[float] | None, info) -> list[float] | None:
+        if valeurs is None:
+            return None
+        if len(valeurs) != 12:
+            raise ValueError("12 valeurs mensuelles attendues")
+        borne = 1.0 if info.field_name == "occupation_mensuelle" else float("inf")
+        if any(v < 0 or v > borne for v in valeurs):
+            raise ValueError("valeur mensuelle hors bornes")
+        return valeurs
 
     # --- Régime locatif & fiscalité (personne physique / SCI IR) ---
     regime_location: RegimeLocation = RegimeLocation.nue
@@ -169,3 +191,6 @@ class ExportDossierInput(BaseModel):
     profil: ProfilEmprunteurInput | None = None
     nom_emprunteur: str | None = None
     adresse_bien: str | None = None
+    chapitres: list[str] | None = Field(
+        default=None, description="Chapitres optionnels à inclure (None : tous). Voir dossier_export.CHAPITRES_OPTIONNELS"
+    )

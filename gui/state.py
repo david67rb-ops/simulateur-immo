@@ -56,6 +56,9 @@ def default_sim_state() -> dict:
         "meuble_tourisme_classe": True,
         "frais_plateforme_pct": 3.0,
         "frais_menage_annuel": 0.0,
+        "profil_saisonnalite": "uniforme",
+        "occupation_mensuelle": None,  # profil personnalisé : 12 valeurs en %
+        "prix_nuitee_mensuel": None,
         # Régime locatif & fiscalité
         "regime_location": "nue",
         "taux_marginal_imposition": 0.30,

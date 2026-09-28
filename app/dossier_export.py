@@ -15,6 +15,8 @@ from docx.oxml.ns import qn
 from . import charts_export as charts
 from . import analyse
 from . import endettement as endet_mod
+from . import saisonnalite
+from .chapitres_dossier import CHAPITRES_OBLIGATOIRES
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
 from .utils import clean_result, libelle_regime
@@ -873,6 +875,100 @@ def _section_loyer_mensuel(doc, resultat):
     )
 
 
+def _ajouter_table_colonnes(container, entetes: list[str], lignes: list[list[str]], largeurs_cm: list[float]) -> None:
+    """Tableau à plusieurs colonnes (en-tête, zébrage, montants négatifs en
+    rouge), serré pour tenir sur la page."""
+    taille, _, marge = STYLE_DENSITE["serre"]
+    table = container.add_table(rows=0, cols=len(entetes))
+    table.style = "Normal Table"
+    table.autofit = False
+    for i, valeurs in enumerate([entetes] + lignes):
+        row = table.add_row()
+        for j, (cell, valeur) in enumerate(zip(row.cells, valeurs)):
+            cell.width = Cm(largeurs_cm[j])
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT if j == 0 else WD_ALIGN_PARAGRAPH.RIGHT
+            if i == 0:
+                _texte(p, valeur, taille - 0.5, BLANC, gras=True)
+                _set_cell_background(cell, VERT_HEX)
+            else:
+                negatif = valeur.lstrip().startswith(("-", "−"))
+                _texte(p, valeur, taille, ROUGE if negatif else (GRIS_LIBELLE if j == 0 else TEXTE_FONCE), gras=j > 0)
+                _bordure_bas_cellule(cell)
+                if i % 2 == 0:
+                    _set_cell_background(cell, ZEBRA_HEX)
+            _cell_marges(cell, haut=marge, bas=marge, gauche=90, droite=90)
+    for j, largeur in enumerate(largeurs_cm):
+        table.columns[j].width = Cm(largeur)
+
+
+def _section_saisonnalite(doc, inp, resultat):
+    saison = saisonnalite.analyse_mensuelle(inp, resultat)
+    tresorerie = saison["tresorerie_securite"]
+    deficitaires = saison["mois_deficitaires"]
+    _tuiles(
+        doc,
+        [
+            ("Trésorerie de sécurité", _eur(tresorerie), tresorerie <= 0),
+            ("Mois déficitaires", f"{deficitaires} / 12", True if deficitaires == 0 else (None if deficitaires < 6 else False)),
+            ("Meilleur / pire mois", f"{saison['meilleur_mois']} / {saison['pire_mois']}", None),
+            ("Part des 3 meilleurs mois", _pct(saison["part_haute_saison"], 0), None),
+        ],
+    )
+    largeur_table, largeur_image = 13.2, 11.5
+    conteneur = doc.add_table(rows=1, cols=2)
+    conteneur.autofit = False
+    conteneur.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _supprimer_bordures(conteneur)
+    conteneur.columns[0].width = Cm(largeur_table)
+    conteneur.columns[1].width = Cm(largeur_image)
+    cell_table, cell_image = conteneur.rows[0].cells
+    cell_table.width = Cm(largeur_table)
+    cell_image.width = Cm(largeur_image)
+    lignes = [
+        [
+            l["mois"],
+            _pct(l["occupation"], 0),
+            _eur(l["prix_nuitee"]),
+            _eur(l["recettes"]),
+            _eur(l["depenses"]),
+            ("+" if l["cashflow"] >= 0 else "") + _eur(l["cashflow"]),
+        ]
+        for l in saison["lignes"]
+    ]
+    total_cf = sum(l["cashflow"] for l in saison["lignes"])
+    lignes.append(
+        [
+            "Année",
+            _pct(sum(l["nuits"] for l in saison["lignes"]) / 365, 0),
+            "",
+            _eur(sum(l["recettes"] for l in saison["lignes"])),
+            _eur(sum(l["depenses"] for l in saison["lignes"])),
+            ("+" if total_cf >= 0 else "") + _eur(total_cf),
+        ]
+    )
+    _ajouter_table_colonnes(
+        cell_table,
+        ["Mois", "Occupation", "Prix / nuit", "Recettes", "Dépenses", "Cash-flow"],
+        lignes,
+        [1.9, 2.1, 2.0, 2.3, 2.3, 2.2],
+    )
+    image = charts.chart_saisonnalite(saison["lignes"])
+    p_image = cell_image.paragraphs[0]
+    p_image.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p_image.paragraph_format.space_after = Pt(0)
+    hauteur_max = HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM
+    largeur = min(largeur_image - 0.5, hauteur_max * _proportions_png(image))
+    p_image.add_run().add_picture(io.BytesIO(image), width=Cm(largeur))
+    _ajouter_note(
+        doc,
+        f"Profil de saisonnalité : {saison['profil'].lower()}. Cash-flow avant impôt de la première année ; "
+        "charges fixes lissées sur 12 mois, commission et gestion proportionnelles aux recettes, ménage "
+        "proportionnel aux nuits louées. La trésorerie de sécurité est la plus forte perte cumulée sur des "
+        "mois consécutifs : la réserve à prévoir pour traverser la basse saison.",
+    )
+
+
 def _section_patrimoine(doc, inp, resultat):
     evolution = analyse.evolution_patrimoine(resultat, inp.prix_achat, inp.taux_revalorisation_bien_annuel)
     n = len(evolution)
@@ -1011,15 +1107,18 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
 
     annee1 = None if is_achat_revente else resultat["annees"][0]
 
-    # (titre, phrase d'explication sous le titre, contenu)
-    sections: list[tuple[str, str, "callable"]] = [
+    # (clé, titre, phrase d'explication sous le titre, contenu). La synthèse,
+    # les points d'attention et les mentions sont toujours inclus.
+    sections: list[tuple[str, str, str, "callable"]] = [
         (
+            "synthese",
             "Synthèse du projet",
             "L'essentiel en un coup d'œil : verdict, indicateurs clés et "
             + ("décomposition de la marge." if is_achat_revente else "répartition du loyer chaque mois."),
             lambda d: _section_synthese(d, payload, inp, resultat, is_achat_revente),
         ),
         (
+            "presentation",
             "Le bien et le projet",
             "Le bien, son prix et la composition du coût total de l'opération.",
             lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
@@ -1028,6 +1127,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     if payload.profil is not None:
         sections.append(
             (
+                "profil",
                 "Profil de l'emprunteur",
                 "Revenus et engagements du foyer pris en compte par la banque.",
                 lambda d: _section_profil(d, payload),
@@ -1035,6 +1135,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
         )
     sections.append(
         (
+            "financement",
             "Plan de financement",
             "Comment l'opération est financée : apport, crédit et mensualités.",
             lambda d: _section_financement(d, inp, resultat, is_achat_revente),
@@ -1043,6 +1144,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     if is_achat_revente:
         sections.append(
             (
+                "achat_revente",
                 "L'opération d'achat-revente",
                 "Du prix d'achat à la marge nette : frais de portage, revente et fiscalité.",
                 lambda d: _section_achat_revente_detail(d, inp, resultat),
@@ -1051,6 +1153,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     else:
         sections.append(
             (
+                "charges",
                 "Recettes et charges annuelles",
                 "Ce que rapporte le bien et ce qu'il coûte chaque année.",
                 lambda d: _section_charges(d, inp, annee1, is_meublee, is_lcd),
@@ -1058,13 +1161,24 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
         )
         sections.append(
             (
+                "loyer_mensuel",
                 "Où va le loyer chaque mois",
                 "Du loyer encaissé au cash-flow net : charges, crédit et impôts, mois par mois.",
                 lambda d: _section_loyer_mensuel(d, resultat),
             )
         )
+        if is_lcd:
+            sections.append(
+                (
+                    "saisonnalite",
+                    "Saisonnalité mois par mois",
+                    "Recettes, dépenses et cash-flow de chaque mois de la première année.",
+                    lambda d: _section_saisonnalite(d, inp, resultat),
+                )
+            )
         sections.append(
             (
+                "patrimoine",
                 "Évolution du patrimoine",
                 "Comment le patrimoine se construit au fil du remboursement du crédit.",
                 lambda d: _section_patrimoine(d, inp, resultat),
@@ -1073,6 +1187,7 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     if payload.profil is not None:
         sections.append(
             (
+                "endettement",
                 "Taux d'endettement",
                 "Capacité d'emprunt du foyer au regard de la règle des 35 % du HCSF.",
                 lambda d: _section_endettement(d, inp, payload, resultat, is_achat_revente),
@@ -1081,13 +1196,26 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
     avertissements = resultat.get("avertissements") or []
     if avertissements:
         sections.append(
-            ("Points d'attention", "Éléments à vérifier avant de s'engager.", lambda d: _section_avertissements(d, avertissements))
+            (
+                "avertissements",
+                "Points d'attention",
+                "Éléments à vérifier avant de s'engager.",
+                lambda d: _section_avertissements(d, avertissements),
+            )
         )
     sections.append(
-        ("Mentions et méthodologie", "Hypothèses de calcul et limites de l'estimation.", lambda d: _section_mentions(d))
+        (
+            "mentions",
+            "Mentions et méthodologie",
+            "Hypothèses de calcul et limites de l'estimation.",
+            lambda d: _section_mentions(d),
+        )
     )
+    if payload.chapitres is not None:
+        retenus = set(payload.chapitres) | CHAPITRES_OBLIGATOIRES
+        sections = [section for section in sections if section[0] in retenus]
 
-    for i, (titre, description, fn) in enumerate(sections, start=1):
+    for i, (_cle, titre, description, fn) in enumerate(sections, start=1):
         _nouvelle_page_chapitre(doc)
         _entete_chapitre(doc, i, titre, description)
         fn(doc)

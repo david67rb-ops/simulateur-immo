@@ -19,7 +19,9 @@ hébergée. Deux parcours, choisis via un onglet en haut de la page :
      l'IS), régime locatif, amortissement, projection, TRI et plus-value.
   5. **Résultats** : cash-flow, comparatif des régimes, graphique, revente.
   6. **Dossier de financement** : taux d'endettement du foyer et export Word
-     du dossier à présenter en banque.
+     du dossier à présenter en banque, chapitre par chapitre au choix
+     (formules Complet, Banque, Personnel ; synthèse, points d'attention et
+     mentions toujours inclus).
 
 ## Lancer l'application
 
@@ -129,7 +131,12 @@ main.py              Point d'entrée (fenêtre native par défaut, --web sinon)
 - **Location longue durée** : nue ou meublée (LMNP), moteur pluriannuel complet.
 - **Location courte durée** (type Airbnb) : fiscalement un meublé de tourisme
   (classé ou non classé, abattement/plafond micro-BIC différents), avec des
-  charges spécifiques (commission plateforme, ménage). **Limite importante** :
+  charges spécifiques (commission plateforme, ménage) et une **saisonnalité**
+  mois par mois : profils types (grande ville, littoral, montagne, campagne)
+  qui répartissent l'occupation et le prix moyens sans changer les recettes
+  annuelles, ou profil personnalisé saisi sur 12 mois. Les résultats et le
+  dossier Word montrent le cash-flow de chaque mois et la trésorerie de
+  sécurité (plus forte perte cumulée sur des mois consécutifs). **Limite importante** :
   aucune source de données ouvertes fiable ne donne un loyer/nuitée de marché ;
   l'étude de marché affiche donc l'indicateur de loyer longue durée comme un
   plancher indicatif, pas comme un prix Airbnb réel.

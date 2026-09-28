@@ -3,6 +3,7 @@ maximum, scénarios de stress et verdict synthétique."""
 from __future__ import annotations
 
 from .notaire import calculer_frais_notaire
+from .saisonnalite import PERSONNALISE
 from .schemas import SimulationInput, TypeProjet
 from .simulation import simuler
 
@@ -68,7 +69,16 @@ def scenarios_stress(inp: SimulationInput) -> list[dict]:
     else:
         if inp.avec_credit:
             scenarios.append(("Taux du crédit +1 point", {"taux_credit_annuel": min(inp.taux_credit_annuel + 0.01, 0.2)}))
-        if inp.type_projet == TypeProjet.location_courte_duree:
+        if inp.type_projet == TypeProjet.location_courte_duree and inp.profil_saisonnalite == PERSONNALISE:
+            # Profil personnalisé : ce sont les 12 valeurs mensuelles qui comptent.
+            scenarios += [
+                (
+                    "Occupation −10 points",
+                    {"occupation_mensuelle": [max(o - 0.10, 0.0) for o in inp.occupation_mensuelle or []]},
+                ),
+                ("Prix à la nuitée −10 %", {"prix_nuitee_mensuel": [p * 0.9 for p in inp.prix_nuitee_mensuel or []]}),
+            ]
+        elif inp.type_projet == TypeProjet.location_courte_duree:
             scenarios += [
                 ("Occupation −10 points", {"taux_occupation_pct": max(inp.taux_occupation_pct - 0.10, 0.0)}),
                 ("Prix à la nuitée −10 %", {"prix_nuitee": inp.prix_nuitee * 0.9}),

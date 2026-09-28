@@ -17,11 +17,12 @@ import os
 from nicegui import app, native, ui
 from pydantic import ValidationError
 
-from app import analyse, endettement as endet_mod, listing_parser, market_data, notaire, schemas, simulation
+from app import analyse, endettement as endet_mod, listing_parser, market_data, notaire, saisonnalite, schemas, simulation
+from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, chapitres_disponibles
 from app.utils import clean_result, libelle_regime
 
 from . import theme
-from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option
+from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
 from .state import (
     PERCENT_FIELDS,
     default_dossier_meta_state,
@@ -228,9 +229,18 @@ def build_simulation_input(sim_state: dict) -> schemas.SimulationInput:
         data[key] = int(data[key] or 0)
     if not data.get("prix_revente_vise"):
         data["prix_revente_vise"] = None
+    if (
+        data.get("profil_saisonnalite") == saisonnalite.PERSONNALISE
+        and data.get("occupation_mensuelle")
+        and data.get("prix_nuitee_mensuel")
+    ):
+        data["occupation_mensuelle"] = [(v or 0) / 100 for v in data["occupation_mensuelle"]]
+        data["prix_nuitee_mensuel"] = [v or 0 for v in data["prix_nuitee_mensuel"]]
+    else:
+        data["occupation_mensuelle"] = data["prix_nuitee_mensuel"] = None
     # Un champ numérique vidé par l'utilisateur renvoie None : on le traite comme 0.
     for key, value in data.items():
-        if value is None and key != "prix_revente_vise":
+        if value is None and key not in ("prix_revente_vise", "occupation_mensuelle", "prix_nuitee_mensuel"):
             data[key] = 0
     return schemas.SimulationInput(**data)
 
@@ -485,6 +495,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     sim_state = default_sim_state()
     profil_state = default_profil_state()
     dossier_meta_state = default_dossier_meta_state()
+    chapitres_state = {cle: True for cle in CHAPITRES_OPTIONNELS}
     ctx = {"last_market_result": None, "commune": None}
     refs: dict[str, ui.element] = {}
 
@@ -868,12 +879,48 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                                 "Commission plateforme",
                                 sim_state,
                                 "frais_plateforme_pct",
-                                suffixe="% des recettes",
+                                suffixe="%",
                                 min=0,
                                 max=30,
                                 aide="Frais Airbnb/Booking côté hôte : environ 3 %, jusqu'à 15 % en formule tout compris.",
                             )
                             champ("Ménage / blanchisserie", sim_state, "frais_menage_annuel", suffixe="€/an", min=0)
+                            select_saisonnalite = liste(
+                                saisonnalite.LIBELLES_PROFILS,
+                                "Saisonnalité",
+                                sim_state,
+                                "profil_saisonnalite",
+                                aide="Répartit l'occupation et le prix moyens sur l'année (profils types indicatifs). "
+                                "Les recettes annuelles ne changent pas, seul leur calendrier change.",
+                            )
+                        with ui.expansion("Détail mois par mois : occupation et prix", icon="calendar_month").props(
+                            "dense"
+                        ).classes("w-full text-sm"):
+                            ui.label(
+                                "Modifier une valeur passe en profil personnalisé : le prix moyen par nuitée et le "
+                                "taux d'occupation annuels sont alors calculés à partir des 12 mois."
+                            ).classes(theme.HINT_CLASSES + " pt-2")
+                            entrees_occupation, entrees_prix = [], []
+                            with ui.element("div").classes("w-full grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1 pt-2"):
+                                for moitie in (saisonnalite.MOIS[:6], saisonnalite.MOIS[6:]):
+                                    with ui.column().classes("w-full gap-1"):
+                                        with ui.row().classes("w-full no-wrap items-center gap-2 " + theme.HINT_CLASSES):
+                                            ui.label("").classes("w-12 shrink-0")
+                                            ui.label("Occupation").classes("flex-1")
+                                            ui.label("Prix par nuit").classes("flex-1")
+                                        for mois in moitie:
+                                            with ui.row().classes("w-full no-wrap items-center gap-2"):
+                                                ui.label(mois).classes("w-12 shrink-0 text-xs font-semibold")
+                                                entrees_occupation.append(
+                                                    ui.number(suffix="%", min=0, max=100, format="%.0f")
+                                                    .props(f'outlined dense aria-label="Occupation {mois}"')
+                                                    .classes("flex-1")
+                                                )
+                                                entrees_prix.append(
+                                                    ui.number(suffix="€", min=0, format="%.0f")
+                                                    .props(f'outlined dense aria-label="Prix par nuit {mois}"')
+                                                    .classes("flex-1")
+                                                )
                     refs["fieldset_lcd"] = fieldset_lcd
 
                     with plus_d_options("Plus d'options : gestion, entretien, comptable, CFE, loyers impayés"):
@@ -1093,6 +1140,22 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     ui.label("Où va ton loyer (mois moyen, année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
                     ui.echart({"series": []}).props('id="loyer-chart"').classes("w-full h-72")
 
+                    bloc_saison = ui.column().classes("w-full gap-2")
+                    with bloc_saison:
+                        titre_saison = ui.label("Saisonnalité : cash-flow mois par mois (année 1)").classes(
+                            theme.SUBSECTION_TITLE_CLASSES
+                        )
+                        with ui.row().classes(theme.GRID_CLASSES):
+                            v_tresorerie_saison = theme.stat_card(
+                                "Trésorerie de sécurité",
+                                aide_texte="Plus forte perte cumulée sur des mois consécutifs (basse saison) : "
+                                "la réserve à prévoir pour ne pas être à découvert, avant impôt.",
+                            )
+                            v_mois_deficitaires = theme.stat_card("Mois déficitaires")
+                            v_meilleur_pire = theme.stat_card("Meilleur / pire mois")
+                        ui.echart({"series": []}).props('id="saison-chart"').classes("w-full h-80")
+                        detail_saison = ui.label("").classes(theme.HINT_CLASSES)
+
                     ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
                     table_regimes = ui.table(
                         columns=[
@@ -1238,6 +1301,24 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             value=dossier_meta_state["adresse_bien"],
                         ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
 
+                    theme.subsection_title("Contenu du rapport")
+                    ui.label(
+                        "La page de garde, la synthèse, les points d'attention et les mentions sont toujours inclus. "
+                        "Chaque chapitre tient sur une page."
+                    ).classes(theme.HINT_CLASSES)
+                    with ui.row().classes("items-center gap-2 mt-1"):
+                        ui.label("Formule :").classes("text-sm")
+                        for cle_formule, (libelle_formule, _) in FORMULES_DOSSIER.items():
+                            ui.button(
+                                libelle_formule, on_click=lambda c=cle_formule: appliquer_formule_dossier(c)
+                            ).props("outline dense no-caps")
+                    cases_chapitres = {}
+                    with ui.element("div").classes("w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-4"):
+                        for cle_chapitre, titre_chapitre in CHAPITRES_OPTIONNELS.items():
+                            cases_chapitres[cle_chapitre] = (
+                                ui.checkbox(titre_chapitre).bind_value(chapitres_state, cle_chapitre).props("dense")
+                            )
+
                     with ui.row().classes("gap-3 mt-3"):
                         btn_generer_dossier = ui.button("Générer l'aperçu du dossier").props("unelevated")
                         btn_telecharger_dossier = ui.button("Télécharger le dossier (Word)").props("outline")
@@ -1258,6 +1339,11 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         ).props("hide-header").classes("w-full")
 
         ui.element("div").classes("espace-barre-mobile h-16")  # place pour le bandeau mobile
+
+    def appliquer_formule_dossier(cle_formule: str) -> None:
+        _, retenus = FORMULES_DOSSIER[cle_formule]
+        for cle in chapitres_state:
+            chapitres_state[cle] = cle in retenus
 
     def onglet_actif(tab) -> bool:
         # La valeur est l'onglet lui-même après un set_value(), son nom après un clic.
@@ -1421,6 +1507,9 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         refs["field_nom_emprunteur"].props(f'label="{libelle_nom}"')
 
         refs["fieldset_lcd"].visible = is_lcd
+        disponibles = chapitres_disponibles(type_projet, avec_credit)
+        for cle, case in cases_chapitres.items():
+            case.visible = cle in disponibles
         refs["fieldset_achat_revente"].visible = is_achat_revente
         refs["fieldset_amortissement"].visible = not is_achat_revente and (is_meublee or is_sci_is)
         refs["fieldset_regime"].visible = not is_achat_revente
@@ -1798,6 +1887,22 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         table_revente.update()
 
         maj_graphique("loyer-chart", repartition_loyer_option(resultat))
+
+        bloc_saison.visible = inp.type_projet == schemas.TypeProjet.location_courte_duree
+        if bloc_saison.visible:
+            saison = saisonnalite.analyse_mensuelle(inp, resultat)
+            titre_saison.set_text(f"Saisonnalité : cash-flow mois par mois (année 1, profil {saison['profil'].lower()})")
+            v_tresorerie_saison.set_text(eur(saison["tresorerie_securite"]))
+            theme.colorer(v_tresorerie_saison, saison["tresorerie_securite"], inverse=True)
+            v_mois_deficitaires.set_text(f"{saison['mois_deficitaires']} / 12")
+            theme.colorer(v_mois_deficitaires, saison["mois_deficitaires"], inverse=True)
+            v_meilleur_pire.set_text(f"{saison['meilleur_mois']} / {saison['pire_mois']}")
+            detail_saison.set_text(
+                f"Les 3 meilleurs mois font {pct(saison['part_haute_saison'], 0)} des recettes. "
+                "Cash-flow avant impôt : charges fixes lissées sur 12 mois, commission et gestion "
+                "proportionnelles aux recettes, ménage proportionnel aux nuits louées."
+            )
+            maj_graphique("saison-chart", saisonnalite_option(saison))
         maj_graphique(
             "patrimoine-chart", patrimoine_option(resultat, inp.prix_achat, inp.taux_revalorisation_bien_annuel)
         )
@@ -1865,6 +1970,79 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
     tab_panels.on_value_change(lambda e: afficher_resultats() if onglet_actif(tab_resultats) else None)
 
+    # =====================================================================
+    # Logique : saisonnalité de la location courte durée
+    # =====================================================================
+    # Profil type : les 12 mois se déduisent des moyennes annuelles saisies.
+    # Profil personnalisé : c'est l'inverse, les moyennes annuelles affichées
+    # se déduisent des 12 mois.
+    saison_ui = {"maj": False}
+
+    def _remplir_mois(occupation: list[float], prix: list[float]) -> None:
+        saison_ui["maj"] = True
+        try:
+            for entree, valeur in zip(entrees_occupation, occupation):
+                if entree.value is None or abs(entree.value - valeur) >= 0.5:
+                    entree.set_value(round(valeur))
+            for entree, valeur in zip(entrees_prix, prix):
+                if entree.value is None or abs(entree.value - valeur) >= 0.5:
+                    entree.set_value(round(valeur))
+        finally:
+            saison_ui["maj"] = False
+
+    def _valeurs_mois_affichees() -> tuple[list[float], list[float]]:
+        return (
+            [e.value or 0 for e in entrees_occupation],
+            [e.value or 0 for e in entrees_prix],
+        )
+
+    def on_saisie_mois(_e) -> None:
+        if saison_ui["maj"]:
+            return
+        occupation, prix = _valeurs_mois_affichees()
+        sim_state["occupation_mensuelle"] = occupation
+        sim_state["prix_nuitee_mensuel"] = prix
+        if sim_state["profil_saisonnalite"] != saisonnalite.PERSONNALISE:
+            sim_state["profil_saisonnalite"] = saisonnalite.PERSONNALISE
+            select_saisonnalite.set_value(saisonnalite.PERSONNALISE)
+
+    for entree in entrees_occupation + entrees_prix:
+        entree.on_value_change(on_saisie_mois)
+
+    def on_profil_saisonnalite(e) -> None:
+        if e.value == saisonnalite.PERSONNALISE:
+            if not sim_state.get("occupation_mensuelle"):
+                occupation, prix = _valeurs_mois_affichees()
+                sim_state["occupation_mensuelle"] = occupation
+                sim_state["prix_nuitee_mensuel"] = prix
+        else:
+            sim_state["occupation_mensuelle"] = None
+            sim_state["prix_nuitee_mensuel"] = None
+
+    select_saisonnalite.on_value_change(on_profil_saisonnalite)
+
+    def synchroniser_saisonnalite() -> None:
+        if sim_state["type_projet"] != "location_courte_duree":
+            return
+        personnalise = sim_state["profil_saisonnalite"] == saisonnalite.PERSONNALISE
+        field_prix_nuitee.set_enabled(not personnalise)
+        field_taux_occupation.set_enabled(not personnalise)
+        if personnalise and sim_state.get("occupation_mensuelle") and sim_state.get("prix_nuitee_mensuel"):
+            taux, prix = saisonnalite.moyennes_annuelles(
+                [(v or 0) / 100 for v in sim_state["occupation_mensuelle"]],
+                [v or 0 for v in sim_state["prix_nuitee_mensuel"]],
+            )
+            if round(taux * 100, 1) != sim_state["taux_occupation_pct"]:
+                sim_state["taux_occupation_pct"] = round(taux * 100, 1)
+            if round(prix, 2) != sim_state["prix_nuitee"]:
+                sim_state["prix_nuitee"] = round(prix, 2)
+            return
+        try:
+            valeurs = saisonnalite.valeurs_mensuelles(build_simulation_input(sim_state))
+        except Exception:  # noqa: BLE001 — saisie incomplète : on attend la suite
+            return
+        _remplir_mois([occ * 100 for occ, _ in valeurs], [prix for _, prix in valeurs])
+
     derniere_saisie = {"signature": None}
 
     def recalculer() -> None:
@@ -1872,6 +2050,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         calcul complet prend quelques millisecondes ; le prix max et les
         scénarios de stress, plus lourds, ne sont calculés que si l'onglet
         Résultats est affiché."""
+        synchroniser_saisonnalite()
         signature = json.dumps(sim_state, sort_keys=True, default=str)
         if signature == derniere_saisie["signature"]:
             return
@@ -2047,7 +2226,11 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
             adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
             payload = schemas.ExportDossierInput(
-                simulation=inp, profil=profil, nom_emprunteur=nom_emprunteur, adresse_bien=adresse_bien
+                simulation=inp,
+                profil=profil,
+                nom_emprunteur=nom_emprunteur,
+                adresse_bien=adresse_bien,
+                chapitres=[cle for cle, inclus in chapitres_state.items() if inclus],
             )
             contenu = dossier_export.generer_dossier_word(payload)
         except Exception as exc:  # noqa: BLE001
