@@ -93,6 +93,13 @@ def default_profil_state() -> dict:
     }
 
 
+def default_patrimoine_state() -> dict:
+    """Patrimoine du foyer, ligne par ligne (voir LIGNES_PATRIMOINE)."""
+    from app.chapitres_dossier import LIGNES_PATRIMOINE
+
+    return {cle: {"detail": "", "valeur": None, "reste_du": None} for cle, _, _ in LIGNES_PATRIMOINE}
+
+
 def default_dossier_meta_state() -> dict:
     return {
         "nom_emprunteur": "",

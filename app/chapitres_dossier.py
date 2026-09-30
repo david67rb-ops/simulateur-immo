@@ -44,6 +44,20 @@ CHAPITRES_OPTIONNELS = {
     "annexes": "Pièces à fournir à la banque",
 }
 CHAPITRES_OBLIGATOIRES = {"synthese", "avertissements", "mentions"}
+
+# Patrimoine du foyer (profil de l'emprunteur) : clé, nature, capital restant
+# dû applicable (biens financés à crédit). Saisi dans l'onglet Endettement,
+# ou laissé à compléter dans Word.
+LIGNES_PATRIMOINE = [
+    ("residence_principale", "Résidence principale", True),
+    ("immobilier_1", "Bien locatif ou résidence secondaire", True),
+    ("immobilier_2", "Bien locatif ou résidence secondaire", True),
+    ("livrets", "Comptes courants et livrets", False),
+    ("assurance_vie", "Assurance-vie", False),
+    ("titres", "Compte-titres, PEA", False),
+    ("retraite", "Épargne retraite (PER, PEE…)", False),
+    ("autres", "Autres (parts de SCI, crypto…)", False),
+]
 FORMULES_DOSSIER = {
     "complet": ("Complet", set(CHAPITRES_OPTIONNELS)),
     "banque": ("Banque", set(CHAPITRES_OPTIONNELS) - {"patrimoine"}),

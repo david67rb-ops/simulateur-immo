@@ -192,6 +192,13 @@ class EndettementInput(BaseModel):
     simulation: SimulationInput
 
 
+class LignePatrimoine(BaseModel):
+    nature: str
+    detail: str | None = None
+    valeur: float | None = Field(default=None, ge=0)
+    reste_du: float | None = Field(default=None, ge=0, description="Capital restant dû (biens financés à crédit)")
+
+
 class ExportDossierInput(BaseModel):
     simulation: SimulationInput
     profil: ProfilEmprunteurInput | None = None
@@ -203,6 +210,11 @@ class ExportDossierInput(BaseModel):
     )
     chapitres: list[str] | None = Field(
         default=None, description="Chapitres optionnels à inclure (None : tous). Voir dossier_export.CHAPITRES_OPTIONNELS"
+    )
+    patrimoine: list[LignePatrimoine] | None = Field(
+        default=None,
+        description="Patrimoine du foyer saisi dans l'onglet Endettement (lignes renseignées). "
+        "Sans saisie, le dossier présente un tableau à compléter",
     )
     photos: list[bytes] | None = Field(
         default=None,

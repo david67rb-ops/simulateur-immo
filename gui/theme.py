@@ -111,6 +111,11 @@ def apply_theme() -> None:
           }
           /* Import des photos du dossier : pas de liste de fichiers, les miniatures suffisent. */
           .uploader-photos .q-uploader__list { display: none; }
+          /* Patrimoine du foyer : une ligne par poste (nature, détail, valeur, reste dû) sur ordinateur. */
+          .grille-patrimoine { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
+          @media (min-width: 640px) {
+            .grille-patrimoine { grid-template-columns: 1.6fr 1.6fr 1.2fr 1.2fr; align-items: center; }
+          }
         </style>
         """
     )

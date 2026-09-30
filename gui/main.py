@@ -29,7 +29,7 @@ from app import (
     schemas,
     simulation,
 )
-from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, chapitres_disponibles
+from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, LIGNES_PATRIMOINE, chapitres_disponibles
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import theme
@@ -39,6 +39,7 @@ from .state import (
     PERCENT_FIELDS,
     default_dossier_meta_state,
     default_market_state,
+    default_patrimoine_state,
     default_profil_state,
     default_sim_state,
 )
@@ -596,6 +597,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     sim_state = default_sim_state()
     profil_state = default_profil_state()
     dossier_meta_state = default_dossier_meta_state()
+    patrimoine_state = default_patrimoine_state()
     chapitres_state = {cle: True for cle in CHAPITRES_OPTIONNELS}
     ctx = {"last_market_result": None, "commune": None, "dept": None, "marche_dossier": None, "photos_dossier": []}
     refs: dict[str, ui.element] = {}
@@ -1391,6 +1393,32 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             v_end_statut = theme.stat_card("Statut")
                         end_marge_label = ui.label("").classes(theme.HINT_CLASSES)
 
+                    with ui.expansion("Patrimoine du foyer (optionnel)", icon="account_balance").classes(
+                        "w-full mt-4"
+                    ):
+                        ui.label(
+                            "Repris dans le profil de l'emprunteur du dossier de financement : il rassure la banque sur "
+                            "la capacité à faire face à un imprévu. Sans saisie, le dossier présente un tableau vide à "
+                            "compléter à la main."
+                        ).classes(theme.HINT_CLASSES + " mb-2")
+                        with ui.element("div").classes("grille-patrimoine w-full"):
+                            for cle_patrimoine, nature, avec_reste_du in LIGNES_PATRIMOINE:
+                                ligne_patrimoine = patrimoine_state[cle_patrimoine]
+                                ui.label(nature).classes("text-sm")
+                                ui.input("Établissement / détail").bind_value(ligne_patrimoine, "detail").props(
+                                    "outlined dense"
+                                )
+                                ui.number("Valeur (€)", min=0).bind_value(ligne_patrimoine, "valeur").props(
+                                    "outlined dense"
+                                ).on_value_change(lambda _e: maj_total_patrimoine())
+                                if avec_reste_du:
+                                    ui.number("Reste dû (€)", min=0).bind_value(ligne_patrimoine, "reste_du").props(
+                                        "outlined dense"
+                                    ).on_value_change(lambda _e: maj_total_patrimoine())
+                                else:
+                                    ui.element("div")
+                        total_patrimoine = ui.label("").classes("text-sm font-semibold mt-2")
+
                 _bouton_onglet_suivant(tab_endettement)
 
             # -----------------------------------------------------------------
@@ -1515,6 +1543,31 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             f"Photo refusée : 25 Mo maximum par photo, {photos_dossier.NB_PHOTOS_MAX} photos au plus."
         )
     )
+
+    def lignes_patrimoine() -> list[schemas.LignePatrimoine]:
+        """Lignes de patrimoine renseignées, pour le dossier."""
+        lignes = []
+        for cle, nature, avec_reste_du in LIGNES_PATRIMOINE:
+            ligne = patrimoine_state[cle]
+            detail = (ligne["detail"] or "").strip()
+            reste_du = ligne["reste_du"] if avec_reste_du else None
+            if ligne["valeur"] or reste_du or detail:
+                lignes.append(
+                    schemas.LignePatrimoine(
+                        nature=nature, detail=detail or None, valeur=ligne["valeur"] or None, reste_du=reste_du or None
+                    )
+                )
+        return lignes
+
+    def maj_total_patrimoine() -> None:
+        lignes = lignes_patrimoine()
+        valeur = sum(ligne.valeur or 0 for ligne in lignes)
+        reste_du = sum(ligne.reste_du or 0 for ligne in lignes)
+        total_patrimoine.set_text(
+            f"Total : {eur(valeur)} · reste dû : {eur(reste_du)} · patrimoine net : {eur(valeur - reste_du)}"
+            if lignes
+            else ""
+        )
 
     def appliquer_formule_dossier(cle_formule: str) -> None:
         _, retenus = FORMULES_DOSSIER[cle_formule]
@@ -2448,6 +2501,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 marche=marche,
                 chapitres=[cle for cle, inclus in chapitres_state.items() if inclus],
                 photos=[photo["jpeg"] for photo in ctx["photos_dossier"]],
+                patrimoine=lignes_patrimoine() or None,
             )
             # Hors de la boucle d'événements : graphiques, cartes et fond IGN
             # prennent quelques secondes, l'application reste réactive.

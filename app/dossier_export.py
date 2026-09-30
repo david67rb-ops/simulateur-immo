@@ -19,7 +19,7 @@ from . import charts_export as charts
 from . import analyse
 from . import endettement as endet_mod
 from . import photos_dossier, saisonnalite
-from .chapitres_dossier import CHAPITRES_OBLIGATOIRES, PARTIE_DU_CHAPITRE, PARTIES
+from .chapitres_dossier import CHAPITRES_OBLIGATOIRES, LIGNES_PATRIMOINE, PARTIE_DU_CHAPITRE, PARTIES
 from .polices_word import integrer_polices
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
@@ -1149,20 +1149,6 @@ def _section_annexes(doc, inp):
     )
 
 
-# Patrimoine du foyer : (nature, capital restant dû applicable). Tableau à
-# compléter par l'emprunteur dans Word.
-LIGNES_PATRIMOINE = [
-    ("Résidence principale", True),
-    ("Bien locatif ou résidence secondaire", True),
-    ("Bien locatif ou résidence secondaire", True),
-    ("Comptes courants et livrets", False),
-    ("Assurance-vie", False),
-    ("Compte-titres, PEA", False),
-    ("Épargne retraite (PER, PEE…)", False),
-    ("Autres (parts de SCI, crypto…)", False),
-]
-
-
 def _hauteur_ligne(row, hauteur_cm: float) -> None:
     """Hauteur minimale de ligne : de la place pour écrire à la main ou
     saisir dans Word."""
@@ -1173,53 +1159,81 @@ def _hauteur_ligne(row, hauteur_cm: float) -> None:
     tr_pr.append(hauteur)
 
 
-def _tableau_patrimoine(container, largeur_cm: float) -> None:
-    """Patrimoine du foyer, cellules de montant vides à compléter."""
+def _lignes_tableau_patrimoine(saisies) -> list[tuple[str, str, str, str, str]]:
+    """(nature, détail, valeur, reste dû, style) de chaque ligne : les lignes
+    saisies dans le simulateur avec total et patrimoine net, sinon toutes
+    les lignes vides à compléter dans Word. Style : "", "total" ou "net"."""
+    if not saisies:
+        lignes = [(nature, "", "€", "€" if credit else "—", "") for _, nature, credit in LIGNES_PATRIMOINE]
+        return lignes + [("Total", "", "€", "€", "total")]
+    credit_par_nature = {nature: credit for _, nature, credit in LIGNES_PATRIMOINE}
+    lignes = []
+    for ligne in saisies:
+        reste_du = _eur(ligne.reste_du) if ligne.reste_du else ("—" if not credit_par_nature.get(ligne.nature) else "")
+        lignes.append((ligne.nature, ligne.detail or "", _eur(ligne.valeur) if ligne.valeur else "", reste_du, ""))
+    valeur = sum(ligne.valeur or 0 for ligne in saisies)
+    reste_du = sum(ligne.reste_du or 0 for ligne in saisies)
+    lignes.append(("Total", "", _eur(valeur), _eur(reste_du), "total"))
+    lignes.append(("Patrimoine net (valeur − reste dû)", "", _eur(valeur - reste_du), "", "net"))
+    return lignes
+
+
+def _tableau_patrimoine(container, largeur_cm: float, saisies=None) -> None:
+    """Patrimoine du foyer : lignes saisies dans le simulateur, ou cellules
+    vides à compléter dans Word."""
     largeurs = [largeur_cm * r for r in (0.42, 0.28, 0.15, 0.15)]
     table = container.add_table(rows=0, cols=4)
     table.style = "Normal Table"
     table.autofit = False
     entetes = ["Nature", "Établissement / détail", "Valeur", "Reste dû"]
-    lignes = [(nature, credit, False) for nature, credit in LIGNES_PATRIMOINE] + [("Total", True, True)]
-    for i, valeurs in enumerate([None] + lignes):
+    vide = not saisies
+    for i, valeurs in enumerate([None] + _lignes_tableau_patrimoine(saisies)):
         row = table.add_row()
-        _hauteur_ligne(row, 0.62 if i == 0 else 0.74)
+        _hauteur_ligne(row, 0.62 if i == 0 or not vide else 0.74)
+        style = valeurs[4] if valeurs else ""
         for j, cell in enumerate(row.cells):
             cell.width = Cm(largeurs[j])
             cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
             _cell_marges(cell, haut=30, bas=30, gauche=90, droite=90)
             p = cell.paragraphs[0]
             p.alignment = WD_ALIGN_PARAGRAPH.LEFT if j < 2 else WD_ALIGN_PARAGRAPH.RIGHT
+            _texte(p, "", 9)  # cellule vide : même hauteur de ligne que les autres
             if valeurs is None:
                 _texte(p, entetes[j], 8.5, BLANC, gras=True)
                 _set_cell_background(cell, MARQUE_HEX)
                 continue
-            nature, credit, est_total = valeurs
+            texte = valeurs[j]
             if j == 0:
-                _texte(p, nature, 9, TEXTE_FONCE if est_total else GRIS_LIBELLE, gras=est_total)
-            elif j == 3 and not credit:
-                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                _texte(p, "—", 9, GRIS_COLOR)
-            elif j == 2 or j == 3:
-                _texte(p, "€", 9, GRIS_COLOR)
-            _bordure_bas_cellule(cell, color=MARQUE_HEX if est_total else BORDURE_HEX, size=8 if est_total else 4)
-            if est_total:
+                _texte(p, texte, 9, TEXTE_FONCE if style else GRIS_LIBELLE, gras=bool(style))
+            elif texte in ("€", "—"):
+                if texte == "—":
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                _texte(p, texte, 9, GRIS_COLOR)
+            elif texte:
+                couleur = PRIMARY_COLOR if style == "net" else TEXTE_FONCE
+                _texte(p, texte, 9.5 if style else 9, couleur, gras=j >= 2)
+            if style:
+                _bordure_bas_cellule(cell, color=MARQUE_HEX, size=8)
                 _set_cell_background(cell, FOND_TUILE_HEX)
-            elif i % 2 == 0:
-                _set_cell_background(cell, ZEBRA_HEX)
+            else:
+                _bordure_bas_cellule(cell)
+                if i % 2 == 0:
+                    _set_cell_background(cell, ZEBRA_HEX)
     for j, largeur in enumerate(largeurs):
         table.columns[j].width = Cm(largeur)
 
 
 def _section_profil(doc, payload):
     p = payload.profil
-    _tuiles(
-        doc,
-        [
-            ("Revenus mensuels retenus", _eur(p.revenus_nets_mensuels_foyer + p.autres_revenus_mensuels), None),
-            ("Crédits en cours / mois", _eur(p.mensualites_credits_existants), None),
-        ],
-    )
+    saisies = payload.patrimoine or []
+    tuiles = [
+        ("Revenus mensuels retenus", _eur(p.revenus_nets_mensuels_foyer + p.autres_revenus_mensuels), None),
+        ("Crédits en cours / mois", _eur(p.mensualites_credits_existants), None),
+    ]
+    if saisies:
+        net = sum(ligne.valeur or 0 for ligne in saisies) - sum(ligne.reste_du or 0 for ligne in saisies)
+        tuiles.append(("Patrimoine net", _eur(net), None))
+    _tuiles(doc, tuiles)
     lignes = []
     if payload.nom_emprunteur:
         lignes.append(("Emprunteur", payload.nom_emprunteur))
@@ -1244,13 +1258,15 @@ def _section_profil(doc, payload):
     _texte(cell_revenus.paragraphs[0], "Revenus et engagements", 11, PRIMARY_COLOR, gras=True)
     cell_revenus.paragraphs[0].paragraph_format.space_after = Pt(6)
     _ajouter_table_kv(cell_revenus, lignes, largeur_cm=largeur_gauche)
-    _texte(cell_patrimoine.paragraphs[0], "Patrimoine du foyer (à compléter)", 11, PRIMARY_COLOR, gras=True)
+    titre = "Patrimoine du foyer" if saisies else "Patrimoine du foyer (à compléter)"
+    _texte(cell_patrimoine.paragraphs[0], titre, 11, PRIMARY_COLOR, gras=True)
     cell_patrimoine.paragraphs[0].paragraph_format.space_after = Pt(6)
-    _tableau_patrimoine(cell_patrimoine, largeur_droite)
+    _tableau_patrimoine(cell_patrimoine, largeur_droite, saisies)
     note = cell_patrimoine.add_paragraph()
     _texte(
         note,
-        "Valeur estimée à ce jour ; pour les biens financés à crédit, capital restant dû. "
+        ("Déclaré par l'emprunteur : valeur estimée" if saisies else "Valeur estimée")
+        + " à ce jour ; pour les biens financés à crédit, capital restant dû. "
         "Le patrimoine rassure la banque sur la capacité à faire face à un imprévu.",
         8.5,
         GRIS_COLOR,
