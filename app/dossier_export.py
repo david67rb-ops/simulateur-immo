@@ -1149,6 +1149,68 @@ def _section_annexes(doc, inp):
     )
 
 
+# Patrimoine du foyer : (nature, capital restant dû applicable). Tableau à
+# compléter par l'emprunteur dans Word.
+LIGNES_PATRIMOINE = [
+    ("Résidence principale", True),
+    ("Bien locatif ou résidence secondaire", True),
+    ("Bien locatif ou résidence secondaire", True),
+    ("Comptes courants et livrets", False),
+    ("Assurance-vie", False),
+    ("Compte-titres, PEA", False),
+    ("Épargne retraite (PER, PEE…)", False),
+    ("Autres (parts de SCI, crypto…)", False),
+]
+
+
+def _hauteur_ligne(row, hauteur_cm: float) -> None:
+    """Hauteur minimale de ligne : de la place pour écrire à la main ou
+    saisir dans Word."""
+    tr_pr = row._tr.get_or_add_trPr()
+    hauteur = OxmlElement("w:trHeight")
+    hauteur.set(qn("w:val"), str(round(hauteur_cm / 2.54 * 1440)))
+    hauteur.set(qn("w:hRule"), "atLeast")
+    tr_pr.append(hauteur)
+
+
+def _tableau_patrimoine(container, largeur_cm: float) -> None:
+    """Patrimoine du foyer, cellules de montant vides à compléter."""
+    largeurs = [largeur_cm * r for r in (0.42, 0.28, 0.15, 0.15)]
+    table = container.add_table(rows=0, cols=4)
+    table.style = "Normal Table"
+    table.autofit = False
+    entetes = ["Nature", "Établissement / détail", "Valeur", "Reste dû"]
+    lignes = [(nature, credit, False) for nature, credit in LIGNES_PATRIMOINE] + [("Total", True, True)]
+    for i, valeurs in enumerate([None] + lignes):
+        row = table.add_row()
+        _hauteur_ligne(row, 0.62 if i == 0 else 0.74)
+        for j, cell in enumerate(row.cells):
+            cell.width = Cm(largeurs[j])
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+            _cell_marges(cell, haut=30, bas=30, gauche=90, droite=90)
+            p = cell.paragraphs[0]
+            p.alignment = WD_ALIGN_PARAGRAPH.LEFT if j < 2 else WD_ALIGN_PARAGRAPH.RIGHT
+            if valeurs is None:
+                _texte(p, entetes[j], 8.5, BLANC, gras=True)
+                _set_cell_background(cell, MARQUE_HEX)
+                continue
+            nature, credit, est_total = valeurs
+            if j == 0:
+                _texte(p, nature, 9, TEXTE_FONCE if est_total else GRIS_LIBELLE, gras=est_total)
+            elif j == 3 and not credit:
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                _texte(p, "—", 9, GRIS_COLOR)
+            elif j == 2 or j == 3:
+                _texte(p, "€", 9, GRIS_COLOR)
+            _bordure_bas_cellule(cell, color=MARQUE_HEX if est_total else BORDURE_HEX, size=8 if est_total else 4)
+            if est_total:
+                _set_cell_background(cell, FOND_TUILE_HEX)
+            elif i % 2 == 0:
+                _set_cell_background(cell, ZEBRA_HEX)
+    for j, largeur in enumerate(largeurs):
+        table.columns[j].width = Cm(largeur)
+
+
 def _section_profil(doc, payload):
     p = payload.profil
     _tuiles(
@@ -1167,14 +1229,34 @@ def _section_profil(doc, payload):
         ("Mensualités de crédits existants", _eur(p.mensualites_credits_existants)),
         ("Total des revenus mensuels retenus", _eur(p.revenus_nets_mensuels_foyer + p.autres_revenus_mensuels), "total"),
     ]
-    image = charts.chart_barres(
-        [
-            ("Revenus mensuels retenus", p.revenus_nets_mensuels_foyer + p.autres_revenus_mensuels),
-            ("Mensualités de crédits existants", p.mensualites_credits_existants),
-        ],
-        "Profil de l'emprunteur",
+    # Revenus à gauche, patrimoine du foyer (à compléter) à droite.
+    largeur_gauche, ecart = 11.0, 0.8
+    largeur_droite = LARGEUR_CONTENU_CM - largeur_gauche - ecart
+    conteneur = doc.add_table(rows=1, cols=3)
+    conteneur.autofit = False
+    _supprimer_bordures(conteneur)
+    for j, (cell, largeur) in enumerate(zip(conteneur.rows[0].cells, (largeur_gauche, ecart, largeur_droite))):
+        conteneur.columns[j].width = Cm(largeur)
+        cell.width = Cm(largeur)
+        cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+        _cell_marges(cell, haut=0, bas=0, gauche=0, droite=0)
+    cell_revenus, _, cell_patrimoine = conteneur.rows[0].cells
+    _texte(cell_revenus.paragraphs[0], "Revenus et engagements", 11, PRIMARY_COLOR, gras=True)
+    cell_revenus.paragraphs[0].paragraph_format.space_after = Pt(6)
+    _ajouter_table_kv(cell_revenus, lignes, largeur_cm=largeur_gauche)
+    _texte(cell_patrimoine.paragraphs[0], "Patrimoine du foyer (à compléter)", 11, PRIMARY_COLOR, gras=True)
+    cell_patrimoine.paragraphs[0].paragraph_format.space_after = Pt(6)
+    _tableau_patrimoine(cell_patrimoine, largeur_droite)
+    note = cell_patrimoine.add_paragraph()
+    _texte(
+        note,
+        "Valeur estimée à ce jour ; pour les biens financés à crédit, capital restant dû. "
+        "Le patrimoine rassure la banque sur la capacité à faire face à un imprévu.",
+        8.5,
+        GRIS_COLOR,
+        italique=True,
     )
-    _ajouter_table_et_graphique(doc, lignes, image)
+    note.paragraph_format.space_before = Pt(5)
 
 
 def _lignes_credit(inp, resultat, montant_emprunte, is_achat_revente) -> list[tuple[str, str]]:
@@ -1672,7 +1754,7 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             payload.profil is not None,
             "profil",
             "Profil de l'emprunteur",
-            "Revenus et engagements du foyer pris en compte par la banque.",
+            "Revenus, engagements et patrimoine du foyer pris en compte par la banque.",
             lambda d: _section_profil(d, payload),
         ),
         (
