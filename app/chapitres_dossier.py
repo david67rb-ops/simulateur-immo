@@ -3,9 +3,9 @@ que l'interface puisse l'utiliser sans charger python-docx ni matplotlib."""
 from __future__ import annotations
 
 # Le dossier suit les questions du banquier, en quatre parties : le bien (où,
-# à quoi il ressemble, quoi, à quel prix ?), la rentabilité (le bien paie-t-il
+# à quoi il ressemble, à quel prix, quoi ?), la rentabilité (le bien paie-t-il
 # son crédit ?), le financement (qui emprunte, peut-il rembourser ?) et la
-# conclusion, qui s'ouvre sur la synthèse du projet.
+# conclusion, avec la synthèse du projet.
 PARTIES = ["Le bien", "La rentabilité", "Le financement", "Conclusion"]
 PARTIE_DU_CHAPITRE = {
     "carte": "Le bien",
@@ -31,8 +31,8 @@ PARTIE_DU_CHAPITRE = {
 CHAPITRES_OPTIONNELS = {
     "carte": "Le bien sur la carte",
     "photos": "Le bien en photos",
-    "presentation": "Le bien et le projet",
     "marche": "Étude de marché",
+    "presentation": "Le bien et le projet",
     "charges": "Recettes et charges annuelles",
     "loyer_mensuel": "Où va le loyer chaque mois",
     "saisonnalite": "Saisonnalité mois par mois",

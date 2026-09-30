@@ -1611,18 +1611,18 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             lambda d: _section_photos(d, payload.photos or []),
         ),
         (
-            True,
-            "presentation",
-            "Le bien et le projet",
-            "Le bien, son prix et la composition du coût total de l'opération.",
-            lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
-        ),
-        (
             avec_marche,
             "marche",
             "Étude de marché",
             "Le prix d'achat comparé aux ventes réelles de biens similaires autour du bien.",
             lambda d: _section_marche(d, inp, marche, is_achat_revente),
+        ),
+        (
+            True,
+            "presentation",
+            "Le bien et le projet",
+            "Le bien, son prix et la composition du coût total de l'opération.",
+            lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
         ),
         # --- La rentabilité
         (
