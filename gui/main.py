@@ -32,7 +32,7 @@ from app import (
 from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, LIGNES_PATRIMOINE, chapitres_disponibles
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
-from . import theme
+from . import apercus_dossier, offre, theme
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
 from .state import (
@@ -201,6 +201,8 @@ class BlocPrixVentes:
         self.expansion = ui.expansion("Voir les ventes comparables", icon="list").props("dense").classes(
             "w-full text-sm"
         )
+        # Le gratuit montre les conclusions, le dossier montre les preuves (voir offre).
+        self.renvoi_dossier = ui.label("").classes(theme.HINT_CLASSES)
         with self.expansion:
             self.table = ui.table(columns=self.COLONNES, rows=[], row_key="cle", pagination=10).props(
                 "dense flat"
@@ -243,7 +245,12 @@ class BlocPrixVentes:
         self.nb.set_text(str(n))
 
         ventes = comparables.get("ventes") or []
-        self.expansion.visible = bool(ventes)
+        self.expansion.visible = bool(ventes) and offre.DETAIL_DANS_LE_SIMULATEUR
+        self.renvoi_dossier.visible = bool(ventes) and not offre.DETAIL_DANS_LE_SIMULATEUR
+        self.renvoi_dossier.set_text(
+            "La liste détaillée des ventes comparables (adresse, date, prix, distance) figure dans le dossier de "
+            "financement (onglet Dossier)."
+        )
         self.expansion.text = (
             f"Voir les {n} ventes comparables" if n <= len(ventes) else f"Voir les {len(ventes)} ventes les plus récentes"
         )
@@ -430,6 +437,7 @@ def message_erreur(exc: Exception) -> str:
 @ui.page("/")
 def index_page() -> None:
     theme.apply_theme()
+    apercus_dossier.installer()
     # None = mode auto : suit le réglage clair/sombre de l'ordinateur ou du téléphone.
     dark_mode = ui.dark_mode(value=None)
 
@@ -1249,7 +1257,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
 
                     bloc_saison = ui.column().classes("w-full gap-2")
                     with bloc_saison:
-                        titre_saison = ui.label("Saisonnalité : cash-flow mois par mois (année 1)").classes(
+                        titre_saison = ui.label("Saisonnalité (année 1)").classes(
                             theme.SUBSECTION_TITLE_CLASSES
                         )
                         with ui.row().classes(theme.GRID_CLASSES):
@@ -1260,8 +1268,15 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             )
                             v_mois_deficitaires = theme.stat_card("Mois déficitaires")
                             v_meilleur_pire = theme.stat_card("Meilleur / pire mois")
-                        ui.echart({"series": []}).props('id="saison-chart"').classes("w-full h-80")
+                        ui.echart({"series": []}).props('id="saison-chart"').classes("w-full h-80").set_visibility(
+                            offre.DETAIL_DANS_LE_SIMULATEUR
+                        )
                         detail_saison = ui.label("").classes(theme.HINT_CLASSES)
+                        if not offre.DETAIL_DANS_LE_SIMULATEUR:
+                            ui.label(
+                                "Le détail mois par mois (occupation, recettes, dépenses et cash-flow) figure dans "
+                                "le dossier de financement (onglet Dossier)."
+                            ).classes(theme.HINT_CLASSES)
 
                     ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
                     table_regimes = ui.table(
@@ -1487,15 +1502,9 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                     apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
                     apercu_dossier.visible = False
                     with apercu_dossier:
-                        theme.subsection_title("Aperçu des données du dossier")
-                        table_apercu_dossier = ui.table(
-                            columns=[
-                                {"name": "k", "label": "", "field": "k", "align": "left"},
-                                {"name": "v", "label": "", "field": "v", "align": "left"},
-                            ],
-                            rows=[],
-                            row_key="k",
-                        ).props("hide-header").classes("w-full")
+                        theme.subsection_title("Aperçu du dossier")
+                        # Pages du rapport Word affichées dans le navigateur (docx-preview).
+                        apercu_pages = ui.element("div").classes("apercu-dossier w-full")
 
         ui.element("div").classes("espace-barre-mobile h-16")  # place pour le bandeau mobile
 
@@ -2120,7 +2129,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         bloc_saison.visible = inp.type_projet == schemas.TypeProjet.location_courte_duree
         if bloc_saison.visible:
             saison = saisonnalite.analyse_mensuelle(inp, resultat)
-            titre_saison.set_text(f"Saisonnalité : cash-flow mois par mois (année 1, profil {saison['profil'].lower()})")
+            titre_saison.set_text(f"Saisonnalité (année 1, profil {saison['profil'].lower()})")
             v_tresorerie_saison.set_text(eur(saison["tresorerie_securite"]))
             theme.colorer(v_tresorerie_saison, saison["tresorerie_securite"], inverse=True)
             v_mois_deficitaires.set_text(f"{saison['mois_deficitaires']} / 12")
@@ -2380,132 +2389,81 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             (libelle_mensualite, eur(mensualite) + "/mois"),
         ]
 
-    def _construire_apercu_dossier(inp, resultat, profil) -> list[tuple[str, str]]:
-        lignes = [
-            ("Type de projet", TYPE_PROJET_OPTIONS.get(inp.type_projet.value, inp.type_projet.value)),
-            ("Structure juridique", STRUCTURE_OPTIONS.get(inp.structure_juridique.value, inp.structure_juridique.value)),
-            ("Prix d'achat", eur(inp.prix_achat)),
-            ("Frais de notaire", eur(inp.frais_notaire)),
-            ("Montant des travaux", eur(inp.montant_travaux)),
-        ]
-        frais_bancaires = (
-            resultat["achat_revente"]["frais_bancaires"]
-            if inp.type_projet == schemas.TypeProjet.achat_revente
-            else resultat["frais_bancaires"]
+    async def generer_contenu_dossier() -> bytes:
+        """Le dossier Word tel qu'il sera téléchargé (aperçu et téléchargement)."""
+        # Importé ici plutôt qu'au démarrage : entraîne matplotlib (via
+        # app.charts_export), coûteux à charger et inutile tant qu'aucun
+        # dossier Word n'est généré.
+        from app import dossier_export
+
+        inp = build_simulation_input(sim_state)
+        profil_rempli = any(v for v in profil_state.values())
+        profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
+        if chapitres_state.get("marche") and not ctx.get("marche_dossier") and market_state.get("adresse"):
+            # Chapitre demandé mais marché pas encore analysé : on lance l'analyse.
+            statut = dossier_status.text
+            await on_analyser_marche()
+            dossier_status.set_text(statut)
+        marche = ctx.get("marche_dossier")
+        if (
+            marche
+            and chapitres_state.get("carte")
+            and inp.type_projet == schemas.TypeProjet.location_longue_duree
+            and marche["code_departement"] not in market_data.DEPARTEMENTS_SANS_DVF
+        ):
+            try:
+                geojson = await donnees_marche.carte_rentabilite(marche["code_departement"], marche["type_bien"])
+                marche = {**marche, "communes_geojson": geojson}
+            except Exception:  # noqa: BLE001 — sans contours, carte des ventes seule
+                pass
+        nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
+        adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
+        payload = schemas.ExportDossierInput(
+            simulation=inp,
+            profil=profil,
+            nom_emprunteur=nom_emprunteur,
+            adresse_bien=adresse_bien,
+            marche=marche,
+            chapitres=[cle for cle, inclus in chapitres_state.items() if inclus],
+            photos=[photo["jpeg"] for photo in ctx["photos_dossier"]],
+            patrimoine=lignes_patrimoine() or None,
         )
-        if frais_bancaires > 0:
-            lignes.append(("Frais bancaires (garantie, dossier, courtage)", eur(frais_bancaires)))
-        if inp.type_projet == schemas.TypeProjet.achat_revente:
-            ar = resultat["achat_revente"]
-            mensualite_projet = ar["frais_portage_interets"] / inp.duree_portage_mois
-            lignes += [
-                ("Coût total de l'opération", eur(ar["cout_total_acquisition"])),
-                ("Apport personnel", eur(ar["apport_reel"])),
-                *_lignes_credit(ar["montant_emprunte"], inp, "Mensualité (intérêts de portage)", mensualite_projet),
-                ("Marge nette prévisionnelle", eur(ar["marge_nette"])),
-                (libelle_rentabilite_ar(ar["apport_reel"]), pct(ar["rentabilite_operation_pct"])),
-            ]
-            loyers_mensuels = 0.0
-        else:
-            annee1 = resultat["annees"][0]
-            meilleur = resultat["meilleur_regime"]
-            mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
-            loyers_mensuels_apercu = annee1["loyers_bruts"] / 12
-            label_loyer = (
-                "Chiffre d'affaires mensuel"
-                if inp.type_projet == schemas.TypeProjet.location_courte_duree
-                else "Loyer appliqué (mensuel)"
-            )
-            lignes += [
-                ("Coût total de l'opération", eur(resultat.get("cout_total_acquisition", 0))),
-                ("Apport personnel", eur(resultat.get("apport_reel", 0))),
-                *_lignes_credit(resultat.get("montant_emprunte", 0), inp, "Mensualité du crédit", mensualite_projet),
-                (label_loyer, eur(loyers_mensuels_apercu) + "/mois"),
-                ("Régime fiscal le plus favorable", libelle_regime(meilleur)),
-                ("Cash-flow net mensuel", eur(annee1["cashflow_apres_impot"][meilleur] / 12)),
-                ("Rendement brut", pct(resultat.get("rendement_brut", 0))),
-                ("Rendement net", pct(resultat.get("rendement_net_charges", 0))),
-            ]
-            loyers_mensuels = annee1["loyers_bruts"] / 12
+        # Hors de la boucle d'événements : graphiques, cartes et fond IGN
+        # prennent quelques secondes, l'application reste réactive.
+        return await run.io_bound(dossier_export.generer_dossier_word, payload)
 
-        if profil is not None:
-            r = endet_mod.calculer_taux_endettement(
-                profil.revenus_nets_mensuels_foyer,
-                profil.autres_revenus_mensuels,
-                profil.mensualites_credits_existants,
-                mensualite_projet,
-                loyers_mensuels,
-            )
-            lignes.append(
-                (
-                    "Taux d'endettement",
-                    pct(r.taux_endettement, 1) + (" ⚠️ dépasse le seuil HCSF" if r.depasse_seuil else " (sous le seuil HCSF)"),
-                )
-            )
-        return lignes
-
-    def on_generer_apercu() -> None:
-        dossier_status.set_text("Génération de l'aperçu…")
+    async def on_generer_apercu() -> None:
+        dossier_status.set_text("Génération de l'aperçu du dossier…")
+        btn_generer_dossier.disable()
         try:
-            inp = build_simulation_input(sim_state)
-            resultat = clean_result(simulation.simuler(inp))
-            profil_rempli = any(v for v in profil_state.values())
-            profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
-            lignes = _construire_apercu_dossier(inp, resultat, profil)
+            contenu = await generer_contenu_dossier()
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
             return
-
-        table_apercu_dossier.rows = [{"k": k, "v": v} for k, v in lignes]
-        table_apercu_dossier.update()
+        finally:
+            btn_generer_dossier.enable()
+        url = apercus_dossier.publier(contenu)
         apercu_dossier.visible = True
         btn_telecharger_dossier.visible = True
-        dossier_status.set_text("Aperçu généré — vérifie les chiffres ci-dessous puis télécharge le dossier.")
+        try:
+            nb_pages = await ui.run_javascript(
+                f"return await window.afficherApercuDossier({json.dumps(url)}, 'c{apercu_pages.id}', "
+                f"{json.dumps(offre.PAGES_APERCU_LISIBLES)})",
+                timeout=60,
+            )
+        except TimeoutError:
+            nb_pages = None
+        dossier_status.set_text(
+            (f"Aperçu du dossier ({nb_pages} pages) : " if nb_pages else "Aperçu du dossier : ")
+            + "vérifie-le ci-dessous puis télécharge-le au format Word."
+        )
 
     btn_generer_dossier.on_click(on_generer_apercu)
 
     async def on_telecharger_dossier() -> None:
         dossier_status.set_text("Génération du dossier Word…")
         try:
-            # Importé ici plutôt qu'au démarrage : entraîne matplotlib (via
-            # app.charts_export), coûteux à charger et inutile tant qu'aucun
-            # dossier Word n'est généré.
-            from app import dossier_export
-
-            inp = build_simulation_input(sim_state)
-            profil_rempli = any(v for v in profil_state.values())
-            profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
-            if chapitres_state.get("marche") and not ctx.get("marche_dossier") and market_state.get("adresse"):
-                # Chapitre demandé mais marché pas encore analysé : on lance l'analyse.
-                await on_analyser_marche()
-                dossier_status.set_text("Génération du dossier Word…")
-            marche = ctx.get("marche_dossier")
-            if (
-                marche
-                and chapitres_state.get("carte")
-                and inp.type_projet == schemas.TypeProjet.location_longue_duree
-                and marche["code_departement"] not in market_data.DEPARTEMENTS_SANS_DVF
-            ):
-                try:
-                    geojson = await donnees_marche.carte_rentabilite(marche["code_departement"], marche["type_bien"])
-                    marche = {**marche, "communes_geojson": geojson}
-                except Exception:  # noqa: BLE001 — sans contours, carte des ventes seule
-                    pass
-            nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
-            adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
-            payload = schemas.ExportDossierInput(
-                simulation=inp,
-                profil=profil,
-                nom_emprunteur=nom_emprunteur,
-                adresse_bien=adresse_bien,
-                marche=marche,
-                chapitres=[cle for cle, inclus in chapitres_state.items() if inclus],
-                photos=[photo["jpeg"] for photo in ctx["photos_dossier"]],
-                patrimoine=lignes_patrimoine() or None,
-            )
-            # Hors de la boucle d'événements : graphiques, cartes et fond IGN
-            # prennent quelques secondes, l'application reste réactive.
-            contenu = await run.io_bound(dossier_export.generer_dossier_word, payload)
+            contenu = await generer_contenu_dossier()
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
             return

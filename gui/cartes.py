@@ -16,7 +16,7 @@ from nicegui import ui
 from app import donnees_marche
 from app.market_data import DEPARTEMENTS_SANS_DVF
 
-from . import theme
+from . import offre, theme
 
 VERT, GRIS, ROUGE, BIEN = "#2d6a4f", "#9aa3ad", "#b23a32", "#a8823b"
 CENTRE_FRANCE = (46.6, 2.4)
@@ -86,8 +86,11 @@ class CarteVentes:
                     "lat": v["lat"],
                     "lon": v["lon"],
                     "couleur": couleur,
+                    # Adresse, date et prix de chaque vente : réservés au dossier (voir offre).
                     "infobulle": f"<b>{_eur(v['prix_m2'])}/m²</b><br>{v['surface']} m², {_eur(v['prix'])}"
-                    f"<br>{v['date']} — {v['adresse']}",
+                    f"<br>{v['date']} — {v['adresse']}"
+                    if offre.DETAIL_DANS_LE_SIMULATEUR
+                    else f"<b>{_eur(v['prix_m2'])}/m²</b> · {v['surface']} m²",
                 }
             )
         code = """
