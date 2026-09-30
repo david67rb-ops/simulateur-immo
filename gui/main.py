@@ -2430,7 +2430,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             if (
                 marche
                 and chapitres_state.get("carte")
-                and inp.type_projet != schemas.TypeProjet.achat_revente
+                and inp.type_projet == schemas.TypeProjet.location_longue_duree
                 and marche["code_departement"] not in market_data.DEPARTEMENTS_SANS_DVF
             ):
                 try:

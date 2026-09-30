@@ -1011,15 +1011,15 @@ def _section_photos(doc, photos: list[bytes]):
             cell.width = Cm(largeur_colonne)
 
 
-def _section_carte(doc, inp, marche: dict, is_achat_revente: bool):
+def _section_carte(doc, marche: dict, carte_communes: bool):
     """Les cartes de l'onglet Marché : ventes comparables autour du bien et,
-    pour un projet locatif, rentabilité brute des communes du département."""
+    en location longue durée, rentabilité brute des communes du département."""
     from . import carte_export
     from .donnees_marche import periode_donnees
 
     comp = marche["comparables"]
     hauteur = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_NOTE_CM - MARGE_SECURITE_CM
-    geojson = None if is_achat_revente else marche.get("communes_geojson")
+    geojson = marche["communes_geojson"] if carte_communes else None
     if geojson:
         images = [
             carte_export.carte_ventes(marche["lat"], marche["lon"], comp),
@@ -1582,27 +1582,24 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
     marche = payload.marche
     avec_marche = bool(marche and (marche.get("comparables") or {}).get("prix_m2_moyen"))
     avertissements = resultat.get("avertissements") or []
+    # Carte de rentabilité des communes : loyers de location classique, sans
+    # objet en location courte durée ou en achat-revente.
+    carte_communes = inp.type_projet == TypeProjet.location_longue_duree and bool(
+        (marche or {}).get("communes_geojson")
+    )
 
     # (clé, titre, phrase d'explication sous le titre, contenu), dans l'ordre
     # du dossier ; la partie de chaque chapitre est dans PARTIE_DU_CHAPITRE.
     # La synthèse, les points d'attention et les mentions sont toujours inclus.
     candidats: list[tuple[bool, str, str, str, "callable"]] = [
-        # --- L'essentiel
-        (
-            True,
-            "synthese",
-            "Synthèse du projet",
-            "L'essentiel en un coup d'œil : verdict, indicateurs clés et "
-            + ("décomposition de la marge." if is_achat_revente else "répartition du loyer chaque mois."),
-            lambda d: _section_synthese(d, payload, inp, resultat, is_achat_revente),
-        ),
         # --- Le bien
         (
-            True,
-            "presentation",
-            "Le bien et le projet",
-            "Le bien, son prix et la composition du coût total de l'opération.",
-            lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
+            avec_marche and marche.get("lat") is not None,
+            "carte",
+            "Le bien sur la carte",
+            "Les ventes comparables autour du bien"
+            + (" et la rentabilité des communes du département." if carte_communes else "."),
+            lambda d: _section_carte(d, marche, carte_communes),
         ),
         (
             True,
@@ -1614,16 +1611,11 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             lambda d: _section_photos(d, payload.photos or []),
         ),
         (
-            avec_marche and marche.get("lat") is not None,
-            "carte",
-            "Le bien sur la carte",
-            "Les ventes comparables autour du bien"
-            + (
-                "."
-                if is_achat_revente or not (marche or {}).get("communes_geojson")
-                else " et la rentabilité des communes du département."
-            ),
-            lambda d: _section_carte(d, inp, marche, is_achat_revente),
+            True,
+            "presentation",
+            "Le bien et le projet",
+            "Le bien, son prix et la composition du coût total de l'opération.",
+            lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
         ),
         (
             avec_marche,
@@ -1697,6 +1689,14 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             "Points d'attention",
             "Éléments à vérifier avant de s'engager.",
             lambda d: _section_avertissements(d, avertissements),
+        ),
+        (
+            True,
+            "synthese",
+            "Synthèse du projet",
+            "Le bilan du projet : verdict, indicateurs clés et "
+            + ("décomposition de la marge." if is_achat_revente else "répartition du loyer chaque mois."),
+            lambda d: _section_synthese(d, payload, inp, resultat, is_achat_revente),
         ),
         (
             inp.avec_credit,

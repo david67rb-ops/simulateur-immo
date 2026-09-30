@@ -2,15 +2,15 @@
 que l'interface puisse l'utiliser sans charger python-docx ni matplotlib."""
 from __future__ import annotations
 
-# Le dossier suit les questions du banquier, en cinq parties : l'essentiel,
-# le bien (quoi, où, à quel prix ?), la rentabilité (le bien paie-t-il son
-# crédit ?), le financement (qui emprunte, peut-il rembourser ?), conclusion.
-PARTIES = ["L'essentiel", "Le bien", "La rentabilité", "Le financement", "Conclusion"]
+# Le dossier suit les questions du banquier, en quatre parties : le bien (où,
+# à quoi il ressemble, quoi, à quel prix ?), la rentabilité (le bien paie-t-il
+# son crédit ?), le financement (qui emprunte, peut-il rembourser ?) et la
+# conclusion, qui s'ouvre sur la synthèse du projet.
+PARTIES = ["Le bien", "La rentabilité", "Le financement", "Conclusion"]
 PARTIE_DU_CHAPITRE = {
-    "synthese": "L'essentiel",
-    "presentation": "Le bien",
-    "photos": "Le bien",
     "carte": "Le bien",
+    "photos": "Le bien",
+    "presentation": "Le bien",
     "marche": "Le bien",
     "charges": "La rentabilité",
     "loyer_mensuel": "La rentabilité",
@@ -21,6 +21,7 @@ PARTIE_DU_CHAPITRE = {
     "profil": "Le financement",
     "endettement": "Le financement",
     "avertissements": "Conclusion",
+    "synthese": "Conclusion",
     "annexes": "Conclusion",
     "mentions": "Conclusion",
 }
@@ -28,9 +29,9 @@ PARTIE_DU_CHAPITRE = {
 # Chapitres que l'utilisateur peut retirer du rapport (clé : titre), dans
 # l'ordre du dossier, et formules prêtes à l'emploi.
 CHAPITRES_OPTIONNELS = {
-    "presentation": "Le bien et le projet",
-    "photos": "Le bien en photos",
     "carte": "Le bien sur la carte",
+    "photos": "Le bien en photos",
+    "presentation": "Le bien et le projet",
     "marche": "Étude de marché",
     "charges": "Recettes et charges annuelles",
     "loyer_mensuel": "Où va le loyer chaque mois",
