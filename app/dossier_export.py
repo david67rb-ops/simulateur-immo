@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import io
+import re
 import threading
 from datetime import datetime
 
 from docx import Document
 from docx.shared import Cm, Mm, Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
+from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT, WD_TAB_LEADER
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.enum.section import WD_ORIENT, WD_SECTION
 from docx.oxml import OxmlElement, parse_xml
@@ -18,7 +19,7 @@ from . import charts_export as charts
 from . import analyse
 from . import endettement as endet_mod
 from . import photos_dossier, saisonnalite
-from .chapitres_dossier import CHAPITRES_OBLIGATOIRES
+from .chapitres_dossier import CHAPITRES_OBLIGATOIRES, PARTIE_DU_CHAPITRE, PARTIES
 from .polices_word import integrer_polices
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
@@ -38,6 +39,7 @@ BLANC = RGBColor(0xFF, 0xFF, 0xFF)
 ROUGE = RGBColor(0xB2, 0x3A, 0x32)
 VERT = RGBColor(0x2D, 0x6A, 0x4F)
 LAITON_CLAIR = RGBColor(0xE9, 0xD8, 0xB0)
+LAITON = RGBColor(0xA8, 0x82, 0x3B)
 MARQUE_HEX = "1B3358"
 LAITON_HEX = "A8823B"
 VERT_HEX = "2D6A4F"
@@ -59,10 +61,11 @@ LARGEUR_CONTENU_CM = LARGEUR_PAGE_CM - 2 * MARGE_CM
 # chapitre et la rangée de tuiles, avec une marge de sécurité (le rendu exact
 # dépend de Word). Le bloc tableau + graphique doit tenir dans ce reste.
 HAUTEUR_UTILE_CM = HAUTEUR_PAGE_CM - 2 * MARGE_CM
-HAUTEUR_ENTETE_CHAPITRE_CM = 2.2
+HAUTEUR_ENTETE_CHAPITRE_CM = 2.6  # dont le nom de la partie
 HAUTEUR_TUILES_CM = 2.1
 HAUTEUR_NOTE_CM = 1.0
 HAUTEUR_VERDICT_CM = 2.6
+HAUTEUR_PHRASE_CM = 1.5  # le projet en une phrase (deux lignes)
 MARGE_SECURITE_CM = 1.0
 HAUTEUR_BLOC_CM = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_TUILES_CM - MARGE_SECURITE_CM
 # Hauteur d'une ligne de tableau clé/valeur selon sa densité (cm).
@@ -303,8 +306,20 @@ def _bandeau_verdict(doc, verdict: dict) -> None:
     _espace(doc, 10)
 
 
-def _entete_chapitre(doc, numero: int, titre: str, description: str | None) -> None:
-    """Numéro dans un pavé vert, titre et phrase d'explication à côté."""
+def _signet(paragraphe, nom: str, identifiant: int) -> None:
+    """Signet Word autour du paragraphe : cible des liens du sommaire."""
+    debut = OxmlElement("w:bookmarkStart")
+    debut.set(qn("w:id"), str(identifiant))
+    debut.set(qn("w:name"), nom)
+    fin = OxmlElement("w:bookmarkEnd")
+    fin.set(qn("w:id"), str(identifiant))
+    paragraphe._p.insert(0, debut)
+    paragraphe._p.append(fin)
+
+
+def _entete_chapitre(doc, numero: int, titre: str, description: str | None, partie: str | None = None) -> None:
+    """Numéro dans un pavé bleu, nom de la partie, titre et phrase
+    d'explication à côté."""
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
     _supprimer_bordures(table)
@@ -321,7 +336,12 @@ def _entete_chapitre(doc, numero: int, titre: str, description: str | None) -> N
     _texte(p_num, f"{numero:02d}", 22, LAITON_CLAIR, gras=True)
     _cell_marges(cell_titre, haut=40, bas=60, gauche=260, droite=60)
     _bordures_cellule(cell_titre, bottom=(MARQUE_HEX, 12))
-    _texte(cell_titre.paragraphs[0], titre, 20, TEXTE_FONCE, gras=True)
+    p_titre = cell_titre.paragraphs[0]
+    if partie:
+        _texte(p_titre, partie.upper(), 8, LAITON, gras=True)
+        p_titre = cell_titre.add_paragraph()
+    _texte(p_titre, titre, 20, TEXTE_FONCE, gras=True)
+    _signet(p_titre, f"chapitre_{numero:02d}", numero)
     if description:
         p = cell_titre.add_paragraph()
         p.paragraph_format.space_before = Pt(1)
@@ -407,6 +427,71 @@ def _mettre_en_page(section, centrer: bool = False) -> None:
 
 def _configurer_page(doc: Document) -> None:
     _mettre_en_page(doc.sections[0], centrer=True)
+
+
+def _lien_interne(paragraphe, signet: str) -> None:
+    """Transforme les runs du paragraphe en lien vers un signet du document."""
+    lien = OxmlElement("w:hyperlink")
+    lien.set(qn("w:anchor"), signet)
+    lien.set(qn("w:history"), "1")
+    for run in list(paragraphe._p.findall(qn("w:r"))):
+        lien.append(run)
+    paragraphe._p.append(lien)
+
+
+def _ajouter_sommaire(doc: Document, sections: list[tuple]) -> None:
+    """Sommaire sur une page, parties en deux colonnes. Chaque chapitre tient
+    sur une page (vérifié par les tests de pagination) : le chapitre n
+    commence page n + 2 (après la couverture et le sommaire). Chaque ligne
+    renvoie au chapitre d'un clic."""
+    _nouvelle_page_chapitre(doc)
+    p = doc.add_paragraph()
+    _texte(p, "Sommaire", 24, TEXTE_FONCE, gras=True)
+    p.paragraph_format.space_after = Pt(4)
+    _add_bottom_border(p, color=MARQUE_HEX, size=12)
+    _espace(doc, 24)
+
+    parties: dict[str, list[tuple[int, str]]] = {}
+    for numero, (cle, titre, _description, _fn) in enumerate(sections, start=1):
+        parties.setdefault(PARTIE_DU_CHAPITRE[cle], []).append((numero, titre))
+    ordre = [partie for partie in PARTIES if partie in parties]
+    # Deux colonnes équilibrées en nombre de lignes, sans couper une partie.
+    lignes = [len(parties[partie]) + 1.5 for partie in ordre]
+    total, cumul, coupure = sum(lignes), 0.0, len(ordre)
+    for i, n in enumerate(lignes):
+        if cumul + n / 2 > total / 2:
+            coupure = max(i, 1)
+            break
+        cumul += n
+    colonnes = [ordre[:coupure], ordre[coupure:]]
+
+    largeur_colonne = (LARGEUR_CONTENU_CM - 1.5) / 2
+    table = doc.add_table(rows=1, cols=3)
+    table.autofit = False
+    _supprimer_bordures(table)
+    for j, largeur in enumerate((largeur_colonne, 1.5, largeur_colonne)):
+        table.columns[j].width = Cm(largeur)
+        table.rows[0].cells[j].width = Cm(largeur)
+    for cell, parties_colonne in zip((table.rows[0].cells[0], table.rows[0].cells[2]), colonnes):
+        cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+        _cell_marges(cell, haut=0, bas=0, gauche=0, droite=0)
+        premier = True
+        for partie in parties_colonne:
+            p_partie = cell.paragraphs[0] if premier else cell.add_paragraph()
+            _texte(p_partie, partie.upper(), 9.5, LAITON, gras=True)
+            p_partie.paragraph_format.space_before = Pt(0 if premier else 22)
+            p_partie.paragraph_format.space_after = Pt(6)
+            premier = False
+            for numero, titre in parties[partie]:
+                p_ligne = cell.add_paragraph()
+                taquets = p_ligne.paragraph_format.tab_stops
+                taquets.add_tab_stop(Cm(1.2))
+                taquets.add_tab_stop(Cm(largeur_colonne - 0.1), WD_TAB_ALIGNMENT.RIGHT, WD_TAB_LEADER.DOTS)
+                _texte(p_ligne, f"{numero:02d}", 13, PRIMARY_COLOR, gras=True)
+                _texte(p_ligne, f"\t{titre}", 13, TEXTE_FONCE)
+                _texte(p_ligne, f"\t{numero + 2}", 13, GRIS_LIBELLE)
+                p_ligne.paragraph_format.space_after = Pt(9)  # après _texte, qui le remet à 0
+                _lien_interne(p_ligne, f"chapitre_{numero:02d}")
 
 
 def _nouvelle_page_chapitre(doc: Document):
@@ -598,7 +683,54 @@ def _image_pont_marge(resultat: dict) -> bytes:
     )
 
 
+def _lieu(adresse: str | None) -> str:
+    """« à Lyon (69002) » à partir d'une adresse se terminant par le code
+    postal et la commune ; vide sinon."""
+    trouve = re.search(r"\b(\d{5})\s+([^,\d][^,]*)$", (adresse or "").strip())
+    return f" à {trouve.group(2).strip()} ({trouve.group(1)})" if trouve else ""
+
+
+def phrase_projet(payload, inp, resultat: dict, is_achat_revente: bool) -> str:
+    """Le projet en une phrase, en tête de la synthèse : ce que le banquier
+    lit en premier."""
+    bien = "un appartement" if inp.type_bien.value == "appartement" else "une maison"
+    neuf = " neuf" if inp.bien_neuf and not is_achat_revente else ""
+    adresse = payload.adresse_bien or (payload.marche or {}).get("adresse")
+    phrase = f"Achat d'{bien}{neuf} de {inp.surface_m2:.0f} m²{_lieu(adresse)} pour {_eur(inp.prix_achat)}"
+    if inp.montant_travaux > 0:
+        phrase += f", plus {_eur(inp.montant_travaux)} de travaux"
+    cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
+    if montant_emprunte > 0:
+        taux = f"{inp.taux_credit_annuel * 100:.2f}".replace(".", ",")
+        phrase += (
+            f", financé à {montant_emprunte / cout_total * 100:.0f} % par un crédit sur {inp.duree_credit_annees} ans"
+            f" à {taux} %"
+        )
+        if apport > 0:
+            phrase += f" et un apport de {_eur(apport)}"
+    else:
+        phrase += ", financé sans crédit"
+    if is_achat_revente:
+        ar = resultat["achat_revente"]
+        phrase += f", pour une revente à {_eur(ar['prix_revente'])} après {inp.duree_portage_mois} mois"
+    elif inp.type_projet == TypeProjet.location_courte_duree:
+        mois = saisonnalite.valeurs_mensuelles(inp)
+        occupation, prix = saisonnalite.moyennes_annuelles([o for o, _ in mois], [p for _, p in mois])
+        phrase += (
+            f", en location courte durée à {_eur(prix)} la nuit en moyenne pour {occupation * 100:.0f} % d'occupation"
+        )
+    else:
+        phrase += (
+            f", loué {_eur(inp.loyer_mensuel_hors_charges)} par mois hors charges"
+            + (" en meublé" if inp.regime_location.value == "meublee" else " vide")
+        )
+    return phrase + "."
+
+
 def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
+    p_phrase = doc.add_paragraph()
+    _texte(p_phrase, phrase_projet(payload, inp, resultat, is_achat_revente), 12.5, TEXTE_FONCE)
+    p_phrase.paragraph_format.space_after = Pt(10)
     _bandeau_verdict(doc, analyse.verdict(inp, resultat))
     cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
     tuile_endettement = None
@@ -650,7 +782,12 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
         lignes.append(("Mensualité du crédit (hors assurance)", _eur(resultat["mensualite_credit_hors_assurance"]) + "/mois"))
     lignes += lignes_projet
     _ajouter_table_et_graphique(
-        doc, lignes, image, largeur_table_cm=13.4, largeur_image_cm=11.0, hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_VERDICT_CM
+        doc,
+        lignes,
+        image,
+        largeur_table_cm=13.4,
+        largeur_image_cm=11.0,
+        hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_VERDICT_CM - HAUTEUR_PHRASE_CM,
     )
 
 
@@ -1442,24 +1579,33 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
     _ajouter_page_de_garde(doc, payload, inp, resultat, is_achat_revente)
 
     annee1 = None if is_achat_revente else resultat["annees"][0]
+    marche = payload.marche
+    avec_marche = bool(marche and (marche.get("comparables") or {}).get("prix_m2_moyen"))
+    avertissements = resultat.get("avertissements") or []
 
-    # (clé, titre, phrase d'explication sous le titre, contenu). La synthèse,
-    # les points d'attention et les mentions sont toujours inclus.
-    sections: list[tuple[str, str, str, "callable"]] = [
+    # (clé, titre, phrase d'explication sous le titre, contenu), dans l'ordre
+    # du dossier ; la partie de chaque chapitre est dans PARTIE_DU_CHAPITRE.
+    # La synthèse, les points d'attention et les mentions sont toujours inclus.
+    candidats: list[tuple[bool, str, str, str, "callable"]] = [
+        # --- L'essentiel
         (
+            True,
             "synthese",
             "Synthèse du projet",
             "L'essentiel en un coup d'œil : verdict, indicateurs clés et "
             + ("décomposition de la marge." if is_achat_revente else "répartition du loyer chaque mois."),
             lambda d: _section_synthese(d, payload, inp, resultat, is_achat_revente),
         ),
+        # --- Le bien
         (
+            True,
             "presentation",
             "Le bien et le projet",
             "Le bien, son prix et la composition du coût total de l'opération.",
             lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
         ),
         (
+            True,
             "photos",
             "Le bien en photos",
             "Photos du bien."
@@ -1467,134 +1613,117 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             else "Emplacements prévus pour les photos du bien : clic droit sur un cadre › Modifier l'image.",
             lambda d: _section_photos(d, payload.photos or []),
         ),
-    ]
-    marche = payload.marche
-    if marche and (marche.get("comparables") or {}).get("prix_m2_moyen"):
-        sections.append(
-            (
-                "marche",
-                "Étude de marché",
-                "Le prix d'achat comparé aux ventes réelles de biens similaires autour du bien.",
-                lambda d: _section_marche(d, inp, marche, is_achat_revente),
-            )
-        )
-        if marche.get("lat") is not None:
-            sections.append(
-                (
-                    "carte",
-                    "Le bien sur la carte",
-                    "Les ventes comparables autour du bien"
-                    + (
-                        "."
-                        if is_achat_revente or not marche.get("communes_geojson")
-                        else " et la rentabilité des communes du département."
-                    ),
-                    lambda d: _section_carte(d, inp, marche, is_achat_revente),
-                )
-            )
-    if payload.profil is not None:
-        sections.append(
-            (
-                "profil",
-                "Profil de l'emprunteur",
-                "Revenus et engagements du foyer pris en compte par la banque.",
-                lambda d: _section_profil(d, payload),
-            )
-        )
-    sections.append(
         (
+            avec_marche and marche.get("lat") is not None,
+            "carte",
+            "Le bien sur la carte",
+            "Les ventes comparables autour du bien"
+            + (
+                "."
+                if is_achat_revente or not (marche or {}).get("communes_geojson")
+                else " et la rentabilité des communes du département."
+            ),
+            lambda d: _section_carte(d, inp, marche, is_achat_revente),
+        ),
+        (
+            avec_marche,
+            "marche",
+            "Étude de marché",
+            "Le prix d'achat comparé aux ventes réelles de biens similaires autour du bien.",
+            lambda d: _section_marche(d, inp, marche, is_achat_revente),
+        ),
+        # --- La rentabilité
+        (
+            not is_achat_revente,
+            "charges",
+            "Recettes et charges annuelles",
+            "Ce que rapporte le bien et ce qu'il coûte chaque année.",
+            lambda d: _section_charges(d, inp, annee1, is_meublee, is_lcd),
+        ),
+        (
+            not is_achat_revente,
+            "loyer_mensuel",
+            "Où va le loyer chaque mois",
+            "Du loyer encaissé au cash-flow net : charges, crédit et impôts, mois par mois.",
+            lambda d: _section_loyer_mensuel(d, resultat),
+        ),
+        (
+            is_lcd,
+            "saisonnalite",
+            "Saisonnalité mois par mois",
+            "Recettes, dépenses et cash-flow de chaque mois de la première année.",
+            lambda d: _section_saisonnalite(d, inp, resultat),
+        ),
+        (
+            not is_achat_revente,
+            "patrimoine",
+            "Évolution du patrimoine",
+            "Comment le patrimoine se construit au fil du remboursement du crédit.",
+            lambda d: _section_patrimoine(d, inp, resultat),
+        ),
+        (
+            is_achat_revente,
+            "achat_revente",
+            "L'opération d'achat-revente",
+            "Du prix d'achat à la marge nette : frais de portage, revente et fiscalité.",
+            lambda d: _section_achat_revente_detail(d, inp, resultat),
+        ),
+        # --- Le financement
+        (
+            True,
             "financement",
             "Plan de financement",
             "Comment l'opération est financée : apport, crédit et mensualités.",
             lambda d: _section_financement(d, inp, resultat, is_achat_revente),
-        )
-    )
-    if is_achat_revente:
-        sections.append(
-            (
-                "achat_revente",
-                "L'opération d'achat-revente",
-                "Du prix d'achat à la marge nette : frais de portage, revente et fiscalité.",
-                lambda d: _section_achat_revente_detail(d, inp, resultat),
-            )
-        )
-    else:
-        sections.append(
-            (
-                "charges",
-                "Recettes et charges annuelles",
-                "Ce que rapporte le bien et ce qu'il coûte chaque année.",
-                lambda d: _section_charges(d, inp, annee1, is_meublee, is_lcd),
-            )
-        )
-        sections.append(
-            (
-                "loyer_mensuel",
-                "Où va le loyer chaque mois",
-                "Du loyer encaissé au cash-flow net : charges, crédit et impôts, mois par mois.",
-                lambda d: _section_loyer_mensuel(d, resultat),
-            )
-        )
-        if is_lcd:
-            sections.append(
-                (
-                    "saisonnalite",
-                    "Saisonnalité mois par mois",
-                    "Recettes, dépenses et cash-flow de chaque mois de la première année.",
-                    lambda d: _section_saisonnalite(d, inp, resultat),
-                )
-            )
-        sections.append(
-            (
-                "patrimoine",
-                "Évolution du patrimoine",
-                "Comment le patrimoine se construit au fil du remboursement du crédit.",
-                lambda d: _section_patrimoine(d, inp, resultat),
-            )
-        )
-    if payload.profil is not None:
-        sections.append(
-            (
-                "endettement",
-                "Taux d'endettement",
-                "Capacité d'emprunt du foyer au regard de la règle des 35 % du HCSF.",
-                lambda d: _section_endettement(d, inp, payload, resultat, is_achat_revente),
-            )
-        )
-    avertissements = resultat.get("avertissements") or []
-    if avertissements:
-        sections.append(
-            (
-                "avertissements",
-                "Points d'attention",
-                "Éléments à vérifier avant de s'engager.",
-                lambda d: _section_avertissements(d, avertissements),
-            )
-        )
-    sections.append(
+        ),
         (
+            payload.profil is not None,
+            "profil",
+            "Profil de l'emprunteur",
+            "Revenus et engagements du foyer pris en compte par la banque.",
+            lambda d: _section_profil(d, payload),
+        ),
+        (
+            payload.profil is not None,
+            "endettement",
+            "Taux d'endettement",
+            "Capacité d'emprunt du foyer au regard de la règle des 35 % du HCSF.",
+            lambda d: _section_endettement(d, inp, payload, resultat, is_achat_revente),
+        ),
+        # --- Conclusion
+        (
+            bool(avertissements),
+            "avertissements",
+            "Points d'attention",
+            "Éléments à vérifier avant de s'engager.",
+            lambda d: _section_avertissements(d, avertissements),
+        ),
+        (
+            inp.avec_credit,
+            "annexes",
+            "Pièces à fournir à la banque",
+            "Les documents à réunir pour que la banque ouvre l'étude de financement.",
+            lambda d: _section_annexes(d, inp),
+        ),
+        (
+            True,
             "mentions",
             "Mentions et méthodologie",
             "Hypothèses de calcul et limites de l'estimation.",
             lambda d: _section_mentions(d),
-        )
-    )
-    if inp.avec_credit:
-        sections.append(
-            (
-                "annexes",
-                "Annexe : pièces à fournir à la banque",
-                "Les documents à réunir pour que la banque ouvre l'étude de financement.",
-                lambda d: _section_annexes(d, inp),
-            )
-        )
-    if payload.chapitres is not None:
-        retenus = set(payload.chapitres) | CHAPITRES_OBLIGATOIRES
-        sections = [section for section in sections if section[0] in retenus]
+        ),
+    ]
+    retenus = None if payload.chapitres is None else set(payload.chapitres) | CHAPITRES_OBLIGATOIRES
+    sections = [
+        (cle, titre, description, fn)
+        for present, cle, titre, description, fn in candidats
+        if present and (retenus is None or cle in retenus)
+    ]
 
-    for i, (_cle, titre, description, fn) in enumerate(sections, start=1):
+    _ajouter_sommaire(doc, sections)
+    for i, (cle, titre, description, fn) in enumerate(sections, start=1):
         _nouvelle_page_chapitre(doc)
-        _entete_chapitre(doc, i, titre, description)
+        _entete_chapitre(doc, i, titre, description, partie=PARTIE_DU_CHAPITRE[cle])
         fn(doc)
 
     integrer_polices(doc)

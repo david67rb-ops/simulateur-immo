@@ -2,58 +2,51 @@
 que l'interface puisse l'utiliser sans charger python-docx ni matplotlib."""
 from __future__ import annotations
 
+# Le dossier suit les questions du banquier, en cinq parties : l'essentiel,
+# le bien (quoi, où, à quel prix ?), la rentabilité (le bien paie-t-il son
+# crédit ?), le financement (qui emprunte, peut-il rembourser ?), conclusion.
+PARTIES = ["L'essentiel", "Le bien", "La rentabilité", "Le financement", "Conclusion"]
+PARTIE_DU_CHAPITRE = {
+    "synthese": "L'essentiel",
+    "presentation": "Le bien",
+    "photos": "Le bien",
+    "carte": "Le bien",
+    "marche": "Le bien",
+    "charges": "La rentabilité",
+    "loyer_mensuel": "La rentabilité",
+    "saisonnalite": "La rentabilité",
+    "patrimoine": "La rentabilité",
+    "achat_revente": "La rentabilité",
+    "financement": "Le financement",
+    "profil": "Le financement",
+    "endettement": "Le financement",
+    "avertissements": "Conclusion",
+    "annexes": "Conclusion",
+    "mentions": "Conclusion",
+}
+
 # Chapitres que l'utilisateur peut retirer du rapport (clé : titre), dans
 # l'ordre du dossier, et formules prêtes à l'emploi.
 CHAPITRES_OPTIONNELS = {
     "presentation": "Le bien et le projet",
     "photos": "Le bien en photos",
-    "marche": "Étude de marché",
     "carte": "Le bien sur la carte",
-    "profil": "Profil de l'emprunteur",
-    "financement": "Plan de financement",
-    "achat_revente": "L'opération d'achat-revente",
+    "marche": "Étude de marché",
     "charges": "Recettes et charges annuelles",
     "loyer_mensuel": "Où va le loyer chaque mois",
     "saisonnalite": "Saisonnalité mois par mois",
     "patrimoine": "Évolution du patrimoine",
+    "achat_revente": "L'opération d'achat-revente",
+    "financement": "Plan de financement",
+    "profil": "Profil de l'emprunteur",
     "endettement": "Taux d'endettement",
     "annexes": "Pièces à fournir à la banque",
 }
 CHAPITRES_OBLIGATOIRES = {"synthese", "avertissements", "mentions"}
 FORMULES_DOSSIER = {
     "complet": ("Complet", set(CHAPITRES_OPTIONNELS)),
-    "banque": (
-        "Banque",
-        {
-            "presentation",
-            "photos",
-            "marche",
-            "carte",
-            "profil",
-            "financement",
-            "achat_revente",
-            "charges",
-            "loyer_mensuel",
-            "saisonnalite",
-            "endettement",
-            "annexes",
-        },
-    ),
-    "personnel": (
-        "Personnel",
-        {
-            "presentation",
-            "photos",
-            "marche",
-            "carte",
-            "financement",
-            "achat_revente",
-            "charges",
-            "loyer_mensuel",
-            "saisonnalite",
-            "patrimoine",
-        },
-    ),
+    "banque": ("Banque", set(CHAPITRES_OPTIONNELS) - {"patrimoine"}),
+    "personnel": ("Personnel", set(CHAPITRES_OPTIONNELS) - {"profil", "endettement", "annexes"}),
 }
 
 
