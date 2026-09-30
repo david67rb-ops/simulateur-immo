@@ -607,7 +607,16 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     dossier_meta_state = default_dossier_meta_state()
     patrimoine_state = default_patrimoine_state()
     chapitres_state = {cle: True for cle in CHAPITRES_OPTIONNELS}
-    ctx = {"last_market_result": None, "commune": None, "dept": None, "marche_dossier": None, "photos_dossier": []}
+    ctx = {
+        "last_market_result": None,
+        "commune": None,
+        "dept": None,
+        "marche_dossier": None,
+        "photos_dossier": [],
+        # Le prix d'achat de départ est un exemple : on ne le compare au marché
+        # qu'une fois saisi par le client ou repris d'une annonce.
+        "prix_renseigne": False,
+    }
     refs: dict[str, ui.element] = {}
 
     # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
@@ -1820,6 +1829,18 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         frais_notaire_input.set_value(sim_state["frais_notaire"])
 
     prix_achat_input.on_value_change(lambda e: recalc_notaire())
+
+    def comparer_prix_au_marche() -> None:
+        prix = sim_state.get("prix_achat") if ctx["prix_renseigne"] else None
+        bloc_prix.comparer(prix, sim_state.get("surface_m2"))
+
+    def on_prix_saisi() -> None:
+        ctx["prix_renseigne"] = True
+        comparer_prix_au_marche()
+
+    # Saisie au clavier uniquement (les mises à jour par le programme
+    # n'émettent pas cet événement).
+    prix_achat_input.on("update:model-value", on_prix_saisi)
     bien_neuf_switch.on_value_change(lambda e: recalc_notaire())
     recalc_notaire()
 
@@ -1852,6 +1873,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         if donnees.get("prix_achat"):
             sim_state["prix_achat"] = round(donnees["prix_achat"])
             prix_achat_input.set_value(sim_state["prix_achat"])
+            ctx["prix_renseigne"] = True
             recalc_notaire()
 
         manquants = donnees.get("champs_manquants") or []
@@ -1927,7 +1949,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
 
         bloc_prix.afficher(comparables, geo)
-        bloc_prix.comparer(sim_state.get("prix_achat"), sim_state.get("surface_m2"))
+        comparer_prix_au_marche()
 
         loyer = loyer or {}
         nuitee = nuitee or {}
@@ -2312,7 +2334,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
         synchroniser_saisonnalite()
         signature = json.dumps(sim_state, sort_keys=True, default=str)
         if signature != derniere_saisie["signature"]:
-            bloc_prix.comparer(sim_state.get("prix_achat"), sim_state.get("surface_m2"))
+            comparer_prix_au_marche()
         if signature == derniere_saisie["signature"]:
             return
         derniere_saisie["signature"] = signature
