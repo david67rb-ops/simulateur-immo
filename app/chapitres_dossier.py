@@ -6,7 +6,9 @@ from __future__ import annotations
 # l'ordre du dossier, et formules prêtes à l'emploi.
 CHAPITRES_OPTIONNELS = {
     "presentation": "Le bien et le projet",
+    "photos": "Le bien en photos",
     "marche": "Étude de marché",
+    "carte": "Le bien sur la carte",
     "profil": "Profil de l'emprunteur",
     "financement": "Plan de financement",
     "achat_revente": "L'opération d'achat-revente",
@@ -15,6 +17,7 @@ CHAPITRES_OPTIONNELS = {
     "saisonnalite": "Saisonnalité mois par mois",
     "patrimoine": "Évolution du patrimoine",
     "endettement": "Taux d'endettement",
+    "annexes": "Pièces à fournir à la banque",
 }
 CHAPITRES_OBLIGATOIRES = {"synthese", "avertissements", "mentions"}
 FORMULES_DOSSIER = {
@@ -23,7 +26,9 @@ FORMULES_DOSSIER = {
         "Banque",
         {
             "presentation",
+            "photos",
             "marche",
+            "carte",
             "profil",
             "financement",
             "achat_revente",
@@ -31,11 +36,23 @@ FORMULES_DOSSIER = {
             "loyer_mensuel",
             "saisonnalite",
             "endettement",
+            "annexes",
         },
     ),
     "personnel": (
         "Personnel",
-        {"presentation", "marche", "financement", "achat_revente", "charges", "loyer_mensuel", "saisonnalite", "patrimoine"},
+        {
+            "presentation",
+            "photos",
+            "marche",
+            "carte",
+            "financement",
+            "achat_revente",
+            "charges",
+            "loyer_mensuel",
+            "saisonnalite",
+            "patrimoine",
+        },
     ),
 }
 
@@ -50,5 +67,6 @@ def chapitres_disponibles(type_projet: str, avec_credit: bool) -> list[str]:
         if type_projet != "location_courte_duree":
             exclus.add("saisonnalite")
     if not avec_credit:
-        exclus |= {"profil", "endettement"}
+        # Sans crédit, pas de banque à convaincre.
+        exclus |= {"profil", "endettement", "annexes"}
     return [cle for cle in CHAPITRES_OPTIONNELS if cle not in exclus]

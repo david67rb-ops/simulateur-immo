@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import threading
 from datetime import datetime
 
 from docx import Document
@@ -9,13 +10,14 @@ from docx.shared import Cm, Mm, Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH, WD_TAB_ALIGNMENT
 from docx.enum.table import WD_ALIGN_VERTICAL, WD_TABLE_ALIGNMENT
 from docx.enum.section import WD_ORIENT, WD_SECTION
-from docx.oxml import OxmlElement
+from docx.oxml import OxmlElement, parse_xml
 from docx.oxml.ns import qn
+from docx.table import _Cell
 
 from . import charts_export as charts
 from . import analyse
 from . import endettement as endet_mod
-from . import saisonnalite
+from . import photos_dossier, saisonnalite
 from .chapitres_dossier import CHAPITRES_OBLIGATOIRES
 from .polices_word import integrer_polices
 from .schemas import ExportDossierInput, TypeProjet
@@ -43,6 +45,9 @@ ROUGE_HEX = "B23A32"
 FOND_TUILE_HEX = "EEF2F7"
 # (couleur du filet et du titre, fond) selon le niveau du verdict
 COULEURS_VERDICT = {"vert": ("2D6A4F", "E9F2ED"), "orange": ("B7791F", "FBF3E6"), "rouge": ("B23A32", "F8E9E7")}
+
+NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
 
 # Page A4 paysage : plus de largeur pour les mises en page tableau + graphique.
 LARGEUR_PAGE_CM = 29.7
@@ -809,6 +814,204 @@ def _section_marche(doc, inp, marche: dict, is_achat_revente: bool):
     _ajouter_note(doc, " ".join(phrases))
 
 
+ECART_PHOTOS_CM = 0.4
+
+
+def _disposition_photos(nb: int, largeur: float, hauteur: float) -> tuple[str, float, float]:
+    """(disposition, largeur de la grande photo, largeur des petites) : une
+    photo seule ; deux côte à côte ; trois en « vitrine » (une grande à gauche,
+    deux empilées à droite) ; quatre en 2 × 2 ; cinq ou six en 2 × 3."""
+    f, g = photos_dossier.FORMAT_PHOTO, ECART_PHOTOS_CM
+    if nb == 3:
+        # Grande photo de hauteur h, petites de hauteur (h - g) / 2, côte à côte :
+        # f·h + g + f·(h - g)/2 ≤ largeur.
+        h = min(hauteur, (largeur - g + f * g / 2) / (1.5 * f))
+        return "vitrine", f * h, f * (h - g) / 2
+    lignes, colonnes = {1: (1, 1), 2: (1, 2), 4: (2, 2)}.get(nb, (2, 3))
+    w = min((largeur - (colonnes - 1) * g) / colonnes, (hauteur - (lignes - 1) * g) / lignes * f)
+    return f"{lignes}x{colonnes}", w, w
+
+
+def _cellule_photo(cell, image: bytes, largeur_cm: float, espace_apres_cm: float = 0) -> None:
+    _cell_marges(cell, haut=0, bas=0, gauche=0, droite=0)
+    p = cell.paragraphs[0]
+    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(0)
+    p.paragraph_format.space_after = Cm(espace_apres_cm)
+    p.add_run().add_picture(io.BytesIO(image), width=Cm(largeur_cm))
+
+
+def _section_photos(doc, photos: list[bytes]):
+    """Photos importées par l'utilisateur, ou emplacements d'attente à
+    remplacer dans Word (clic droit > Modifier l'image)."""
+    images = photos[: photos_dossier.NB_PHOTOS_MAX] or [photos_dossier.emplacement_photo()] * 3
+    hauteur = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - MARGE_SECURITE_CM
+    largeur = LARGEUR_CONTENU_CM - 0.2
+    disposition, grande, petite = _disposition_photos(len(images), largeur, hauteur)
+    g = ECART_PHOTOS_CM
+    if disposition == "vitrine":
+        table = doc.add_table(rows=2, cols=2)
+        largeurs = (grande + g, petite)
+        cellule_grande = table.cell(0, 0).merge(table.cell(1, 0))
+        cellule_grande.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+        _cellule_photo(cellule_grande, images[0], grande)
+        cellule_grande.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.LEFT
+        _cellule_photo(table.cell(0, 1), images[1], petite, espace_apres_cm=g)
+        _cellule_photo(table.cell(1, 1), images[2], petite)
+    else:
+        lignes, colonnes = (int(n) for n in disposition.split("x"))
+        table = doc.add_table(rows=lignes, cols=colonnes)
+        largeurs = (grande + g,) * colonnes  # photos resserrées, tableau centré
+        for i, image in enumerate(images):
+            ligne, colonne = divmod(i, colonnes)
+            _cellule_photo(table.cell(ligne, colonne), image, grande, espace_apres_cm=g if ligne < lignes - 1 else 0)
+    table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _supprimer_bordures(table)
+    for j, largeur_colonne in enumerate(largeurs):
+        table.columns[j].width = Cm(largeur_colonne)
+        for cell in table.columns[j].cells:
+            cell.width = Cm(largeur_colonne)
+
+
+def _section_carte(doc, inp, marche: dict, is_achat_revente: bool):
+    """Les cartes de l'onglet Marché : ventes comparables autour du bien et,
+    pour un projet locatif, rentabilité brute des communes du département."""
+    from . import carte_export
+    from .donnees_marche import periode_donnees
+
+    comp = marche["comparables"]
+    hauteur = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_NOTE_CM - MARGE_SECURITE_CM
+    geojson = None if is_achat_revente else marche.get("communes_geojson")
+    if geojson:
+        images = [
+            carte_export.carte_ventes(marche["lat"], marche["lon"], comp),
+            carte_export.carte_rentabilite(geojson, marche["lat"], marche["lon"], marche.get("code_insee")),
+        ]
+    else:
+        images = [carte_export.carte_ventes(marche["lat"], marche["lon"], comp, taille_cm=(20.0, 10.6))]
+    largeur_colonne = LARGEUR_CONTENU_CM / len(images)
+    table = doc.add_table(rows=1, cols=len(images))
+    table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _supprimer_bordures(table)
+    for j, (cell, image) in enumerate(zip(table.rows[0].cells, images)):
+        table.columns[j].width = Cm(largeur_colonne)
+        cell.width = Cm(largeur_colonne)
+        cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+        _cellule_photo(cell, image, min(largeur_colonne - 0.3, hauteur * _proportions_png(image)))
+
+    phrases = [
+        f"Couleur des ventes : écart de leur prix au m² à la médiane du secteur ({_eur(comp['prix_m2_moyen'])}/m²)."
+    ]
+    if geojson:
+        periode = periode_donnees()
+        phrases.append(
+            "Rentabilité brute d'une commune = loyer d'annonce au m² × 12 ÷ prix médian au m² des ventes dans l'ancien"
+            + (f" ({periode})" if periode else "")
+            + "."
+        )
+    phrases.append(
+        "Sources : DVF (DGFiP), carte des loyers (ANIL), contours geo.api.gouv.fr, fond de carte © IGN."
+        if geojson
+        else "Sources : DVF (DGFiP), fond de carte © IGN."
+    )
+    _ajouter_note(doc, " ".join(phrases))
+
+
+def _case_a_cocher(paragraphe) -> None:
+    """Case à cocher Word (contrôle de contenu) : se coche d'un clic dans
+    Word, s'imprime comme une case vide."""
+    police = '<w:rFonts w:ascii="MS Gothic" w:eastAsia="MS Gothic" w:hAnsi="MS Gothic"/><w:color w:val="1B3358"/><w:sz w:val="22"/>'
+    paragraphe._p.append(
+        parse_xml(
+            f'<w:sdt xmlns:w="{NS_W}" xmlns:w14="{NS_W14}"><w:sdtPr><w:rPr>{police}</w:rPr>'
+            '<w14:checkbox><w14:checked w14:val="0"/>'
+            '<w14:checkedState w14:val="2612" w14:font="MS Gothic"/>'
+            '<w14:uncheckedState w14:val="2610" w14:font="MS Gothic"/></w14:checkbox></w:sdtPr>'
+            f'<w:sdtContent><w:r><w:rPr>{police}</w:rPr><w:t>☐</w:t></w:r></w:sdtContent></w:sdt>'
+        )
+    )
+
+
+def _pieces_a_fournir(inp) -> list[tuple[str, list[tuple[str, str]]]]:
+    """(rubrique, [(pièce, précision)]) : pièces demandées par la banque pour
+    ouvrir l'étude de financement."""
+    if inp.montant_travaux > 0:
+        precision_travaux = f"Travaux prévus au plan de financement : {_eur(inp.montant_travaux)}"
+    else:
+        precision_travaux = "Si des travaux sont prévus et que les devis sont disponibles"
+    return [
+        (
+            "Identité et domicile",
+            [
+                ("Pièce d'identité", "Carte d'identité ou passeport en cours de validité"),
+                ("Justificatif de domicile", "Facture d'énergie, quittance de loyer ou avis de taxe foncière récent"),
+            ],
+        ),
+        (
+            "Revenus et situation professionnelle",
+            [
+                ("3 derniers bulletins de salaire", "Ainsi que celui de décembre de l'année précédente (cumul annuel)"),
+                ("Contrat de travail", "Ou, à défaut, attestation de l'employeur"),
+                ("2 derniers avis d'imposition", "Toutes les pages"),
+            ],
+        ),
+        ("Comptes bancaires", [("3 derniers relevés de compte", "Tous les comptes courants")]),
+        (
+            "Le bien",
+            [
+                ("Compromis de vente", "Si déjà signé"),
+                ("DPE (diagnostic de performance énergétique)", "Fourni par le vendeur ou l'agence"),
+                ("Devis des travaux", precision_travaux),
+            ],
+        ),
+    ]
+
+
+def _section_annexes(doc, inp):
+    taille, _, marge = STYLE_DENSITE["compact"]
+    largeurs = (1.1, 10.0, LARGEUR_CONTENU_CM - 11.1)
+    table = doc.add_table(rows=0, cols=3)
+    table.style = "Normal Table"
+    table.autofit = False
+    for rubrique, pieces in _pieces_a_fournir(inp):
+        ligne = table.add_row()
+        cellule = ligne.cells[0].merge(ligne.cells[2])
+        _set_cell_background(cellule, FOND_TUILE_HEX)
+        _cell_marges(cellule, haut=70, bas=70, gauche=120, droite=90)
+        _texte(cellule.paragraphs[0], rubrique.upper(), 8, PRIMARY_COLOR, gras=True)
+        for piece, precision in pieces:
+            ligne = table.add_row()
+            case, cellule_piece, cellule_precision = ligne.cells
+            for cell in ligne.cells:
+                cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
+                _bordure_bas_cellule(cell)
+                _cell_marges(cell, haut=marge, bas=marge, gauche=120, droite=90)
+            for cell in ligne.cells:
+                cell.paragraphs[0].paragraph_format.space_after = Pt(0)
+                cell.paragraphs[0].paragraph_format.line_spacing = 1.0
+            case.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
+            _case_a_cocher(case.paragraphs[0])
+            _texte(cellule_piece.paragraphs[0], piece, taille, TEXTE_FONCE, gras=True)
+            _texte(cellule_precision.paragraphs[0], precision, taille, GRIS_LIBELLE)
+    for j, largeur in enumerate(largeurs):
+        table.columns[j].width = Cm(largeur)
+    for ligne in table.rows:
+        cellules = [_Cell(tc, table) for tc in ligne._tr.tc_lst]
+        if len(cellules) == 1:  # ligne de rubrique fusionnée
+            cellules[0].width = Cm(sum(largeurs))
+        else:
+            for cell, largeur in zip(cellules, largeurs):
+                cell.width = Cm(largeur)
+    _ajouter_note(
+        doc,
+        "Pièces à fournir pour chaque emprunteur. Les cases se cochent d'un clic dans Word. La banque peut demander "
+        "des justificatifs complémentaires selon la situation (épargne constituant l'apport, crédits en cours, "
+        "revenus locatifs existants…).",
+    )
+
+
 def _section_profil(doc, payload):
     p = payload.profil
     _tuiles(
@@ -1208,7 +1411,18 @@ def _section_mentions(doc):
 # Point d'entrée
 # ---------------------------------------------------------------------------
 
+# matplotlib (pyplot) n'est pas prévu pour tracer depuis plusieurs fils à la
+# fois : une génération à la fois (l'interface la lance hors de la boucle
+# d'événements).
+_VERROU_GENERATION = threading.Lock()
+
+
 def generer_dossier_word(payload: ExportDossierInput) -> bytes:
+    with _VERROU_GENERATION:
+        return _generer_dossier_word(payload)
+
+
+def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
     inp = payload.simulation
     if not inp.avec_credit:
         # Sans crédit, pas d'emprunteur ni de taux d'endettement à présenter.
@@ -1245,6 +1459,14 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
             "Le bien, son prix et la composition du coût total de l'opération.",
             lambda d: _section_presentation(d, payload, inp, resultat, is_achat_revente),
         ),
+        (
+            "photos",
+            "Le bien en photos",
+            "Photos du bien."
+            if payload.photos
+            else "Emplacements prévus pour les photos du bien : clic droit sur un cadre › Modifier l'image.",
+            lambda d: _section_photos(d, payload.photos or []),
+        ),
     ]
     marche = payload.marche
     if marche and (marche.get("comparables") or {}).get("prix_m2_moyen"):
@@ -1256,6 +1478,20 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
                 lambda d: _section_marche(d, inp, marche, is_achat_revente),
             )
         )
+        if marche.get("lat") is not None:
+            sections.append(
+                (
+                    "carte",
+                    "Le bien sur la carte",
+                    "Les ventes comparables autour du bien"
+                    + (
+                        "."
+                        if is_achat_revente or not marche.get("communes_geojson")
+                        else " et la rentabilité des communes du département."
+                    ),
+                    lambda d: _section_carte(d, inp, marche, is_achat_revente),
+                )
+            )
     if payload.profil is not None:
         sections.append(
             (
@@ -1343,6 +1579,15 @@ def generer_dossier_word(payload: ExportDossierInput) -> bytes:
             lambda d: _section_mentions(d),
         )
     )
+    if inp.avec_credit:
+        sections.append(
+            (
+                "annexes",
+                "Annexe : pièces à fournir à la banque",
+                "Les documents à réunir pour que la banque ouvre l'étude de financement.",
+                lambda d: _section_annexes(d, inp),
+            )
+        )
     if payload.chapitres is not None:
         retenus = set(payload.chapitres) | CHAPITRES_OBLIGATOIRES
         sections = [section for section in sections if section[0] in retenus]

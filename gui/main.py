@@ -14,10 +14,21 @@ import argparse
 import json
 import os
 
-from nicegui import app, native, ui
+from nicegui import app, native, run, ui
 from pydantic import ValidationError
 
-from app import analyse, donnees_marche, endettement as endet_mod, listing_parser, market_data, notaire, saisonnalite, schemas, simulation
+from app import (
+    analyse,
+    donnees_marche,
+    endettement as endet_mod,
+    listing_parser,
+    market_data,
+    notaire,
+    photos_dossier,
+    saisonnalite,
+    schemas,
+    simulation,
+)
 from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, chapitres_disponibles
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
@@ -110,6 +121,11 @@ def _marche_pour_dossier(geo: dict, comparables: dict, loyer: dict | None, type_
     rendement = commune.get("rendement_brut")
     return {
         "adresse": geo.get("label"),
+        "lat": geo["lat"],
+        "lon": geo["lon"],
+        "code_insee": geo["code_insee"],
+        "code_departement": geo["code_departement"],
+        "type_bien": type_bien,
         "comparables": comparables,
         "loyer": loyer if loyer and not loyer.get("erreur") else None,
         "commune_indicateurs": {
@@ -581,7 +597,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
     profil_state = default_profil_state()
     dossier_meta_state = default_dossier_meta_state()
     chapitres_state = {cle: True for cle in CHAPITRES_OPTIONNELS}
-    ctx = {"last_market_result": None, "commune": None, "dept": None, "marche_dossier": None}
+    ctx = {"last_market_result": None, "commune": None, "dept": None, "marche_dossier": None, "photos_dossier": []}
     refs: dict[str, ui.element] = {}
 
     # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
@@ -1396,6 +1412,25 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                             value=dossier_meta_state["adresse_bien"],
                         ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
 
+                    theme.subsection_title("Photos du bien")
+                    ui.label(
+                        f"Jusqu'à {photos_dossier.NB_PHOTOS_MAX} photos, recadrées au format 4:3 ; la première est "
+                        "mise en avant. Sans photo, le dossier prévoit des emplacements à remplacer dans Word."
+                    ).classes(theme.HINT_CLASSES)
+                    upload_photos = (
+                        ui.upload(
+                            multiple=True,
+                            auto_upload=True,
+                            max_file_size=25_000_000,
+                            max_files=photos_dossier.NB_PHOTOS_MAX,
+                            label="Ajouter des photos",
+                        )
+                        .props('accept="image/*" flat bordered color="primary"')
+                        .classes("uploader-photos w-full max-w-md")
+                    )
+                    rangee_photos = ui.row().classes("gap-2 flex-wrap")
+                    photos_status = ui.label("").classes(theme.HINT_CLASSES)
+
                     theme.subsection_title("Contenu du rapport")
                     ui.label(
                         "La page de garde, la synthèse, les points d'attention et les mentions sont toujours inclus. "
@@ -1435,6 +1470,51 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                         ).props("hide-header").classes("w-full")
 
         ui.element("div").classes("espace-barre-mobile h-16")  # place pour le bandeau mobile
+
+    def afficher_photos() -> None:
+        rangee_photos.clear()
+        with rangee_photos:
+            for i, photo in enumerate(ctx["photos_dossier"]):
+                with ui.element("div").classes("relative"):
+                    ui.image(photo["miniature"]).classes("w-32 h-24 rounded-lg")
+                    ui.button(icon="close", on_click=lambda i=i: retirer_photo(i)).props(
+                        "round dense size=xs color=grey-9"
+                    ).classes("absolute top-1 right-1").tooltip("Retirer la photo")
+
+    def retirer_photo(i: int) -> None:
+        del ctx["photos_dossier"][i]
+        photos_status.set_text("")
+        afficher_photos()
+
+    async def on_photos_importees(e) -> None:
+        import base64
+
+        place = photos_dossier.NB_PHOTOS_MAX - len(ctx["photos_dossier"])
+        refusees = []
+        for contenu, nom in zip(e.contents, e.names):
+            if place <= 0:
+                refusees.append(f"{nom} (maximum {photos_dossier.NB_PHOTOS_MAX} photos)")
+                continue
+            try:
+                jpeg, miniature = await run.io_bound(photos_dossier.preparer_photo_et_miniature, contenu.read())
+            except photos_dossier.PhotoIllisible as exc:
+                refusees.append(f"{nom} : {exc}")
+                continue
+            ctx["photos_dossier"].append(
+                {"jpeg": jpeg, "miniature": "data:image/jpeg;base64," + base64.b64encode(miniature).decode()}
+            )
+            place -= 1
+        e.sender.reset()
+        if refusees:  # le navigateur peut envoyer les photos en plusieurs lots : message conservé
+            photos_status.set_text("Non ajoutée(s) : " + " ; ".join(refusees))
+        afficher_photos()
+
+    upload_photos.on_multi_upload(on_photos_importees)
+    upload_photos.on_rejected(
+        lambda: photos_status.set_text(
+            f"Photo refusée : 25 Mo maximum par photo, {photos_dossier.NB_PHOTOS_MAX} photos au plus."
+        )
+    )
 
     def appliquer_formule_dossier(cle_formule: str) -> None:
         _, retenus = FORMULES_DOSSIER[cle_formule]
@@ -2346,6 +2426,18 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 # Chapitre demandé mais marché pas encore analysé : on lance l'analyse.
                 await on_analyser_marche()
                 dossier_status.set_text("Génération du dossier Word…")
+            marche = ctx.get("marche_dossier")
+            if (
+                marche
+                and chapitres_state.get("carte")
+                and inp.type_projet != schemas.TypeProjet.achat_revente
+                and marche["code_departement"] not in market_data.DEPARTEMENTS_SANS_DVF
+            ):
+                try:
+                    geojson = await donnees_marche.carte_rentabilite(marche["code_departement"], marche["type_bien"])
+                    marche = {**marche, "communes_geojson": geojson}
+                except Exception:  # noqa: BLE001 — sans contours, carte des ventes seule
+                    pass
             nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
             adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
             payload = schemas.ExportDossierInput(
@@ -2353,10 +2445,13 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
                 profil=profil,
                 nom_emprunteur=nom_emprunteur,
                 adresse_bien=adresse_bien,
-                marche=ctx.get("marche_dossier"),
+                marche=marche,
                 chapitres=[cle for cle, inclus in chapitres_state.items() if inclus],
+                photos=[photo["jpeg"] for photo in ctx["photos_dossier"]],
             )
-            contenu = dossier_export.generer_dossier_word(payload)
+            # Hors de la boucle d'événements : graphiques, cartes et fond IGN
+            # prennent quelques secondes, l'application reste réactive.
+            contenu = await run.io_bound(dossier_export.generer_dossier_word, payload)
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
             return

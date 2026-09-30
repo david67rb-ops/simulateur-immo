@@ -109,6 +109,8 @@ def apply_theme() -> None:
             .colonne-synthese { display: block; }
             .barre-synthese-mobile, .espace-barre-mobile { display: none !important; }
           }
+          /* Import des photos du dossier : pas de liste de fichiers, les miniatures suffisent. */
+          .uploader-photos .q-uploader__list { display: none; }
         </style>
         """
     )

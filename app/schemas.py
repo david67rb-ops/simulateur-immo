@@ -204,3 +204,8 @@ class ExportDossierInput(BaseModel):
     chapitres: list[str] | None = Field(
         default=None, description="Chapitres optionnels à inclure (None : tous). Voir dossier_export.CHAPITRES_OPTIONNELS"
     )
+    photos: list[bytes] | None = Field(
+        default=None,
+        description="Photos du bien importées par l'utilisateur (JPEG préparés par photos_dossier.preparer_photo). "
+        "Sans photo, le dossier prévoit des emplacements à remplacer dans Word",
+    )
