@@ -86,8 +86,8 @@ LARGEUR_CONTENU_CM = LARGEUR_PAGE_CM - 2 * MARGE_CM
 # chapitre et la rangée de tuiles, avec une marge de sécurité (le rendu exact
 # dépend de Word). Le bloc tableau + graphique doit tenir dans ce reste.
 HAUTEUR_UTILE_CM = HAUTEUR_PAGE_CM - 2 * MARGE_CM
-HAUTEUR_ENTETE_CHAPITRE_CM = 3.0  # fil des parties, puis numéro, titre et description
-HAUTEUR_A_RETENIR_CM = 1.3  # encadré « À retenir » sous l'en-tête
+HAUTEUR_ENTETE_CHAPITRE_CM = 2.3  # numéro, titre et description
+HAUTEUR_A_RETENIR_CM = 1.6  # encadré « À retenir » en bas de page (et son espace au-dessus)
 HAUTEUR_TUILES_CM = 2.1
 HAUTEUR_NOTE_CM = 1.0
 HAUTEUR_VERDICT_CM = 2.6
@@ -321,6 +321,7 @@ def _bandeau_verdict(doc, verdict: dict) -> None:
     filet, fond = COULEURS_VERDICT[verdict["niveau"]]
     table = doc.add_table(rows=1, cols=1)
     table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
     _supprimer_bordures(table)
     table.columns[0].width = Cm(LARGEUR_CONTENU_CM)
     cell = table.rows[0].cells[0]
@@ -355,12 +356,8 @@ def _entete_chapitre(
     parties: tuple[str, ...] = (),
     icone: str | None = None,
 ) -> None:
-    """Fil des parties du dossier (où en est le lecteur), puis numéro dans un
-    pavé bleu, icône, titre et phrase d'explication."""
-    if partie and parties:
-        p_fil = doc.add_paragraph()
-        p_fil.paragraph_format.space_after = Pt(7)
-        p_fil.add_run().add_picture(io.BytesIO(visuels.fil_parties(parties, partie)), height=Cm(0.62))
+    """Numéro dans un pavé bleu, icône, titre et phrase d'explication (le
+    fil des parties est dans le pied de page, voir _pied_de_page_chapitre)."""
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
     _supprimer_bordures(table)
@@ -398,7 +395,9 @@ def _a_retenir(doc, niveau: str, texte: str) -> None:
     filet, fond = COULEURS_VERDICT[niveau]
     table = doc.add_table(rows=1, cols=1)
     table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER  # aligné sur les tuiles, centrées elles aussi
     _supprimer_bordures(table)
+    _ancrer_en_bas_de_page(table)
     table.columns[0].width = Cm(LARGEUR_CONTENU_CM)
     cell = table.rows[0].cells[0]
     cell.width = Cm(LARGEUR_CONTENU_CM)
@@ -409,7 +408,55 @@ def _a_retenir(doc, niveau: str, texte: str) -> None:
     p = cell.add_paragraph()
     p.paragraph_format.space_before = Pt(1)
     _texte(p, texte, 11.5, RGBColor.from_string(filet))
-    _espace(doc, 12)
+    _espace(doc, 1)
+
+
+def _ancrer_en_bas_de_page(table) -> None:
+    """Tableau flottant posé en bas de la zone de texte de la page, centré :
+    le contenu du chapitre s'écoule au-dessus sans le recouvrir."""
+    tbl_pr = table._tbl.tblPr
+    position = OxmlElement("w:tblpPr")
+    for attribut, valeur in (
+        ("w:leftFromText", "0"),
+        ("w:rightFromText", "0"),
+        ("w:topFromText", "200"),
+        ("w:bottomFromText", "0"),
+        ("w:vertAnchor", "margin"),
+        ("w:horzAnchor", "margin"),
+        ("w:tblpXSpec", "center"),
+        ("w:tblpYSpec", "bottom"),
+    ):
+        position.set(qn(attribut), valeur)
+    style = tbl_pr.find(qn("w:tblStyle"))
+    if style is not None:
+        style.addnext(position)
+    else:
+        tbl_pr.insert(0, position)
+    chevauchement = OxmlElement("w:tblOverlap")
+    chevauchement.set(qn("w:val"), "never")
+    position.addnext(chevauchement)
+
+
+def _pied_de_page_chapitre(section, fil: bytes) -> None:
+    """Pied de page propre au chapitre : fil des parties (où en est le
+    lecteur) à gauche, mention au centre, pagination à droite."""
+    section.footer.is_linked_to_previous = False
+    p = section.footer.paragraphs[0]
+    _taquet_a_droite(p)
+    p.paragraph_format.tab_stops.add_tab_stop(Cm(LARGEUR_CONTENU_CM - 2.6), WD_TAB_ALIGNMENT.RIGHT)
+    run = p.add_run()
+    run.add_picture(io.BytesIO(fil), height=Cm(0.62))
+    run.font.position = Pt(-4)
+    _texte(p, "\tÉtabli avec Fiabimmo — estimation à faire valider par un professionnel", 7.5, GRIS_COLOR, italique=True)
+    _texte(p, "\tPage ", 8, GRIS_COLOR)
+    _add_field(p, "PAGE")
+    _texte(p, " / ", 8, GRIS_COLOR)
+    _add_field(p, "NUMPAGES")
+    for run in p.runs:  # numéros de page : même style que le texte du pied
+        if not run._r.xpath(".//w:drawing") and not run.italic:
+            run.font.size = Pt(8)
+            run.font.name = POLICE
+            run.font.color.rgb = GRIS_COLOR
 
 
 def _supprimer_bordures(table) -> None:
@@ -485,6 +532,9 @@ def _mettre_en_page(section, centrer: bool = False) -> None:
     section.right_margin = Cm(MARGE_CM)
     section.top_margin = Cm(MARGE_CM)
     section.bottom_margin = Cm(MARGE_CM)
+    # Pied de page plus bas que le réglage par défaut (1,27 cm) : de l'air
+    # entre l'encadré « À retenir », posé en bas de la zone de texte, et le fil.
+    section.footer_distance = Cm(0.6)
     _alignement_vertical(section, "center" if centrer else "top")
 
 
@@ -916,6 +966,7 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
     for rang in range(2):
         table = doc.add_table(rows=1, cols=3)
         table.autofit = False
+        table.alignment = WD_TABLE_ALIGNMENT.CENTER
         _supprimer_bordures(table)
         for j, largeur in enumerate((largeur_bloc, 0.5, largeur_bloc)):
             table.columns[j].width = Cm(largeur)
@@ -2113,7 +2164,8 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
     parties_presentes = tuple(p for p in PARTIES if any(PARTIE_DU_CHAPITRE[cle] == p for cle, *_ in sections))
     a_retenir = phrases_a_retenir(payload, inp, resultat, is_achat_revente)
     for i, (cle, titre, description, fn) in enumerate(sections, start=1):
-        _nouvelle_page_chapitre(doc)
+        section = _nouvelle_page_chapitre(doc)
+        _pied_de_page_chapitre(section, visuels.fil_parties(parties_presentes, PARTIE_DU_CHAPITRE[cle]))
         _entete_chapitre(
             doc,
             i,
