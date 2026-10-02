@@ -1570,9 +1570,10 @@ def _build_investor_view() -> None:
                             else:
                                 ui.label(str(i + 1))
                         ui.label(LIBELLES_COURTS[tab]).classes("frise-libelle")
-            with ui.row().classes("items-baseline gap-2 mt-3 no-wrap"):
+            # Compteur puis nom de l'étape, centrés sous la frise.
+            with ui.column().classes("w-full items-center gap-0 mt-3"):
                 ui.label(f"Étape {rang + 1} sur {len(visibles)}").classes("etape-compteur")
-                ui.label(courante.props["name"]).classes("etape-titre")
+                ui.label(courante.props["name"]).classes("etape-titre text-center")
         nav_etapes.clear()
         with nav_etapes:
             if rang > 0:
