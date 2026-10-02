@@ -137,7 +137,6 @@ def apply_theme() -> None:
              à saisir (bordure laiton), calculé automatiquement (fond bleu), estimé d'après le
              marché (fond vert) ; « à vérifier » utilise l'état d'erreur de Quasar (bordure rouge). */
           .champ-a-saisir.q-field--outlined .q-field__control:before { border: 2px solid var(--c-laiton); }
-          .champ-a-saisir .q-field__label::after { content: " · à renseigner"; color: var(--c-laiton); font-weight: 600; }
           .champ-calcule.q-field--outlined .q-field__control { background: var(--c-fond-calcule); }
           .champ-calcule.q-field--outlined .q-field__control:before { border-color: var(--c-bord-calcule); }
           .champ-calcule .q-field__label::after { content: " · auto"; color: var(--c-texte-calcule); font-weight: 600; }
@@ -149,7 +148,6 @@ def apply_theme() -> None:
           .body--dark { --c-fond-calcule: rgba(58, 100, 158, 0.22); --c-bord-calcule: #3a649e; --c-texte-calcule: #9dbbe2;
                         --c-fond-estime: rgba(45, 106, 79, 0.25); --c-bord-estime: #3f8a68; --c-texte-estime: #8fd0ae; }
           .pastille-legende { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
-          .badge-a-saisir { background: var(--c-laiton) !important; color: #fff !important; font-size: 10px; }
           /* Jauge (taux d'endettement face au seuil). */
           .jauge { position: relative; height: 12px; border-radius: 6px; background: var(--c-filet); overflow: visible; }
           .jauge-remplissage { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
