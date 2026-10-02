@@ -19,7 +19,6 @@ from pydantic import ValidationError
 
 from app import (
     analyse,
-    estimations,
     donnees_marche,
     endettement as endet_mod,
     listing_parser,
@@ -34,6 +33,7 @@ from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, LIGNES
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import apercus_dossier, offre, theme
+from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
 from .state import (
@@ -91,17 +91,7 @@ def champ(label: str, state: dict, cle: str, *, suffixe: str | None = None, aide
     if aide:
         with field.add_slot("append"):
             theme.aide(aide)
-    enregistrer_champ(cle, field)
     return field
-
-
-def enregistrer_champ(cle: str, field) -> None:
-    """Registre des champs de la page par clé d'état, pour leur appliquer le
-    code couleur (à saisir, calculé, estimé, à vérifier)."""
-    client = ui.context.client
-    if not hasattr(client, "champs_fiabimmo"):
-        client.champs_fiabimmo = {}
-    client.champs_fiabimmo.setdefault(cle, []).append(field)
 
 
 def liste(options: dict, label: str, state: dict, cle: str, *, aide: str | None = None):
@@ -450,12 +440,13 @@ def index_page() -> None:
     theme.apply_theme()
     apercus_dossier.installer()
     # None = mode auto : suit le réglage clair/sombre de l'ordinateur ou du téléphone.
-    dark_mode = ui.dark_mode(value=None)
+    ui.dark_mode(value=None)
 
-    async def basculer_theme() -> None:
-        # En mode auto, seul le navigateur sait quel thème est affiché.
-        sombre = await ui.run_javascript("document.body.classList.contains('body--dark')")
-        dark_mode.value = not sombre
+    def basculer_theme() -> None:
+        # Bascule côté navigateur (Quasar) uniquement : passer par ui.dark_mode
+        # modifie la configuration de Tailwind, qui régénère alors ses styles en
+        # perdant les classes responsives (toute la mise en page se décale).
+        ui.run_javascript("Quasar.Dark.set(!Quasar.Dark.isActive)")
 
     with ui.column().classes("w-full max-w-6xl mx-auto gap-5 p-4"):
         with ui.row().classes("w-full items-center justify-center relative mb-2"):
@@ -472,7 +463,7 @@ def index_page() -> None:
                         )
                 ui.label(
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
-                ).classes("text-sm text-gray-500 dark:text-gray-400 text-center mt-1")
+                ).classes("text-sm text-gray-500 text-center mt-1")
 
         _build_investor_view()
 
@@ -504,10 +495,8 @@ def _build_investor_view() -> None:
         "prix_renseigne": False,
     }
     refs: dict[str, ui.element] = {}
-    # Champs que le client a lui-même saisis (les estimations ne les écrasent
-    # jamais) et champs remplis par une estimation (marché ou forfait).
+    # Champs calculés automatiquement que le client a corrigés à la main.
     saisis: set[str] = set()
-    estimes: set[str] = set()
 
     # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
     # bandeau dépliable en bas de l'écran (mobile).
@@ -533,17 +522,13 @@ def _build_investor_view() -> None:
                     .classes("flex-1 min-w-[220px]")
                 )
             structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
-            # Légende du code couleur des champs.
-            with ui.row().classes("w-full items-center gap-x-4 gap-y-1 flex-wrap mt-2 " + theme.HINT_CLASSES):
-                for style_pastille, libelle_pastille in (
-                    ("border: 2px solid var(--c-laiton)", "À renseigner"),
-                    ("background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)", "Calculé"),
-                    ("background: var(--c-fond-estime); border: 1px solid var(--c-bord-estime)", "Estimé"),
-                    ("border: 2px solid var(--c-ko)", "À vérifier"),
-                ):
-                    with ui.row().classes("items-center gap-0 no-wrap"):
-                        ui.html(f'<span class="pastille-legende" style="{style_pastille}"></span>')
-                        ui.label(libelle_pastille)
+            # Légende : les champs sur fond bleu sont calculés automatiquement.
+            with ui.row().classes("items-center gap-0 no-wrap mt-2 " + theme.HINT_CLASSES):
+                ui.html(
+                    '<span class="pastille-legende" '
+                    'style="background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)"></span>'
+                )
+                ui.label("Calculé automatiquement (modifiable)")
 
         # -- Barre d'onglets --
         with ui.tabs().props("dense").classes("w-full onglets-parcours") as tabs:
@@ -633,10 +618,7 @@ def _build_investor_view() -> None:
 
                     btn_market = ui.button("Analyser le marché").props("unelevated").classes("mt-3")
                     market_status = ui.label("").classes(theme.HINT_CLASSES)
-                    progres_marche = ui.linear_progress(show_value=False).props(
-                        "indeterminate rounded color=primary size=6px"
-                    ).classes("w-full")
-                    progres_marche.visible = False
+                    progres_marche = Progression()
 
                     market_results = ui.column().classes("w-full gap-2 mt-2")
                     market_results.visible = False
@@ -1306,12 +1288,11 @@ def _build_investor_view() -> None:
                     ).classes(theme.HINT_CLASSES + " mb-2")
 
                     with ui.row().classes(theme.GRID_CLASSES):
-                        refs["end_revenus"] = ui.number(
+                        ui.number(
                             "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
                         ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes(
                             "w-full"
                         )
-                        enregistrer_champ("revenus_nets_mensuels_foyer", refs["end_revenus"])
                         ui.number(
                             "Autres revenus mensuels (€)", value=profil_state["autres_revenus_mensuels"], min=0
                         ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full")
@@ -1434,10 +1415,7 @@ def _build_investor_view() -> None:
                         btn_telecharger_dossier = ui.button("Télécharger le dossier (Word)").props("outline")
                         btn_telecharger_dossier.visible = False
                     dossier_status = ui.label("").classes(theme.HINT_CLASSES)
-                    progres_dossier = ui.linear_progress(show_value=False).props(
-                        "indeterminate rounded color=primary size=6px"
-                    ).classes("w-full")
-                    progres_dossier.visible = False
+                    progres_dossier = Progression()
 
                     apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
                     apercu_dossier.visible = False
@@ -1519,76 +1497,28 @@ def _build_investor_view() -> None:
         )
 
     # =====================================================================
-    # Code couleur des champs
+    # Frais de notaire : calculés automatiquement (fond bleu) tant que le
+    # client ne les corrige pas ; bouton « revenir au calcul » ensuite.
     # =====================================================================
-    # Code couleur : chaque champ saisi au clavier passe de « à renseigner »,
-    # « calculé » ou « estimé » à « saisi ».
-    registre_champs = getattr(ui.context.client, "champs_fiabimmo", {})
+    def actualiser_notaire() -> None:
+        calcule = "frais_notaire" not in saisis
+        if calcule:
+            frais_notaire_input.classes(add="champ-calcule")
+        else:
+            frais_notaire_input.classes(remove="champ-calcule")
+        btn_notaire_auto.visible = not calcule
 
-    def suivre_saisie(champ_ui, cle: str) -> None:
-        def marquer() -> None:
-            saisis.add(cle)
-            estimes.discard(cle)
-            if cle == "prix_achat":
-                on_prix_saisi()
-
-        champ_ui.on("update:model-value", marquer)
-
-    for cle_champ, champs_ui in registre_champs.items():
-        for champ_ui in champs_ui:
-            suivre_saisie(champ_ui, cle_champ)
+    def marquer_notaire_saisi() -> None:
+        saisis.add("frais_notaire")
+        actualiser_notaire()
 
     def revenir_au_calcul_notaire() -> None:
         saisis.discard("frais_notaire")
         recalc_notaire()
+        actualiser_notaire()
 
-    def cles_a_saisir() -> set[str]:
-        """Données que seul le client connaît, tant qu'il ne les a pas saisies."""
-        type_projet = sim_state["type_projet"]
-        cles = {"prix_achat", "surface_m2"}
-        if sim_state["avec_credit"]:
-            cles |= {"apport", "revenus_nets_mensuels_foyer"}
-        if type_projet == "location_longue_duree":
-            cles.add("loyer_mensuel_hors_charges")
-        elif type_projet == "location_courte_duree":
-            cles |= {"prix_nuitee", "taux_occupation_pct"}
-        else:
-            cles.add("prix_revente_vise")
-        return cles
-
-    etats_appliques: dict[int, tuple] = {}
-    derniere_signature_etats = {"valeur": None}
-
-    def actualiser_etats() -> None:
-        signature = json.dumps(
-            [sim_state, profil_state, sorted(saisis), sorted(estimes)], sort_keys=True, default=str
-        )
-        if signature == derniere_signature_etats["valeur"]:
-            return
-        derniere_signature_etats["valeur"] = signature
-        alertes = estimations.controles_coherence({**sim_state, **profil_state})
-        a_saisir = cles_a_saisir()
-        for cle, champs_ui in registre_champs.items():
-            if cle in estimes:
-                etat = "champ-estime"
-            elif cle == "frais_notaire" and cle not in saisis:
-                etat = "champ-calcule"
-            elif cle in a_saisir and cle not in saisis:
-                etat = "champ-a-saisir"
-            else:
-                etat = ""
-            message = alertes.get(cle)
-            for champ_ui in champs_ui:
-                if etats_appliques.get(id(champ_ui)) == (etat, message):
-                    continue  # rien de changé : pas d'envoi au navigateur
-                etats_appliques[id(champ_ui)] = (etat, message)
-                champ_ui.classes(remove="champ-estime champ-calcule champ-a-saisir", add=etat or None)
-                champ_ui._props["error"] = bool(message)
-                champ_ui._props["error-message"] = message or ""
-                champ_ui.update()
-        btn_notaire_auto.visible = "frais_notaire" in saisis
-
-    ui.timer(0.5, actualiser_etats)
+    frais_notaire_input.on("update:model-value", marquer_notaire_saisi)
+    actualiser_notaire()
 
     async def adapter_au_telephone() -> None:
         """Sur téléphone, tableaux de résultats en mode cartes (une carte par
@@ -1630,12 +1560,12 @@ def _build_investor_view() -> None:
             with boite:
                 titre = ui.label("").classes("font-bold leading-tight")
                 detail = ui.label("").classes("text-xs mt-1")
-            principal_label = ui.label("").classes("text-xs text-gray-500 dark:text-gray-400 mt-1")
+            principal_label = ui.label("").classes("text-xs text-gray-500 mt-1")
             principal = ui.label("–").classes("text-3xl font-bold leading-none")
             lignes = []
             for _ in range(6):
                 with ui.row().classes("w-full justify-between items-baseline no-wrap synthese-ligne") as rangee:
-                    libelle = ui.label("").classes("text-sm text-gray-500 dark:text-gray-400")
+                    libelle = ui.label("").classes("text-sm text-gray-500")
                     valeur = ui.label("").classes("text-sm font-semibold text-right")
                 lignes.append((rangee, libelle, valeur))
             erreur = ui.label("").classes("text-sm").style(f"color: {theme.NEGATIVE}")
@@ -1894,13 +1824,10 @@ def _build_investor_view() -> None:
             market_state["surface_m2"] = donnees["surface_m2"]
             ms_surface.set_value(donnees["surface_m2"])
             sim_state["surface_m2"] = donnees["surface_m2"]
-        if donnees.get("surface_m2"):
-            saisis.add("surface_m2")
         if donnees.get("prix_achat"):
             sim_state["prix_achat"] = round(donnees["prix_achat"])
             prix_achat_input.set_value(sim_state["prix_achat"])
             ctx["prix_renseigne"] = True
-            saisis.add("prix_achat")
             recalc_notaire()
 
         manquants = donnees.get("champs_manquants") or []
@@ -1918,12 +1845,12 @@ def _build_investor_view() -> None:
     async def on_analyser_marche() -> None:
         """Étude de marché, avec barre de chargement (DVF : jusqu'à 30 s au
         premier appel pour un département)."""
-        progres_marche.visible = True
+        progres_marche.demarrer()
         btn_market.disable()
         try:
             await _analyser_marche()
         finally:
-            progres_marche.visible = False
+            progres_marche.terminer()
             btn_market.enable()
 
     async def _analyser_marche() -> None:
@@ -1934,12 +1861,16 @@ def _build_investor_view() -> None:
         market_status.set_text("Analyse en cours…")
         market_results.visible = False
 
+        progres_marche.etape(0.02, 0.10)
         try:
             geo = await market_data.geocoder_adresse(adresse)
         except market_data.MarketDataError as exc:
             market_status.set_text(f"Erreur : {exc}")
             return
 
+        # Ventes DVF : l'étape la plus longue (téléchargement du département
+        # au premier appel, jusqu'à 30 s).
+        progres_marche.etape(0.10, 0.75)
         try:
             comparables = await market_data.comparables_dvf(
                 geo["code_departement"],
@@ -1954,6 +1885,7 @@ def _build_investor_view() -> None:
             comparables = {"erreur": str(exc)}
 
         is_lcd = sim_state["type_projet"] == "location_courte_duree"
+        progres_marche.etape(0.75, 0.88)
         loyer = None
         if sim_state["type_projet"] != "achat_revente":
             try:
@@ -2017,6 +1949,7 @@ def _build_investor_view() -> None:
 
         market_results.visible = True
         carte_ventes.afficher(geo["lat"], geo["lon"], comparables)
+        progres_marche.etape(0.88, 0.98)
         await carte_rentabilite.afficher(geo["code_departement"], geo["lat"], geo["lon"], market_state["type_bien"])
 
     btn_market.on_click(on_analyser_marche)
@@ -2035,29 +1968,20 @@ def _build_investor_view() -> None:
         sim_state["type_bien"] = market_state["type_bien"]
         sim_state["surface_m2"] = market_state["surface_m2"]
         sim_state["bien_neuf"] = bool(market_state.get("bien_neuf"))
-        saisis.add("surface_m2")  # saisie dans l'onglet Marché
         if result.get("prix_marche_estime"):
             sim_state["prix_achat"] = result["prix_marche_estime"]
             prix_achat_input.set_value(sim_state["prix_achat"])
-            saisis.discard("prix_achat")
-            estimes.add("prix_achat")
             recalc_notaire()
         if sim_state["type_projet"] == "location_courte_duree":
             if result.get("prix_nuitee_estime"):
                 sim_state["prix_nuitee"] = result["prix_nuitee_estime"]
                 field_prix_nuitee.set_value(sim_state["prix_nuitee"])
-                saisis.discard("prix_nuitee")
-                estimes.add("prix_nuitee")
             if result.get("taux_occupation_estime"):
                 sim_state["taux_occupation_pct"] = result["taux_occupation_estime"] * 100
                 field_taux_occupation.set_value(sim_state["taux_occupation_pct"])
-                saisis.discard("taux_occupation_pct")
-                estimes.add("taux_occupation_pct")
         elif result.get("loyer_mensuel_estime"):
             sim_state["loyer_mensuel_hors_charges"] = result["loyer_mensuel_estime"]
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
-            saisis.discard("loyer_mensuel_hors_charges")
-            estimes.add("loyer_mensuel_hors_charges")
         ui.notify("Valeurs de marché appliquées dans l'onglet Financement.", type="positive")
         tab_panels.set_value(tab_financement)
 
@@ -2471,14 +2395,18 @@ def _build_investor_view() -> None:
             (libelle_mensualite, eur(mensualite) + "/mois"),
         ]
 
-    async def generer_contenu_dossier() -> bytes:
+    async def generer_contenu_dossier(terminer: bool = True) -> bytes:
         """Le dossier Word tel qu'il sera téléchargé (aperçu et téléchargement),
         avec barre de chargement pendant toute la préparation."""
-        progres_dossier.visible = True
+        progres_dossier.demarrer()
         try:
-            return await _generer_contenu_dossier()
-        finally:
-            progres_dossier.visible = False
+            contenu = await _generer_contenu_dossier()
+        except Exception:
+            progres_dossier.terminer()
+            raise
+        if terminer:  # sinon l'appelant termine (aperçu : mise en page dans le navigateur)
+            progres_dossier.terminer()
+        return contenu
 
     async def _generer_contenu_dossier() -> bytes:
         # Importé ici plutôt qu'au démarrage : entraîne matplotlib (via
@@ -2491,6 +2419,7 @@ def _build_investor_view() -> None:
         profil = build_profil_input(profil_state) if profil_rempli and inp.avec_credit else None
         if chapitres_state.get("marche") and not ctx.get("marche_dossier") and market_state.get("adresse"):
             # Chapitre demandé mais marché pas encore analysé : on lance l'analyse.
+            progres_dossier.etape(0.02, 0.40)
             statut = dossier_status.text
             await on_analyser_marche()
             dossier_status.set_text(statut)
@@ -2501,6 +2430,7 @@ def _build_investor_view() -> None:
             and inp.type_projet == schemas.TypeProjet.location_longue_duree
             and marche["code_departement"] not in market_data.DEPARTEMENTS_SANS_DVF
         ):
+            progres_dossier.etape(progres_dossier.valeur, 0.50)
             try:
                 geojson = await donnees_marche.carte_rentabilite(marche["code_departement"], marche["type_bien"])
                 marche = {**marche, "communes_geojson": geojson}
@@ -2520,13 +2450,14 @@ def _build_investor_view() -> None:
         )
         # Hors de la boucle d'événements : graphiques, cartes et fond IGN
         # prennent quelques secondes, l'application reste réactive.
+        progres_dossier.etape(progres_dossier.valeur, 0.88)  # reprend où en est la barre
         return await run.io_bound(dossier_export.generer_dossier_word, payload)
 
     async def on_generer_apercu() -> None:
         dossier_status.set_text("Génération de l'aperçu du dossier…")
         btn_generer_dossier.disable()
         try:
-            contenu = await generer_contenu_dossier()
+            contenu = await generer_contenu_dossier(terminer=False)
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
             return
@@ -2536,7 +2467,7 @@ def _build_investor_view() -> None:
         apercu_dossier.visible = True
         btn_telecharger_dossier.visible = True
         dossier_status.set_text("Affichage de l'aperçu…")
-        progres_dossier.visible = True  # le navigateur met en page le document
+        progres_dossier.etape(0.90, 0.99)  # le navigateur met en page le document
         try:
             nb_pages = await ui.run_javascript(
                 f"return await window.afficherApercuDossier({json.dumps(url)}, 'c{apercu_pages.id}', "
@@ -2546,7 +2477,7 @@ def _build_investor_view() -> None:
         except TimeoutError:
             nb_pages = None
         finally:
-            progres_dossier.visible = False
+            progres_dossier.terminer()
         dossier_status.set_text(
             (f"Aperçu du dossier ({nb_pages} pages) : " if nb_pages else "Aperçu du dossier : ")
             + "vérifie-le ci-dessous puis télécharge-le au format Word."

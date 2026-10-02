@@ -42,7 +42,7 @@ LOGO_SVG = f"""
 CARD_CLASSES = "w-full rounded-2xl shadow-sm border border-[color:var(--c-filet)] p-4 sm:p-5 md:p-6"
 SECTION_TITLE_CLASSES = "text-xl font-semibold mb-1 titre-sora"
 SUBSECTION_TITLE_CLASSES = "text-sm font-semibold uppercase tracking-wide text-[color:var(--primary-color)] mt-2 mb-1"
-HINT_CLASSES = "text-xs text-gray-500 dark:text-gray-400"
+HINT_CLASSES = "text-xs text-gray-500"
 GRID_CLASSES = "w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
 
 
@@ -97,6 +97,8 @@ def apply_theme() -> None:
              colonne de synthèse de rester fixe (position: sticky). */
           .q-tab-panels, .q-tab-panels .q-panel, .q-panel-parent { overflow: visible !important; }
           .q-tab-panels { background: transparent !important; }
+          /* Texte secondaire en mode sombre (remplace la variante Tailwind dark:, voir basculer_theme). */
+          .body--dark .text-gray-500 { color: #9ca3af !important; }
           .q-tabs--dense .q-tab { padding: 0 10px; }
           .q-table tbody tr:nth-child(even) { background: rgba(127, 127, 127, 0.06); }
           .q-table td.text-right, .q-table th.text-right { font-variant-numeric: tabular-nums; }
@@ -133,20 +135,12 @@ def apply_theme() -> None:
             .q-table__grid-item-row:first-child { margin-bottom: 6px; }
             .q-table__grid-item-row:first-child .q-table__grid-item-value { font-size: 15px; }
           }
-          /* États des champs (légende sous « Type de projet ») :
-             à saisir (bordure laiton), calculé automatiquement (fond bleu), estimé d'après le
-             marché (fond vert) ; « à vérifier » utilise l'état d'erreur de Quasar (bordure rouge). */
-          .champ-a-saisir.q-field--outlined .q-field__control:before { border: 2px solid var(--c-laiton); }
+          /* Champ calculé automatiquement (frais de notaire) : fond bleu, mention « auto ». */
           .champ-calcule.q-field--outlined .q-field__control { background: var(--c-fond-calcule); }
           .champ-calcule.q-field--outlined .q-field__control:before { border-color: var(--c-bord-calcule); }
           .champ-calcule .q-field__label::after { content: " · auto"; color: var(--c-texte-calcule); font-weight: 600; }
-          .champ-estime.q-field--outlined .q-field__control { background: var(--c-fond-estime); }
-          .champ-estime.q-field--outlined .q-field__control:before { border-color: var(--c-bord-estime); }
-          .champ-estime .q-field__label::after { content: " · estimé"; color: var(--c-texte-estime); font-weight: 600; }
-          :root { --c-fond-calcule: #e8f0fa; --c-bord-calcule: #a9c3e3; --c-texte-calcule: #2f5d93;
-                  --c-fond-estime: #e8f3ec; --c-bord-estime: #9cc5ad; --c-texte-estime: #2d6a4f; }
-          .body--dark { --c-fond-calcule: rgba(58, 100, 158, 0.22); --c-bord-calcule: #3a649e; --c-texte-calcule: #9dbbe2;
-                        --c-fond-estime: rgba(45, 106, 79, 0.25); --c-bord-estime: #3f8a68; --c-texte-estime: #8fd0ae; }
+          :root { --c-fond-calcule: #e8f0fa; --c-bord-calcule: #a9c3e3; --c-texte-calcule: #2f5d93; }
+          .body--dark { --c-fond-calcule: rgba(58, 100, 158, 0.22); --c-bord-calcule: #3a649e; --c-texte-calcule: #9dbbe2; }
           .pastille-legende { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
           /* Jauge (taux d'endettement face au seuil). */
           .jauge { position: relative; height: 12px; border-radius: 6px; background: var(--c-filet); overflow: visible; }
@@ -179,7 +173,7 @@ def stat_card(label: str, initial: str = "–", aide_texte: str | None = None, g
     de valeur pour pouvoir le mettre à jour ensuite (`.set_text(...)`)."""
     with ui.column().classes("stat-card gap-0"):
         with ui.row().classes("items-center gap-1 no-wrap"):
-            libelle = ui.label(label).classes("text-xs text-gray-500 dark:text-gray-400")
+            libelle = ui.label(label).classes("text-xs text-gray-500")
             if aide_texte:
                 aide(aide_texte)
         value = ui.label(initial).classes("valeur " + ("text-3xl font-bold" if grand else "text-xl font-bold"))
