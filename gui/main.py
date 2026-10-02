@@ -29,7 +29,13 @@ from app import (
     schemas,
     simulation,
 )
-from app.chapitres_dossier import CHAPITRES_OPTIONNELS, FORMULES_DOSSIER, LIGNES_PATRIMOINE, chapitres_disponibles
+from app.chapitres_dossier import (
+    CHAPITRES_OPTIONNELS,
+    FORMULES_DOSSIER,
+    LIGNES_PATRIMOINE,
+    MENTION_LEGALE,
+    chapitres_disponibles,
+)
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import apercus_dossier, offre, theme
@@ -466,7 +472,7 @@ def index_page() -> None:
                     "text-xs uppercase tracking-wider text-[color:var(--c-laiton)] font-semibold text-center"
                 )
                 ui.label(
-                    "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
+                    "Outil de simulation : les résultats sont des estimations, pas un conseil."
                 ).classes("text-sm text-gray-500 text-center mt-1")
 
         _build_investor_view()
@@ -475,7 +481,8 @@ def index_page() -> None:
             "Sources marché : API Adresse (BAN), DVF géolocalisé (data.gouv.fr), Carte des loyers DHUP/ANIL. "
             "Fiscalité : barème IR 2026 sur revenus 2025, IS 2026, réforme LMNP (loi de finances 2025, art. 84). "
             "Voir le README pour les hypothèses détaillées."
-        ).classes(theme.HINT_CLASSES + " text-center mt-2 mb-4")
+        ).classes(theme.HINT_CLASSES + " text-center mt-2")
+        ui.label(MENTION_LEGALE).classes(theme.HINT_CLASSES + " text-center mb-4")
 
 
 # =========================================================================
@@ -497,7 +504,50 @@ def _build_investor_view() -> None:
         # Le prix d'achat de départ est un exemple : on ne le compare au marché
         # qu'une fois saisi par le client ou repris d'une annonce.
         "prix_renseigne": False,
+        # Idem pour les revenus du foyer (3 000 € par défaut) : le taux
+        # d'endettement n'entre dans le verdict qu'une fois saisis.
+        "profil_renseigne": False,
     }
+
+    COULEURS_VERDICT = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE, "neutre": "#9AA3AD"}
+    ICONES_VERDICT = {"vert": "verified", "orange": "error", "rouge": "cancel"}
+
+    def construire_verdict(avec_detail: bool = False) -> dict:
+        """Encart du verdict en trois niveaux : titre, puis un repère de
+        couleur par critère (rentabilité, prix, financement)."""
+        boite = ui.column().classes("w-full gap-2 rounded-xl p-3 border")
+        with boite:
+            with ui.row().classes("items-center gap-2 no-wrap"):
+                icone = ui.icon("verified", size="26px")
+                titre = ui.label("").classes("text-lg font-bold leading-tight")
+            criteres = []
+            for _ in range(3):
+                with ui.row().classes("w-full items-start gap-2 no-wrap"):
+                    pastille = ui.element("span").classes("pastille-critere")
+                    with ui.column().classes("gap-0 min-w-0"):
+                        nom = ui.label("").classes("text-xs font-semibold leading-tight")
+                        texte = ui.label("").classes("text-xs text-gray-500 leading-tight")
+                criteres.append((pastille, nom, texte))
+            detail = ui.label("").classes("text-xs text-gray-500")
+            detail.visible = avec_detail
+        return {"boite": boite, "icone": icone, "titre": titre, "criteres": criteres, "detail": detail}
+
+    def remplir_verdict(el: dict, v: dict) -> None:
+        couleur = COULEURS_VERDICT[v["niveau"]]
+        el["boite"].style(f"background: color-mix(in srgb, {couleur} 12%, transparent); border-color: {couleur};")
+        el["boite"].visible = True
+        el["icone"].set_name(ICONES_VERDICT[v["niveau"]])
+        el["icone"].style(f"color: {couleur}")
+        el["titre"].set_text(v["titre"])
+        el["titre"].style(f"color: {couleur}")
+        for (pastille, nom, texte), critere in zip(el["criteres"], v["criteres"]):
+            pastille.style(f"background: {COULEURS_VERDICT[critere['niveau']]}")
+            nom.set_text(critere["nom"])
+            texte.set_text(critere["texte"])
+        el["detail"].set_text(v["detail"])
+
+    def marquer_profil_renseigne() -> None:
+        ctx["profil_renseigne"] = True
     refs: dict[str, ui.element] = {}
     # Champs calculés automatiquement que le client a corrigés à la main.
     saisis: set[str] = set()
@@ -1089,11 +1139,9 @@ def _build_investor_view() -> None:
             with ui.tab_panel(tab_resultats):
                 results_placeholder = ui.label("").classes(theme.HINT_CLASSES)
 
-                verdict_box = ui.column().classes("w-full gap-1 rounded-xl p-4 border")
+                verdict_resultats = construire_verdict(avec_detail=True)
+                verdict_box = verdict_resultats["boite"]
                 verdict_box.visible = False
-                with verdict_box:
-                    verdict_titre = ui.label("").classes("text-lg font-bold")
-                    verdict_detail = ui.label("").classes("text-sm")
 
                 def colonne(nom: str, label: str, gauche: bool = False) -> dict:
                     return {"name": nom, "label": label, "field": nom, "align": "left" if gauche else "right"}
@@ -1273,15 +1321,15 @@ def _build_investor_view() -> None:
                             "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
                         ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes(
                             "w-full"
-                        )
+                        ).on("update:model-value", marquer_profil_renseigne)
                         ui.number(
                             "Autres revenus mensuels (€)", value=profil_state["autres_revenus_mensuels"], min=0
-                        ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full")
+                        ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full").on("update:model-value", marquer_profil_renseigne)
                         ui.number(
                             "Mensualités de crédits existants (€)",
                             value=profil_state["mensualites_credits_existants"],
                             min=0,
-                        ).bind_value(profil_state, "mensualites_credits_existants").props("outlined dense").classes("w-full")
+                        ).bind_value(profil_state, "mensualites_credits_existants").props("outlined dense").classes("w-full").on("update:model-value", marquer_profil_renseigne)
 
                     with ui.row().classes("gap-3 mt-3"):
                         btn_endettement = ui.button("Calculer le taux d'endettement").props("unelevated")
@@ -1602,7 +1650,6 @@ def _build_investor_view() -> None:
     # =====================================================================
     # Synthèse en direct (colonne de droite + bandeau mobile)
     # =====================================================================
-    COULEURS_VERDICT = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE}
     syntheses: list[dict] = []
 
     def voir_detail() -> None:
@@ -1612,10 +1659,7 @@ def _build_investor_view() -> None:
 
     def construire_synthese() -> None:
         with ui.column().classes("w-full gap-2"):
-            boite = ui.column().classes("w-full gap-0 rounded-xl p-3 border")
-            with boite:
-                titre = ui.label("").classes("font-bold leading-tight")
-                detail = ui.label("").classes("text-xs mt-1")
+            verdict_el = construire_verdict()
             principal_label = ui.label("").classes("text-xs text-gray-500 mt-1")
             principal = ui.label("–").classes("text-3xl font-bold leading-none")
             lignes = []
@@ -1630,9 +1674,7 @@ def _build_investor_view() -> None:
             )
         syntheses.append(
             {
-                "boite": boite,
-                "titre": titre,
-                "detail": detail,
+                "verdict": verdict_el,
                 "principal_label": principal_label,
                 "principal": principal,
                 "lignes": lignes,
@@ -1641,12 +1683,7 @@ def _build_investor_view() -> None:
         )
 
     def remplir_synthese(sy: dict, v: dict, principal: tuple[str, str, float], lignes: list[tuple[str, str]]) -> None:
-        couleur = COULEURS_VERDICT[v["niveau"]]
-        sy["boite"].style(f"background: color-mix(in srgb, {couleur} 12%, transparent); border-color: {couleur};")
-        sy["boite"].visible = True
-        sy["titre"].set_text(v["titre"])
-        sy["titre"].style(f"color: {couleur}")
-        sy["detail"].set_text(v["detail"])
+        remplir_verdict(sy["verdict"], v)
         sy["principal_label"].set_text(principal[0])
         if sy["principal"].text not in ("–", principal[1]):
             # Surligne brièvement le chiffre qui vient de changer (animation CSS relancée).
@@ -1663,8 +1700,39 @@ def _build_investor_view() -> None:
                 valeur.set_text(lignes[i][1])
         sy["erreur"].set_text("")
 
+    def ecart_au_marche() -> tuple[float | None, str]:
+        """Écart du prix au m² à la médiane du quartier, ou la raison pour
+        laquelle on ne peut pas encore le calculer."""
+        mediane = ((ctx.get("marche_dossier") or {}).get("comparables") or {}).get("prix_m2_moyen")
+        surface = sim_state.get("surface_m2")
+        if not mediane:
+            return None, "Lancez l'étude de marché pour le comparer au quartier"
+        if not ctx["prix_renseigne"] or not surface:
+            return None, "Saisissez le prix d'achat pour le comparer au quartier"
+        return sim_state["prix_achat"] / surface / mediane - 1, ""
+
+    def calculer_verdict(inp, resultat: dict) -> dict:
+        ecart, raison = ecart_au_marche()
+        endettement = None
+        if ctx["profil_renseigne"] and inp.avec_credit:
+            if inp.type_projet == schemas.TypeProjet.achat_revente:
+                mensualite = resultat["achat_revente"]["frais_portage_interets"] / inp.duree_portage_mois
+                loyers = 0.0
+            else:
+                mensualite = resultat.get("mensualite_credit_hors_assurance", 0.0)
+                loyers = resultat["annees"][0]["loyers_bruts"] / 12
+            profil = build_profil_input(profil_state)
+            endettement = endet_mod.calculer_taux_endettement(
+                profil.revenus_nets_mensuels_foyer,
+                profil.autres_revenus_mensuels,
+                profil.mensualites_credits_existants,
+                mensualite,
+                loyers,
+            )
+        return analyse.verdict_global(inp, resultat, ecart, endettement, raison or "")
+
     def maj_syntheses(inp, resultat: dict) -> None:
-        v = analyse.verdict(inp, resultat)
+        v = calculer_verdict(inp, resultat)
         if inp.type_projet == schemas.TypeProjet.achat_revente:
             ar = resultat["achat_revente"]
             principal = ("Marge nette", eur(ar["marge_nette"]), ar["marge_nette"])
@@ -1702,11 +1770,11 @@ def _build_investor_view() -> None:
         for sy in syntheses:
             remplir_synthese(sy, v, principal, lignes)
         barre_pastille.style(f"background: {COULEURS_VERDICT[v['niveau']]}")
-        barre_titre.set_text(v["titre"])
+        barre_titre.set_text(f"{v['titre']} · {principal[1]}")
 
     def erreur_syntheses(message: str) -> None:
         for sy in syntheses:
-            sy["boite"].visible = False
+            sy["verdict"]["boite"].visible = False
             sy["principal_label"].set_text("")
             sy["principal"].set_text("")
             for rangee, _, _ in sy["lignes"]:
@@ -2069,14 +2137,7 @@ def _build_investor_view() -> None:
         )
 
     def render_verdict(v: dict) -> None:
-        couleur = COULEURS_VERDICT[v["niveau"]]
-        verdict_box.style(
-            f"background: color-mix(in srgb, {couleur} 12%, transparent); border-color: {couleur};"
-        )
-        verdict_titre.set_text(v["titre"])
-        verdict_titre.style(f"color: {couleur}")
-        verdict_detail.set_text(v["detail"])
-        verdict_box.visible = True
+        remplir_verdict(verdict_resultats, v)
 
     def texte_prix_max(pm: dict | None, objectif_libelle: str) -> str:
         if pm is None:
@@ -2093,7 +2154,7 @@ def _build_investor_view() -> None:
         results_achat_revente.visible = False
 
         meilleur = resultat["meilleur_regime"]
-        render_verdict(analyse.verdict(inp, resultat))
+        render_verdict(calculer_verdict(inp, resultat))
 
         v_cashflow.set_text(eur(resultat["cashflow_mensuel_an1"]) + "/mois")
         theme.colorer(v_cashflow, resultat["cashflow_mensuel_an1"])
@@ -2205,7 +2266,7 @@ def _build_investor_view() -> None:
         results_location.visible = False
         results_achat_revente.visible = True
         ar = resultat["achat_revente"]
-        render_verdict(analyse.verdict(inp, resultat))
+        render_verdict(calculer_verdict(inp, resultat))
 
         v_ar_marge_nette.set_text(eur(ar["marge_nette"]))
         theme.colorer(v_ar_marge_nette, ar["marge_nette"])
@@ -2364,7 +2425,12 @@ def _build_investor_view() -> None:
         scénarios de stress, plus lourds, ne sont calculés que si l'onglet
         Résultats est affiché."""
         synchroniser_saisonnalite()
-        signature = json.dumps(sim_state, sort_keys=True, default=str)
+        mediane = ((ctx.get("marche_dossier") or {}).get("comparables") or {}).get("prix_m2_moyen")
+        signature = json.dumps(
+            [sim_state, profil_state, ctx["prix_renseigne"], ctx["profil_renseigne"], mediane],
+            sort_keys=True,
+            default=str,
+        )
         if signature != derniere_saisie["signature"]:
             comparer_prix_au_marche()
         if signature == derniere_saisie["signature"]:
@@ -2408,6 +2474,7 @@ def _build_investor_view() -> None:
         return r
 
     def on_calc_endettement() -> None:
+        marquer_profil_renseigne()
         endettement_status.set_text("Calcul en cours…")
         try:
             r = compute_endettement()

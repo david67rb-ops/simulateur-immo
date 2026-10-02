@@ -163,6 +163,8 @@ def apply_theme() -> None:
           .champ-calcule .q-field__label::after { content: " · auto"; color: var(--c-texte-calcule); font-weight: 600; }
           :root { --c-fond-calcule: #e8f0fa; --c-bord-calcule: #a9c3e3; --c-texte-calcule: #2f5d93; }
           .body--dark { --c-fond-calcule: rgba(58, 100, 158, 0.22); --c-bord-calcule: #3a649e; --c-texte-calcule: #9dbbe2; }
+          /* Verdict : un repère de couleur par critère (rentabilité, prix, financement). */
+          .pastille-critere { display: inline-block; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; }
           .pastille-legende { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
           /* Jauge (taux d'endettement face au seuil). */
           .jauge { position: relative; height: 12px; border-radius: 6px; background: var(--c-filet); overflow: visible; }

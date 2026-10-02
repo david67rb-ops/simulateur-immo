@@ -147,6 +147,77 @@ def verdict(inp: SimulationInput, resultat: dict) -> dict:
     return {"niveau": niveau, "titre": titre, "detail": detail}
 
 
+TITRES_VERDICT_GLOBAL = {"vert": "Projet solide", "orange": "Projet à renforcer", "rouge": "Projet à revoir"}
+SEUIL_APPORT_CONFORTABLE = 0.10  # apport / coût total
+MARGE_ENDETTEMENT_CONFORTABLE = 0.03  # points sous le seuil HCSF
+
+
+def niveau_ecart_au_marche(ecart: float) -> str:
+    """Prix au m² du projet face à la médiane des ventes du quartier."""
+    return "vert" if ecart < 0.03 else ("orange" if ecart < 0.10 else "rouge")
+
+
+def verdict_global(
+    inp: SimulationInput,
+    resultat: dict,
+    ecart_marche: float | None = None,
+    endettement=None,
+    raison_prix: str = "Lancez l'étude de marché pour le comparer au quartier",
+) -> dict:
+    """Verdict en trois niveaux (solide, à renforcer, à revoir) sur les trois
+    questions du banquier : la rentabilité, le prix face au marché, le
+    financement. Un critère pas encore évalué (étude de marché non lancée…)
+    reste « neutre » et ne compte pas dans le niveau.
+
+    `ecart_marche` : écart du prix au m² à la médiane du quartier (0,05 = 5 %
+    au-dessus). `endettement` : ResultatEndettement si le profil de
+    l'emprunteur est renseigné. `resultat` : sortie de clean_result."""
+    is_ar = inp.type_projet == TypeProjet.achat_revente
+    rentabilite = verdict(inp, resultat)
+    criteres = [{"nom": "Marge" if is_ar else "Rentabilité", "niveau": rentabilite["niveau"], "texte": rentabilite["titre"]}]
+
+    if ecart_marche is None:
+        criteres.append({"nom": "Prix", "niveau": "neutre", "texte": raison_prix})
+    else:
+        if abs(ecart_marche) < 0.005:
+            texte = "Dans la médiane du quartier"
+        else:
+            sens = "au-dessus de" if ecart_marche > 0 else "sous"
+            texte = f"{_pct(abs(ecart_marche), 0)} {sens} la médiane du quartier"
+        criteres.append({"nom": "Prix", "niveau": niveau_ecart_au_marche(ecart_marche), "texte": texte})
+
+    source = resultat["achat_revente"] if is_ar else resultat
+    cout_total = source.get("cout_total_acquisition", 0.0)
+    if source.get("montant_emprunte", 0.0) <= 0:
+        criteres.append({"nom": "Financement", "niveau": "neutre", "texte": "Sans crédit, en fonds propres"})
+    elif endettement is not None:
+        taux, seuil = endettement.taux_endettement, endettement.seuil_hcsf
+        if endettement.depasse_seuil:
+            niveau, texte = "rouge", f"Endettement de {_pct(taux)}, au-delà du seuil de {_pct(seuil, 0)}"
+        elif seuil - taux < MARGE_ENDETTEMENT_CONFORTABLE:
+            niveau, texte = "orange", f"Endettement de {_pct(taux)}, proche du seuil de {_pct(seuil, 0)}"
+        else:
+            niveau, texte = "vert", f"Endettement de {_pct(taux)}, sous le seuil de {_pct(seuil, 0)}"
+        criteres.append({"nom": "Financement", "niveau": niveau, "texte": texte})
+    else:
+        part = source.get("apport_reel", 0.0) / cout_total if cout_total else 0.0
+        texte = f"Apport de {_pct(part, 0)} du coût total"
+        if part < SEUIL_APPORT_CONFORTABLE:
+            texte += ", souvent jugé faible"
+        criteres.append(
+            {"nom": "Financement", "niveau": "vert" if part >= SEUIL_APPORT_CONFORTABLE else "orange", "texte": texte}
+        )
+
+    niveaux = {c["niveau"] for c in criteres}
+    niveau = "rouge" if "rouge" in niveaux else ("orange" if "orange" in niveaux else "vert")
+    return {
+        "niveau": niveau,
+        "titre": TITRES_VERDICT_GLOBAL[niveau],
+        "detail": rentabilite["detail"],
+        "criteres": criteres,
+    }
+
+
 def _eur(v: float) -> str:
     # Espaces insécables : un montant n'est jamais coupé en fin de ligne.
     return f"{v:,.0f}\u00a0€".replace(",", "\u00a0")

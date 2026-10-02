@@ -20,7 +20,7 @@ from . import analyse
 from . import endettement as endet_mod
 from . import photos_dossier, saisonnalite
 from . import visuels_dossier as visuels
-from .chapitres_dossier import CHAPITRES_OBLIGATOIRES, LIGNES_PATRIMOINE, PARTIE_DU_CHAPITRE, PARTIES
+from .chapitres_dossier import CHAPITRES_OBLIGATOIRES, LIGNES_PATRIMOINE, MENTION_LEGALE, PARTIE_DU_CHAPITRE, PARTIES
 from .polices_word import integrer_polices
 from .schemas import ExportDossierInput, TypeProjet
 from .simulation import simuler
@@ -1824,10 +1824,10 @@ def _section_avertissements(doc, avertissements):
 
 def _section_mentions(doc):
     doc.add_paragraph(
-        "Ce document est une estimation pédagogique générée automatiquement à partir des "
-        "hypothèses saisies par l'utilisateur (prix, loyers ou tarifs de location, charges, taux, durée...). Il ne "
-        "constitue ni une offre de prêt, ni un conseil fiscal ou juridique personnalisé."
+        "Ce document est une estimation générée automatiquement à partir des hypothèses saisies par "
+        "l'utilisateur (prix, loyers ou tarifs de location, charges, taux, durée...)."
     )
+    doc.add_paragraph(MENTION_LEGALE)
     doc.add_paragraph(
         "Le barème de l'impôt sur le revenu, les taux de prélèvements sociaux et les règles "
         "d'amortissement appliqués correspondent à la législation en vigueur au moment de la "
@@ -1854,7 +1854,7 @@ def _ecart_au_marche(inp, marche: dict | None) -> tuple[float, float] | None:
 
 
 def _niveau_ecart(ecart: float) -> str:
-    return "vert" if ecart < 0.03 else ("orange" if ecart < 0.10 else "rouge")
+    return analyse.niveau_ecart_au_marche(ecart)
 
 
 def _couverture_loyer(resultat: dict) -> tuple[float, float]:
