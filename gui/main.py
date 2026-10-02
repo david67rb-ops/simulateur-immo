@@ -19,6 +19,7 @@ from pydantic import ValidationError
 
 from app import (
     analyse,
+    estimations,
     donnees_marche,
     endettement as endet_mod,
     listing_parser,
@@ -503,7 +504,12 @@ def _build_investor_view() -> None:
     with colonne_saisie:
         # -- En-tête persistant : type de projet & structure (pilote tout le reste) --
         with theme.section_card():
-            ui.label("Type de projet").classes(theme.SECTION_TITLE_CLASSES)
+            with ui.row().classes("w-full items-center justify-between gap-2"):
+                ui.label("Type de projet").classes(theme.SECTION_TITLE_CLASSES)
+                # Express : quelques chiffres et un verdict ; Détaillé : les onglets complets.
+                mode_toggle = ui.toggle({"express": "Express", "detail": "Détaillé"}, value="express").props(
+                    "dense no-caps unelevated rounded toggle-color=primary"
+                )
             with ui.row().classes("w-full gap-4"):
                 type_projet_select = (
                     ui.select(TYPE_PROJET_OPTIONS, label="Type de projet", value=sim_state["type_projet"])
@@ -518,6 +524,67 @@ def _build_investor_view() -> None:
                     .classes("flex-1 min-w-[220px]")
                 )
             structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
+
+        # -- Simulation express : les quelques chiffres que le visiteur connaît,
+        # le reste estimé (et signalé comme tel), verdict immédiat. --
+        carte_express = theme.section_card()
+        with carte_express:
+            ui.label("Simulation express").classes(theme.SECTION_TITLE_CLASSES)
+            ui.label(
+                "Quelques chiffres suffisent pour un premier verdict. Le reste est estimé d'après le quartier "
+                "et reste modifiable en mode détaillé."
+            ).classes(theme.HINT_CLASSES + " mb-2")
+            with ui.row().classes("w-full items-start gap-2 no-wrap"):
+                ui.input("Lien d'une annonce (optionnel)").bind_value(market_state, "listing_url").props(
+                    "outlined dense clearable"
+                ).classes("flex-1 min-w-0")
+                ui.button("Remplir", on_click=lambda: on_extraire()).props("outline no-caps").classes("mt-1")
+            with ui.row().classes(theme.GRID_CLASSES + " mt-2"):
+                ui.input("Adresse du bien", placeholder="12 rue de la République, 69002 Lyon").bind_value(
+                    market_state, "adresse"
+                ).props("outlined dense").classes("w-full")
+                liste(TYPE_BIEN_OPTIONS, "Type de bien", sim_state, "type_bien")
+                champ("Surface", sim_state, "surface_m2", suffixe="m²", min=1)
+                refs["ex_prix"] = champ("Prix d'achat", sim_state, "prix_achat", suffixe="€", min=1)
+                refs["ex_apport"] = champ("Apport", sim_state, "apport", suffixe="€", min=0)
+                refs["ex_loyer"] = champ(
+                    "Loyer mensuel",
+                    sim_state,
+                    "loyer_mensuel_hors_charges",
+                    suffixe="€/mois",
+                    min=0,
+                    aide="Hors charges. Si tu ne le modifies pas, le loyer moyen du quartier est repris.",
+                )
+                refs["ex_nuitee"] = champ("Prix moyen par nuitée", sim_state, "prix_nuitee", suffixe="€", min=0)
+                refs["ex_occupation"] = champ(
+                    "Taux d'occupation", sim_state, "taux_occupation_pct", suffixe="%", min=0, max=100
+                )
+                refs["ex_travaux"] = champ("Travaux", sim_state, "montant_travaux", suffixe="€", min=0)
+                refs["ex_revente"] = champ("Prix de revente visé", sim_state, "prix_revente_vise", suffixe="€", min=0)
+            btn_express = ui.button("Voir le verdict", icon="bolt").props("unelevated no-caps").classes("mt-3")
+            express_status = ui.label("").classes(theme.HINT_CLASSES)
+            resultat_express = ui.column().classes("w-full gap-3 mt-2")
+            resultat_express.visible = False
+            with resultat_express:
+                with ui.column().classes("w-full gap-0 rounded-xl p-3 border") as express_boite_verdict:
+                    express_titre = ui.label("").classes("font-bold text-lg leading-tight titre-sora")
+                    express_detail = ui.label("").classes("text-sm mt-1")
+                with ui.row().classes(theme.GRID_CLASSES):
+                    express_v1 = theme.stat_card("Cash-flow net / mois")
+                    express_v2 = theme.stat_card("Rendement brut")
+                    express_v3 = theme.stat_card("Enrichissement net")
+                express_marche = ui.label("").classes("text-sm")
+                ui.label("Hypothèses utilisées").classes(theme.SUBSECTION_TITLE_CLASSES)
+                express_hypotheses = ui.column().classes("w-full gap-1 text-sm")
+                with ui.row().classes("gap-3 mt-1"):
+                    ui.button(
+                        "Affiner mon projet", icon="tune", on_click=lambda: passer_en_detail(tab_financement)
+                    ).props("outline no-caps")
+                    ui.button(
+                        "Préparer le dossier bancaire",
+                        icon="description",
+                        on_click=lambda: passer_en_detail(tab_dossier),
+                    ).props("flat no-caps")
 
         # -- Barre d'onglets --
         with ui.tabs().props("dense").classes("w-full onglets-parcours") as tabs:
@@ -689,7 +756,9 @@ def _build_investor_view() -> None:
                             min=0,
                             aide="Meubles et équipements d'une location meublée, amortis sur la durée indiquée en Fiscalité.",
                         )
-                        champ("Taxe foncière", sim_state, "taxe_fonciere_annuelle", suffixe="€/an", min=0)
+                        refs["field_taxe_fonciere"] = champ(
+                            "Taxe foncière", sim_state, "taxe_fonciere_annuelle", suffixe="€/an", min=0
+                        )
                         champ(
                             "Assurance PNO",
                             sim_state,
@@ -1463,6 +1532,182 @@ def _build_investor_view() -> None:
             else ""
         )
 
+    # =====================================================================
+    # Simulation express
+    # =====================================================================
+    # Champs que le client a lui-même saisis : les estimations ne les écrasent
+    # jamais. `estimes` : champs remplis par une estimation (marché ou forfait).
+    saisis: set[str] = set()
+    estimes: set[str] = set()
+
+    def suivre_saisie(champ_ui, cle: str) -> None:
+        def marquer() -> None:
+            saisis.add(cle)
+            estimes.discard(cle)
+
+        champ_ui.on("update:model-value", marquer)
+
+    for cle_champ, noms in (
+        ("loyer_mensuel_hors_charges", ("field_loyer", "ex_loyer")),
+        ("prix_nuitee", ("field_prix_nuitee", "ex_nuitee")),
+        ("taux_occupation_pct", ("field_taux_occupation", "ex_occupation")),
+        ("taxe_fonciere_annuelle", ("field_taxe_fonciere",)),
+        ("charges_copropriete_annuelles", ("field_charges_copro",)),
+    ):
+        for nom in noms:
+            suivre_saisie(refs[nom], cle_champ)
+    refs["ex_prix"].on("update:model-value", lambda: on_prix_saisi())
+
+    def appliquer_mode(e=None) -> None:
+        express = mode_toggle.value == "express"
+        carte_express.visible = express
+        tabs.visible = not express
+        tab_panels.visible = not express
+
+    def passer_en_detail(onglet) -> None:
+        mode_toggle.set_value("detail")
+        tab_panels.set_value(onglet)
+
+    mode_toggle.on_value_change(appliquer_mode)
+    appliquer_mode()
+
+    def estimer(cle: str, valeur) -> None:
+        if cle not in saisis and valeur:
+            sim_state[cle] = valeur
+            estimes.add(cle)
+
+    async def on_voir_verdict() -> None:
+        btn_express.disable()
+        try:
+            # L'étude de marché lit le type de bien et la surface dans son propre état.
+            market_state["type_bien"] = sim_state["type_bien"]
+            market_state["surface_m2"] = sim_state["surface_m2"]
+            marche = None
+            if (market_state.get("adresse") or "").strip():
+                express_status.set_text("Analyse du quartier…")
+                await on_analyser_marche()
+                marche = ctx.get("last_market_result") or {}
+            type_projet = sim_state["type_projet"]
+            loyer_marche = (marche or {}).get("loyer_mensuel_estime")
+            if type_projet == "location_longue_duree":
+                estimer("loyer_mensuel_hors_charges", loyer_marche)
+            elif type_projet == "location_courte_duree" and marche:
+                estimer("prix_nuitee", marche.get("prix_nuitee_estime"))
+                if marche.get("taux_occupation_estime"):
+                    estimer("taux_occupation_pct", round(marche["taux_occupation_estime"] * 100))
+            surface = sim_state.get("surface_m2") or 0
+            base_loyer = loyer_marche or (
+                sim_state["loyer_mensuel_hors_charges"] if type_projet == "location_longue_duree" else None
+            )
+            estimer("taxe_fonciere_annuelle", estimations.taxe_fonciere(base_loyer, surface))
+            if "charges_copropriete_annuelles" not in saisis:
+                sim_state["charges_copropriete_annuelles"] = estimations.charges_copropriete(
+                    sim_state["type_bien"], surface
+                )
+                estimes.add("charges_copropriete_annuelles")
+            recalc_notaire()
+            inp = build_simulation_input(sim_state)
+            resultat = clean_result(simulation.simuler(inp))
+        except Exception as exc:  # noqa: BLE001
+            express_status.set_text(message_erreur(exc))
+            return
+        finally:
+            btn_express.enable()
+        express_status.set_text("")
+        afficher_resultat_express(inp, resultat)
+
+    btn_express.on_click(on_voir_verdict)
+
+    def afficher_resultat_express(inp, resultat: dict) -> None:
+        v = analyse.verdict(inp, resultat)
+        couleur = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE}[v["niveau"]]
+        express_boite_verdict.style(
+            f"border-color: {couleur}; background: color-mix(in srgb, {couleur} 8%, transparent)"
+        )
+        express_titre.set_text(v["titre"])
+        express_titre.style(f"color: {couleur}")
+        express_detail.set_text(v["detail"])
+        if inp.type_projet == schemas.TypeProjet.achat_revente:
+            ar = resultat["achat_revente"]
+            tri = ar.get("tri_annualise")
+            valeurs = [
+                ("Marge nette", eur(ar["marge_nette"]), ar["marge_nette"]),
+                (libelle_rentabilite_ar(ar["apport_reel"]), pct(ar["rentabilite_operation_pct"], 1), None),
+                ("TRI annualisé de l'apport", pct(tri, 1) if tri is not None else "–", tri),
+            ]
+        else:
+            regime = resultat["meilleur_regime"]
+            valeurs = [
+                ("Cash-flow net / mois", eur(resultat["cashflow_mensuel_an1"]), resultat["cashflow_mensuel_an1"]),
+                ("Rendement brut", pct(resultat["rendement_brut"], 1), None),
+                (
+                    f"Enrichissement sur {inp.duree_projection_annees} ans",
+                    eur(resultat["enrichissement_par_regime"][regime]),
+                    resultat["enrichissement_par_regime"][regime],
+                ),
+            ]
+        for carte, (libelle, texte, signe) in zip((express_v1, express_v2, express_v3), valeurs):
+            carte.set_text(texte)
+            carte.libelle.set_text(libelle)
+            if signe is not None:
+                theme.colorer(carte, signe)
+            else:
+                carte.style("color: var(--c-marque-texte)")
+        # Prix d'achat face aux ventes du quartier, si l'adresse a été analysée.
+        comparables = (ctx.get("marche_dossier") or {}).get("comparables") or {}
+        mediane = comparables.get("prix_m2_moyen")
+        if mediane and inp.surface_m2:
+            ecart = inp.prix_achat / inp.surface_m2 / mediane - 1
+            position = (
+                "dans la médiane du quartier"
+                if abs(ecart) < 0.03
+                else f"{abs(ecart) * 100:.0f} % {'sous' if ecart < 0 else 'au-dessus de'} la médiane du quartier"
+            )
+            express_marche.set_text(
+                f"Prix d'achat : {eur(inp.prix_achat / inp.surface_m2)}/m², {position} ({eur(mediane)}/m²)."
+            )
+        else:
+            express_marche.set_text("")
+        # Hypothèses : ce qui vient du client, ce qui est estimé.
+        express_hypotheses.clear()
+        lignes = []
+        if inp.type_projet == schemas.TypeProjet.location_longue_duree:
+            lignes.append(("Loyer", f"{eur(inp.loyer_mensuel_hors_charges)}/mois", "loyer_mensuel_hors_charges"))
+        if inp.type_projet == schemas.TypeProjet.location_courte_duree:
+            lignes.append(("Prix par nuitée", eur(inp.prix_nuitee), "prix_nuitee"))
+            lignes.append(("Taux d'occupation", pct(inp.taux_occupation_pct, 0), "taux_occupation_pct"))
+        if inp.type_projet != schemas.TypeProjet.achat_revente:
+            lignes.append(("Taxe foncière", f"{eur(inp.taxe_fonciere_annuelle)}/an", "taxe_fonciere_annuelle"))
+            lignes.append(
+                ("Charges de copropriété", f"{eur(inp.charges_copropriete_annuelles)}/an", "charges_copropriete_annuelles")
+            )
+        lignes.append(("Frais de notaire", eur(inp.frais_notaire), "auto"))
+        if inp.avec_credit:
+            lignes.append(
+                (
+                    "Crédit",
+                    f"{inp.duree_credit_annees} ans à {pct(inp.taux_credit_annuel, 2)}, "
+                    f"assurance {pct(inp.taux_assurance_emprunteur, 2)}",
+                    "defaut",
+                )
+            )
+        origines = {
+            "auto": "calculés au barème",
+            "defaut": "valeurs par défaut",
+        }
+        with express_hypotheses:
+            for libelle, valeur, cle in lignes:
+                if cle in estimes:
+                    origine = "estimation"
+                elif cle in origines:
+                    origine = origines[cle]
+                else:
+                    origine = "ta saisie" if cle in saisis else "valeur par défaut"
+                with ui.row().classes("w-full justify-between no-wrap gap-3"):
+                    ui.label(libelle).classes("text-gray-600 dark:text-gray-300")
+                    ui.label(f"{valeur} · {origine}").classes("text-right font-medium")
+        resultat_express.visible = True
+
     async def adapter_au_telephone() -> None:
         """Sur téléphone, tableaux de résultats en mode cartes (une carte par
         ligne, chaque valeur avec son libellé) : lisibles sans défilement
@@ -1681,6 +1926,13 @@ def _build_investor_view() -> None:
         refs["field_differe_duree"].visible = not is_achat_revente and differe_type != "aucun"
         refs["fieldset_credit"].visible = sim_state["avec_credit"]
         refs["note_fonds_propres"].visible = not sim_state["avec_credit"]
+
+        refs["ex_loyer"].visible = type_projet == "location_longue_duree"
+        refs["ex_nuitee"].visible = is_lcd
+        refs["ex_occupation"].visible = is_lcd
+        refs["ex_travaux"].visible = is_achat_revente
+        refs["ex_revente"].visible = is_achat_revente
+        refs["ex_apport"].visible = avec_credit
 
         refs["ms_loyer_block"].visible = type_projet == "location_longue_duree"
         refs["ms_nuitee_block"].visible = type_projet == "location_courte_duree"

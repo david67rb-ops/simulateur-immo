@@ -157,10 +157,11 @@ def stat_card(label: str, initial: str = "–", aide_texte: str | None = None, g
     de valeur pour pouvoir le mettre à jour ensuite (`.set_text(...)`)."""
     with ui.column().classes("stat-card gap-0"):
         with ui.row().classes("items-center gap-1 no-wrap"):
-            ui.label(label).classes("text-xs text-gray-500 dark:text-gray-400")
+            libelle = ui.label(label).classes("text-xs text-gray-500 dark:text-gray-400")
             if aide_texte:
                 aide(aide_texte)
         value = ui.label(initial).classes("valeur " + ("text-3xl font-bold" if grand else "text-xl font-bold"))
+    value.libelle = libelle  # pour changer l'intitulé selon le contexte
     return value
 
 
