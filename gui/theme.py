@@ -133,6 +133,30 @@ def apply_theme() -> None:
             .q-table__grid-item-row:first-child { margin-bottom: 6px; }
             .q-table__grid-item-row:first-child .q-table__grid-item-value { font-size: 15px; }
           }
+          /* États des champs (légende sous « Type de projet ») :
+             à saisir (bordure laiton), calculé automatiquement (fond bleu), estimé d'après le
+             marché (fond vert) ; « à vérifier » utilise l'état d'erreur de Quasar (bordure rouge). */
+          .champ-a-saisir.q-field--outlined .q-field__control:before { border: 2px solid var(--c-laiton); }
+          .champ-a-saisir .q-field__label::after { content: " · à renseigner"; color: var(--c-laiton); font-weight: 600; }
+          .champ-calcule.q-field--outlined .q-field__control { background: var(--c-fond-calcule); }
+          .champ-calcule.q-field--outlined .q-field__control:before { border-color: var(--c-bord-calcule); }
+          .champ-calcule .q-field__label::after { content: " · auto"; color: var(--c-texte-calcule); font-weight: 600; }
+          .champ-estime.q-field--outlined .q-field__control { background: var(--c-fond-estime); }
+          .champ-estime.q-field--outlined .q-field__control:before { border-color: var(--c-bord-estime); }
+          .champ-estime .q-field__label::after { content: " · estimé"; color: var(--c-texte-estime); font-weight: 600; }
+          :root { --c-fond-calcule: #e8f0fa; --c-bord-calcule: #a9c3e3; --c-texte-calcule: #2f5d93;
+                  --c-fond-estime: #e8f3ec; --c-bord-estime: #9cc5ad; --c-texte-estime: #2d6a4f; }
+          .body--dark { --c-fond-calcule: rgba(58, 100, 158, 0.22); --c-bord-calcule: #3a649e; --c-texte-calcule: #9dbbe2;
+                        --c-fond-estime: rgba(45, 106, 79, 0.25); --c-bord-estime: #3f8a68; --c-texte-estime: #8fd0ae; }
+          .pastille-legende { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
+          .badge-a-saisir { background: var(--c-laiton) !important; color: #fff !important; font-size: 10px; }
+          /* Jauge (taux d'endettement face au seuil). */
+          .jauge { position: relative; height: 12px; border-radius: 6px; background: var(--c-filet); overflow: visible; }
+          .jauge-remplissage { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
+          .jauge-seuil { position: absolute; top: -4px; bottom: -4px; width: 2px; background: var(--c-marque-texte); }
+          /* Chiffre qui vient de changer : bref surlignage. */
+          @keyframes maj-flash { 0% { background: color-mix(in srgb, var(--c-laiton) 35%, transparent); } 100% { background: transparent; } }
+          .maj-flash { animation: maj-flash 1.2s ease-out; border-radius: 6px; }
           /* Import des photos du dossier : pas de liste de fichiers, les miniatures suffisent. */
           .uploader-photos .q-uploader__list { display: none; }
           /* Patrimoine du foyer : une ligne par poste (nature, détail, valeur, reste dû) sur ordinateur. */
@@ -177,5 +201,25 @@ def section_card():
     return ui.card().classes(CARD_CLASSES)
 
 
+# Icône de chaque rubrique du formulaire (Material Icons, fournis avec Quasar).
+ICONES_RUBRIQUES = {
+    "Le bien": "home",
+    "Financement": "account_balance",
+    "Achat-revente": "swap_horiz",
+    "Revenus et charges": "payments",
+    "Location courte durée": "luggage",
+    "Régime locatif & fiscalité": "receipt_long",
+    "Photos du bien": "photo_camera",
+    "Contenu du rapport": "checklist",
+    "Aperçu du dossier": "visibility",
+}
+
+
 def subsection_title(text: str) -> None:
-    ui.label(text).classes(SUBSECTION_TITLE_CLASSES)
+    icone = ICONES_RUBRIQUES.get(text)
+    if not icone:
+        ui.label(text).classes(SUBSECTION_TITLE_CLASSES)
+        return
+    with ui.row().classes("items-center gap-2 no-wrap mt-2 mb-1"):
+        ui.icon(icone).classes("text-lg text-[color:var(--c-laiton)]")
+        ui.label(text).classes(SUBSECTION_TITLE_CLASSES.replace("mt-2 mb-1", ""))

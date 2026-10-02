@@ -91,7 +91,17 @@ def champ(label: str, state: dict, cle: str, *, suffixe: str | None = None, aide
     if aide:
         with field.add_slot("append"):
             theme.aide(aide)
+    enregistrer_champ(cle, field)
     return field
+
+
+def enregistrer_champ(cle: str, field) -> None:
+    """Registre des champs de la page par clé d'état, pour leur appliquer le
+    code couleur (à saisir, calculé, estimé, à vérifier)."""
+    client = ui.context.client
+    if not hasattr(client, "champs_fiabimmo"):
+        client.champs_fiabimmo = {}
+    client.champs_fiabimmo.setdefault(cle, []).append(field)
 
 
 def liste(options: dict, label: str, state: dict, cle: str, *, aide: str | None = None):
@@ -494,6 +504,10 @@ def _build_investor_view() -> None:
         "prix_renseigne": False,
     }
     refs: dict[str, ui.element] = {}
+    # Champs que le client a lui-même saisis (les estimations ne les écrasent
+    # jamais) et champs remplis par une estimation (marché ou forfait).
+    saisis: set[str] = set()
+    estimes: set[str] = set()
 
     # -- Mise en page : saisie à gauche, synthèse en direct à droite (ordinateur),
     # bandeau dépliable en bas de l'écran (mobile).
@@ -524,6 +538,17 @@ def _build_investor_view() -> None:
                     .classes("flex-1 min-w-[220px]")
                 )
             structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
+            # Légende du code couleur des champs.
+            with ui.row().classes("w-full items-center gap-x-4 gap-y-1 flex-wrap mt-2 " + theme.HINT_CLASSES):
+                for style_pastille, libelle_pastille in (
+                    ("border: 2px solid var(--c-laiton)", "À renseigner"),
+                    ("background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)", "Calculé"),
+                    ("background: var(--c-fond-estime); border: 1px solid var(--c-bord-estime)", "Estimé"),
+                    ("border: 2px solid var(--c-ko)", "À vérifier"),
+                ):
+                    with ui.row().classes("items-center gap-0 no-wrap"):
+                        ui.html(f'<span class="pastille-legende" style="{style_pastille}"></span>')
+                        ui.label(libelle_pastille)
 
         # -- Simulation express : les quelques chiffres que le visiteur connaît,
         # le reste estimé (et signalé comme tel), verdict immédiat. --
@@ -740,6 +765,13 @@ def _build_investor_view() -> None:
                             aide="Calculés automatiquement selon le barème officiel (droits de mutation, "
                             "émoluments, débours). Tu peux les corriger.",
                         )
+                        with frais_notaire_input.add_slot("prepend"):
+                            btn_notaire_auto = (
+                                ui.button(icon="restart_alt", on_click=lambda: revenir_au_calcul_notaire())
+                                .props("flat round dense size=sm")
+                                .tooltip("Revenir au calcul automatique")
+                            )
+                            btn_notaire_auto.visible = False
                         champ(
                             "Travaux",
                             sim_state,
@@ -1336,9 +1368,12 @@ def _build_investor_view() -> None:
                     ).classes(theme.HINT_CLASSES + " mb-2")
 
                     with ui.row().classes(theme.GRID_CLASSES):
-                        ui.number(
+                        refs["end_revenus"] = ui.number(
                             "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
-                        ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes("w-full")
+                        ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes(
+                            "w-full"
+                        )
+                        enregistrer_champ("revenus_nets_mensuels_foyer", refs["end_revenus"])
                         ui.number(
                             "Autres revenus mensuels (€)", value=profil_state["autres_revenus_mensuels"], min=0
                         ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full")
@@ -1360,6 +1395,15 @@ def _build_investor_view() -> None:
                             v_end_mensualites = theme.stat_card("Mensualités totales")
                             v_end_taux = theme.stat_card("Taux d'endettement")
                             v_end_statut = theme.stat_card("Statut")
+                        # Jauge : le taux du foyer face au seuil de 35 % (échelle de 0 à 50 %).
+                        with ui.column().classes("w-full gap-1"):
+                            with ui.element("div").classes("jauge w-full"):
+                                jauge_remplissage = ui.element("div").classes("jauge-remplissage")
+                                jauge_seuil = ui.element("div").classes("jauge-seuil")
+                            with ui.row().classes("w-full justify-between " + theme.HINT_CLASSES):
+                                ui.label("0 %")
+                                jauge_legende = ui.label("")
+                                ui.label("50 %")
                         end_marge_label = ui.label("").classes(theme.HINT_CLASSES)
 
                     with ui.expansion("Patrimoine du foyer (optionnel)", icon="account_balance").classes(
@@ -1535,28 +1579,95 @@ def _build_investor_view() -> None:
     # =====================================================================
     # Simulation express
     # =====================================================================
-    # Champs que le client a lui-même saisis : les estimations ne les écrasent
-    # jamais. `estimes` : champs remplis par une estimation (marché ou forfait).
-    saisis: set[str] = set()
-    estimes: set[str] = set()
+    # Code couleur : chaque champ saisi au clavier passe de « à renseigner »,
+    # « calculé » ou « estimé » à « saisi ».
+    registre_champs = getattr(ui.context.client, "champs_fiabimmo", {})
 
     def suivre_saisie(champ_ui, cle: str) -> None:
         def marquer() -> None:
             saisis.add(cle)
             estimes.discard(cle)
+            if cle == "prix_achat":
+                on_prix_saisi()
 
         champ_ui.on("update:model-value", marquer)
 
-    for cle_champ, noms in (
-        ("loyer_mensuel_hors_charges", ("field_loyer", "ex_loyer")),
-        ("prix_nuitee", ("field_prix_nuitee", "ex_nuitee")),
-        ("taux_occupation_pct", ("field_taux_occupation", "ex_occupation")),
-        ("taxe_fonciere_annuelle", ("field_taxe_fonciere",)),
-        ("charges_copropriete_annuelles", ("field_charges_copro",)),
-    ):
-        for nom in noms:
-            suivre_saisie(refs[nom], cle_champ)
-    refs["ex_prix"].on("update:model-value", lambda: on_prix_saisi())
+    for cle_champ, champs_ui in registre_champs.items():
+        for champ_ui in champs_ui:
+            suivre_saisie(champ_ui, cle_champ)
+
+    def revenir_au_calcul_notaire() -> None:
+        saisis.discard("frais_notaire")
+        recalc_notaire()
+
+    def cles_a_saisir() -> set[str]:
+        """Données que seul le client connaît, tant qu'il ne les a pas saisies."""
+        type_projet = sim_state["type_projet"]
+        cles = {"prix_achat", "surface_m2"}
+        if sim_state["avec_credit"]:
+            cles |= {"apport", "revenus_nets_mensuels_foyer"}
+        if type_projet == "location_longue_duree":
+            cles.add("loyer_mensuel_hors_charges")
+        elif type_projet == "location_courte_duree":
+            cles |= {"prix_nuitee", "taux_occupation_pct"}
+        else:
+            cles.add("prix_revente_vise")
+        return cles
+
+    ONGLET_DU_CHAMP = {
+        "prix_achat": tab_financement,
+        "surface_m2": tab_financement,
+        "apport": tab_financement,
+        "prix_revente_vise": tab_financement,
+        "loyer_mensuel_hors_charges": tab_fiscalite,
+        "prix_nuitee": tab_fiscalite,
+        "taux_occupation_pct": tab_fiscalite,
+        "revenus_nets_mensuels_foyer": tab_endettement,
+    }
+    badges_onglets = {}
+    for onglet in (tab_financement, tab_fiscalite, tab_endettement):
+        with onglet:
+            badges_onglets[onglet] = ui.badge("").props("floating rounded").classes("badge-a-saisir")
+            badges_onglets[onglet].visible = False
+    etats_appliques: dict[int, tuple] = {}
+    derniere_signature_etats = {"valeur": None}
+
+    def actualiser_etats() -> None:
+        signature = json.dumps(
+            [sim_state, profil_state, sorted(saisis), sorted(estimes)], sort_keys=True, default=str
+        )
+        if signature == derniere_signature_etats["valeur"]:
+            return
+        derniere_signature_etats["valeur"] = signature
+        alertes = estimations.controles_coherence({**sim_state, **profil_state})
+        a_saisir = cles_a_saisir()
+        restants = {onglet: 0 for onglet in badges_onglets}
+        for cle, champs_ui in registre_champs.items():
+            if cle in estimes:
+                etat = "champ-estime"
+            elif cle == "frais_notaire" and cle not in saisis:
+                etat = "champ-calcule"
+            elif cle in a_saisir and cle not in saisis:
+                etat = "champ-a-saisir"
+            else:
+                etat = ""
+            message = alertes.get(cle)
+            for champ_ui in champs_ui:
+                if etats_appliques.get(id(champ_ui)) == (etat, message):
+                    continue  # rien de changé : pas d'envoi au navigateur
+                etats_appliques[id(champ_ui)] = (etat, message)
+                champ_ui.classes(remove="champ-estime champ-calcule champ-a-saisir", add=etat or None)
+                champ_ui._props["error"] = bool(message)
+                champ_ui._props["error-message"] = message or ""
+                champ_ui.update()
+            if etat == "champ-a-saisir" and ONGLET_DU_CHAMP.get(cle) in restants:
+                restants[ONGLET_DU_CHAMP[cle]] += 1
+        for onglet, badge in badges_onglets.items():
+            badge.set_text(str(restants[onglet]))
+            badge.visible = restants[onglet] > 0
+        btn_notaire_auto.visible = "frais_notaire" in saisis
+
+    ui.timer(0.5, actualiser_etats)
 
     def appliquer_mode(e=None) -> None:
         express = mode_toggle.value == "express"
@@ -1780,6 +1891,12 @@ def _build_investor_view() -> None:
         sy["titre"].style(f"color: {couleur}")
         sy["detail"].set_text(v["detail"])
         sy["principal_label"].set_text(principal[0])
+        if sy["principal"].text not in ("–", principal[1]):
+            # Surligne brièvement le chiffre qui vient de changer (animation CSS relancée).
+            ui.run_javascript(
+                f"const e = document.getElementById('c{sy['principal'].id}');"
+                "if (e) { e.classList.remove('maj-flash'); void e.offsetWidth; e.classList.add('maj-flash'); }"
+            )
         sy["principal"].set_text(principal[1])
         theme.colorer(sy["principal"], principal[2])
         for i, (rangee, libelle, valeur) in enumerate(sy["lignes"]):
@@ -1965,7 +2082,7 @@ def _build_investor_view() -> None:
     # =====================================================================
     def recalc_notaire() -> None:
         prix = sim_state.get("prix_achat") or 0
-        if prix <= 0:
+        if prix <= 0 or "frais_notaire" in saisis:  # montant corrigé à la main : on n'y touche plus
             return
         resultat = notaire.calculer_frais_notaire(prix, bool(sim_state["bien_neuf"]))
         sim_state["frais_notaire"] = round(resultat["total"])
@@ -2013,10 +2130,13 @@ def _build_investor_view() -> None:
             market_state["surface_m2"] = donnees["surface_m2"]
             ms_surface.set_value(donnees["surface_m2"])
             sim_state["surface_m2"] = donnees["surface_m2"]
+        if donnees.get("surface_m2"):
+            saisis.add("surface_m2")
         if donnees.get("prix_achat"):
             sim_state["prix_achat"] = round(donnees["prix_achat"])
             prix_achat_input.set_value(sim_state["prix_achat"])
             ctx["prix_renseigne"] = True
+            saisis.add("prix_achat")
             recalc_notaire()
 
         manquants = donnees.get("champs_manquants") or []
@@ -2140,20 +2260,29 @@ def _build_investor_view() -> None:
         sim_state["type_bien"] = market_state["type_bien"]
         sim_state["surface_m2"] = market_state["surface_m2"]
         sim_state["bien_neuf"] = bool(market_state.get("bien_neuf"))
+        saisis.add("surface_m2")  # saisie dans l'onglet Marché
         if result.get("prix_marche_estime"):
             sim_state["prix_achat"] = result["prix_marche_estime"]
             prix_achat_input.set_value(sim_state["prix_achat"])
+            saisis.discard("prix_achat")
+            estimes.add("prix_achat")
             recalc_notaire()
         if sim_state["type_projet"] == "location_courte_duree":
             if result.get("prix_nuitee_estime"):
                 sim_state["prix_nuitee"] = result["prix_nuitee_estime"]
                 field_prix_nuitee.set_value(sim_state["prix_nuitee"])
+                saisis.discard("prix_nuitee")
+                estimes.add("prix_nuitee")
             if result.get("taux_occupation_estime"):
                 sim_state["taux_occupation_pct"] = result["taux_occupation_estime"] * 100
                 field_taux_occupation.set_value(sim_state["taux_occupation_pct"])
+                saisis.discard("taux_occupation_pct")
+                estimes.add("taux_occupation_pct")
         elif result.get("loyer_mensuel_estime"):
             sim_state["loyer_mensuel_hors_charges"] = result["loyer_mensuel_estime"]
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
+            saisis.discard("loyer_mensuel_hors_charges")
+            estimes.add("loyer_mensuel_hors_charges")
         ui.notify("Valeurs de marché appliquées dans l'onglet Financement.", type="positive")
         tab_panels.set_value(tab_financement)
 
@@ -2534,6 +2663,15 @@ def _build_investor_view() -> None:
         v_end_revenus.set_text(eur(r.revenus_consideres_mensuels))
         v_end_mensualites.set_text(eur(r.mensualites_totales_mensuelles))
         v_end_taux.set_text(pct(r.taux_endettement, 1))
+        echelle = 0.50
+        couleur_jauge = theme.NEGATIVE if r.depasse_seuil else (
+            theme.ACCENT if r.taux_endettement > r.seuil_hcsf - 0.05 else theme.POSITIVE
+        )
+        jauge_remplissage.style(
+            f"width: {min(r.taux_endettement / echelle, 1) * 100:.1f}%; background: {couleur_jauge}"
+        )
+        jauge_seuil.style(f"left: {r.seuil_hcsf / echelle * 100:.1f}%")
+        jauge_legende.set_text(f"Seuil HCSF : {pct(r.seuil_hcsf, 0)}")
         v_end_statut.set_text(
             f"⚠️ Dépasse le seuil HCSF ({pct(r.seuil_hcsf, 0)})" if r.depasse_seuil else f"OK (seuil HCSF {pct(r.seuil_hcsf, 0)})"
         )
