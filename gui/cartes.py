@@ -188,7 +188,7 @@ class CarteRentabilite:
         """ % (json.dumps(geojson), self.contexte["lat"], self.contexte["lon"], BIEN)
         ui.run_javascript(_JS_DESSINER % (self.carte.id, code))
         periode = donnees_marche.periode_donnees()
-        self.message.set_text("Survolez une commune pour le détail.")
+        self.message.set_text("Survolez ou touchez une commune pour le détail.")
         self.source.set_text(
             "Rentabilité brute = loyer d'annonce × 12 ÷ prix médian au m² des ventes dans l'ancien"
             + (f" ({periode})" if periode else "")

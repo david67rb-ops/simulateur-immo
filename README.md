@@ -2,31 +2,27 @@
 
 Application 100 % Python ([NiceGUI](https://nicegui.io) — plus de HTML/CSS/JS
 séparés), utilisable en fenêtre de bureau native ou en application web
-hébergée. Deux parcours, choisis via un onglet en haut de la page :
+hébergée. Un parcours complet organisé en onglets qui s'adaptent au
+**type de projet** choisi (location longue durée, location courte durée,
+achat-revente) :
 
-- **Agent immobilier — estimation rapide** : adresse → prix/loyer de marché
-  (bas/moyen/haut), rien d'autre. Pensé pour une estimation en quelques
-  secondes, sans configuration.
-- **Particulier / investisseur** : parcours complet organisé en onglets qui
-  s'adaptent au **type de projet** choisi (location longue durée, location
-  courte durée, achat-revente) :
-  1. **Marché** : étude de marché automatique (géocodage, comparables DVF,
-     loyers DHUP/ANIL, extraction depuis un lien d'annonce), carte des ventes
-     comparables autour du bien, carte de rentabilité brute des communes
-     du département, position du prix d'achat par rapport à la médiane des
-     ventes et liens pour recouper sur MeilleursAgents ou SeLoger.
-  2. **Financement** : caractéristiques du bien, frais de notaire automatiques,
-     emprunt (classique ou différé partiel/total), spécificités achat-revente.
-  3. **Exploitation** : loyers et charges (masqué en achat-revente).
-  4. **Fiscalité** : structure juridique (personne physique, SCI à l'IR, SCI à
-     l'IS), régime locatif, amortissement, projection, TRI et plus-value.
-  5. **Résultats** : cash-flow, comparatif des régimes, graphique, revente.
-  6. **Dossier de financement** : taux d'endettement du foyer et export Word
-     du dossier à présenter en banque (dont un chapitre « Étude de marché » :
-     prix d'achat face aux ventes réelles voisines, pour justifier le prix),
-     chapitre par chapitre au choix
-     (formules Complet, Banque, Personnel ; synthèse, points d'attention et
-     mentions toujours inclus).
+1. **Marché** : étude de marché automatique (géocodage, comparables DVF,
+   loyers DHUP/ANIL, extraction depuis un lien d'annonce), carte des ventes
+   comparables autour du bien, carte de rentabilité brute des communes
+   du département, position du prix d'achat par rapport à la médiane des
+   ventes et liens pour recouper sur MeilleursAgents ou SeLoger.
+2. **Financement** : caractéristiques du bien, frais de notaire automatiques,
+   emprunt (classique ou différé partiel/total), spécificités achat-revente.
+3. **Exploitation** : loyers et charges (masqué en achat-revente).
+4. **Fiscalité** : structure juridique (personne physique, SCI à l'IR, SCI à
+   l'IS), régime locatif, amortissement, projection, TRI et plus-value.
+5. **Résultats** : cash-flow, comparatif des régimes, graphique, revente.
+6. **Dossier de financement** : taux d'endettement du foyer et export Word
+   du dossier à présenter en banque (dont un chapitre « Étude de marché » :
+   prix d'achat face aux ventes réelles voisines, pour justifier le prix),
+   chapitre par chapitre au choix
+   (formules Complet, Banque, Personnel ; synthèse, points d'attention et
+   mentions toujours inclus).
 
 ## Lancer l'application
 

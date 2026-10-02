@@ -39,7 +39,7 @@ LOGO_SVG = f"""
 </svg>
 """.strip()
 
-CARD_CLASSES = "w-full rounded-2xl shadow-sm border border-[color:var(--c-filet)] p-5 md:p-6"
+CARD_CLASSES = "w-full rounded-2xl shadow-sm border border-[color:var(--c-filet)] p-4 sm:p-5 md:p-6"
 SECTION_TITLE_CLASSES = "text-xl font-semibold mb-1 titre-sora"
 SUBSECTION_TITLE_CLASSES = "text-sm font-semibold uppercase tracking-wide text-[color:var(--primary-color)] mt-2 mb-1"
 HINT_CLASSES = "text-xs text-gray-500 dark:text-gray-400"
@@ -108,6 +108,30 @@ def apply_theme() -> None:
           @media (min-width: 1024px) {
             .colonne-synthese { display: block; }
             .barre-synthese-mobile, .espace-barre-mobile { display: none !important; }
+          }
+          /* Téléphone : les 6 onglets sur deux lignes, tous visibles (au lieu d'une barre qui
+             défile et cache l'onglet en cours), et pas de double marge autour des cartes. */
+          @media (max-width: 639px) {
+            .onglets-parcours .q-tabs__content { flex-wrap: wrap; overflow: visible; transform: none !important; }
+            .onglets-parcours .q-tab { flex: 1 1 33%; min-height: 44px; padding: 0 4px; }
+            .onglets-parcours .q-tab__label { font-size: 13px; text-transform: none; letter-spacing: 0; white-space: normal; line-height: 1.2; text-align: center; }
+            .onglets-parcours .q-tabs__arrow { display: none; }
+            .q-tab-panel { padding-left: 0; padding-right: 0; }
+            /* Cartes de chiffres par deux (les grandes, une par ligne) : moins de défilement. */
+            .grid:has(> .stat-card) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+            .grid:has(> .stat-card .text-3xl) { grid-template-columns: minmax(0, 1fr); }
+            .stat-card { padding: 10px 12px; }
+            .stat-card .valeur.text-xl { font-size: 1.1rem; line-height: 1.45rem; }
+            /* Tableaux en mode cartes (une carte par ligne) : lisibles sans défilement horizontal. */
+            .q-table__grid-content .q-table__grid-item { width: 100%; padding: 4px 0; }
+            .q-table__grid-item-card { padding: 12px 14px; }
+            .q-table__grid-item-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+            .q-table__grid-item-row + .q-table__grid-item-row { margin-top: 4px; }
+            .q-table__grid-item-title { font-size: 13px; opacity: 0.75; }
+            .q-table__grid-item-value { font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; }
+            /* Première ligne de chaque carte (régime, scénario…) : en titre. */
+            .q-table__grid-item-row:first-child { margin-bottom: 6px; }
+            .q-table__grid-item-row:first-child .q-table__grid-item-value { font-size: 15px; }
           }
           /* Import des photos du dossier : pas de liste de fichiers, les miniatures suffisent. */
           .uploader-photos .q-uploader__list { display: none; }

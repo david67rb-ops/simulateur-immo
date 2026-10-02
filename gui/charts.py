@@ -23,7 +23,7 @@ def _eur(v: float) -> str:
 
 
 def cashflow_chart_option(resultat: dict, regimes: list[str]) -> dict:
-    labels = [f"Année {a['annee']}" for a in resultat["annees"]]
+    labels = [f"An {a['annee']}" for a in resultat["annees"]]
     series = []
     for i, regime in enumerate(regimes):
         cumul = 0.0
@@ -37,7 +37,7 @@ def cashflow_chart_option(resultat: dict, regimes: list[str]) -> dict:
                 "type": "line",
                 "data": valeurs,
                 "smooth": True,
-                "symbolSize": 5,
+                "showSymbol": False,
                 "itemStyle": {"color": SERIES_COLORS[i % len(SERIES_COLORS)]},
                 "lineStyle": {"color": SERIES_COLORS[i % len(SERIES_COLORS)]},
             }
@@ -45,8 +45,10 @@ def cashflow_chart_option(resultat: dict, regimes: list[str]) -> dict:
     return {
         "tooltip": {"trigger": "axis"},
         "legend": {"bottom": 0, "data": [libelle_regime(r) for r in regimes], "textStyle": _AXES_TEXTE},
-        "grid": {"left": 60, "right": 20, "top": 20, "bottom": 50, "containLabel": True},
-        "xAxis": {"type": "category", "data": labels, "axisLabel": {"rotate": 45, "fontSize": 10, **_AXES_TEXTE}},
+        "grid": {"left": 10, "right": 20, "top": 20, "bottom": 50, "containLabel": True},
+        # « An 1 », « An 2 »… à plat : ECharts n'affiche qu'une année sur deux ou trois
+        # quand la place manque (téléphone), au lieu de libellés obliques serrés.
+        "xAxis": {"type": "category", "data": labels, "axisLabel": {"fontSize": 10, **_AXES_TEXTE}},
         "yAxis": {"type": "value", "axisLabel": {"formatter": "{value} €", **_AXES_TEXTE}},
         "series": series,
     }
@@ -105,7 +107,12 @@ def repartition_loyer_option(resultat: dict) -> dict:
     # que les montants affichés ne chevauchent pas les noms des colonnes.
     bas_min, haut_max = min(points), max(points)
     marge = (haut_max - bas_min) * 0.15
-    axe_y = {"type": "value", "axisLabel": {"formatter": "{value} €", **_AXES_TEXTE}}
+    # Bornes arrondies hors graduation : leurs libellés chevaucheraient la
+    # graduation voisine (« 900 € / 1 000 € »), on ne les affiche pas.
+    axe_y = {
+        "type": "value",
+        "axisLabel": {"formatter": "{value} €", "showMinLabel": False, "showMaxLabel": False, **_AXES_TEXTE},
+    }
     if bas_min < 0:
         axe_y["min"] = -round((-bas_min + marge) / 100 + 0.5) * 100
     axe_y["max"] = round((haut_max + marge) / 100 + 0.5) * 100
@@ -117,7 +124,15 @@ def repartition_loyer_option(resultat: dict) -> dict:
             "type": "category",
             "data": categories,
             "axisLine": {"onZero": False},
-            "axisLabel": {"interval": 0, "fontSize": 11, **_AXES_TEXTE},
+            # Libellés sur deux lignes au besoin : lisibles sur un écran de téléphone.
+            "axisLabel": {
+                "interval": 0,
+                "fontSize": 11,
+                "width": 62,
+                "overflow": "break",
+                "lineHeight": 13,
+                **_AXES_TEXTE,
+            },
         },
         "yAxis": axe_y,
         "series": [
@@ -140,16 +155,16 @@ def patrimoine_option(resultat: dict, prix_achat: float, taux_revalorisation_bie
     (valeur − capital restant dû + cash-flows cumulés − apport), avant impôt de
     revente, pour le régime le plus favorable."""
     lignes = evolution_patrimoine(resultat, prix_achat, taux_revalorisation_bien)
-    annees = [f"Année {l['annee']}" for l in lignes]
+    annees = [f"An {l['annee']}" for l in lignes]
     valeurs = [round(l["valeur_bien"]) for l in lignes]
     crd = [round(l["capital_restant_du"]) for l in lignes]
     patrimoine = [round(l["patrimoine_net"]) for l in lignes]
-    serie = {"type": "line", "smooth": True, "symbolSize": 4}
+    serie = {"type": "line", "smooth": True, "showSymbol": False}
     return {
         "tooltip": {"trigger": "axis"},
         "legend": {"bottom": 0, "textStyle": _AXES_TEXTE},
         "grid": {"left": 10, "right": 20, "top": 20, "bottom": 50, "containLabel": True},
-        "xAxis": {"type": "category", "data": annees, "axisLabel": {"rotate": 45, "fontSize": 10, **_AXES_TEXTE}},
+        "xAxis": {"type": "category", "data": annees, "axisLabel": {"fontSize": 10, **_AXES_TEXTE}},
         "yAxis": {"type": "value", "axisLabel": {"formatter": "{value} €", **_AXES_TEXTE}},
         "series": [
             {**serie, "name": "Valeur du bien", "data": valeurs, "itemStyle": {"color": "#8aa4c8"}},

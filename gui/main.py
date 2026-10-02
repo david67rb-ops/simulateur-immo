@@ -68,13 +68,14 @@ def eur(v) -> str:
     if v is None:
         return "–"
     v = 0.0 if round(v) == 0 else v  # évite « -0 € »
-    return f"{v:,.0f} €".replace(",", " ")
+    # Espaces insécables : un montant n'est jamais coupé en fin de ligne (téléphone).
+    return f"{v:,.0f}\u00a0€".replace(",", "\u00a0")
 
 
 def pct(v, digits: int = 2) -> str:
     if v is None:
         return "–"
-    return f"{v * 100:.{digits}f} %".replace(".", ",")
+    return f"{v * 100:.{digits}f}\u00a0%".replace(".", ",")
 
 
 def champ(label: str, state: dict, cle: str, *, suffixe: str | None = None, aide: str | None = None, **kwargs):
@@ -156,8 +157,7 @@ FIABILITE_PRIX = {
 
 class BlocPrixVentes:
     """Prix au m² des ventes comparables (DVF) : fourchette, fiabilité de
-    l'échantillon et liste des ventes retenues. Partagé par la vue agent et
-    l'onglet Marché."""
+    l'échantillon et liste des ventes retenues (onglet Marché)."""
 
     COLONNES = [
         {"name": "date", "label": "Date", "field": "date", "align": "left"},
@@ -463,16 +463,7 @@ def index_page() -> None:
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
                 ).classes("text-sm text-gray-500 dark:text-gray-400 text-center mt-1")
 
-        with ui.tabs().props("dense").classes("w-full max-w-4xl mx-auto") as profil_tabs:
-            tab_investisseur = ui.tab("Particulier / Investisseur")
-            tab_agent = ui.tab("Agent immobilier")
-
-        with ui.tab_panels(profil_tabs, value=tab_investisseur, animated=False).classes("w-full"):
-            with ui.tab_panel(tab_investisseur).classes("p-0"):
-                _build_investor_view(profil_tabs, tab_agent)
-            with ui.tab_panel(tab_agent).classes("p-0"):
-                with ui.column().classes("w-full max-w-4xl mx-auto gap-5"):
-                    _build_agent_view()
+        _build_investor_view()
 
         ui.label(
             "Sources marché : API Adresse (BAN), DVF géolocalisé (data.gouv.fr), Carte des loyers DHUP/ANIL. "
@@ -482,125 +473,9 @@ def index_page() -> None:
 
 
 # =========================================================================
-# Vue agent immobilier : estimation rapide de prix/loyer de marché
-# =========================================================================
-def _build_agent_view() -> None:
-    state = default_market_state()
-
-    with theme.section_card():
-        ui.label("Estimation rapide").classes(theme.SECTION_TITLE_CLASSES)
-        ui.label(
-            "Prix et loyer de marché à partir d'une simple adresse — sans financement ni fiscalité."
-        ).classes(theme.HINT_CLASSES + " mb-2")
-
-        with ui.row().classes(theme.GRID_CLASSES):
-            adresse_input = (
-                ui.input("Adresse du bien", placeholder="12 rue de la République, 69002 Lyon")
-                .bind_value(state, "adresse")
-                .props("outlined dense")
-                .classes("w-full")
-            )
-            type_input = (
-                ui.select(TYPE_BIEN_OPTIONS, label="Type de bien", value=state["type_bien"])
-                .bind_value(state, "type_bien")
-                .props("outlined dense")
-                .classes("w-full")
-            )
-            surface_input = (
-                ui.number("Surface (m²)", value=state["surface_m2"], min=1)
-                .bind_value(state, "surface_m2")
-                .props("outlined dense")
-                .classes("w-full")
-            )
-            rayon_input = (
-                ui.number("Rayon de recherche (m)", value=state["rayon_metres"], min=100, step=100)
-                .bind_value(state, "rayon_metres")
-                .props("outlined dense")
-                .classes("w-full")
-            )
-        ui.switch("Bien neuf (comparer aux ventes sur plan, VEFA)").bind_value(state, "bien_neuf")
-
-        btn_estimer = ui.button("Estimer").props("unelevated").classes("mt-3")
-        status = ui.label("").classes(theme.HINT_CLASSES)
-
-        results = ui.column().classes("w-full gap-2 mt-2")
-        results.visible = False
-        with results:
-            bloc_prix = BlocPrixVentes()
-            carte_ventes = CarteVentes()
-            ui.label("Loyer de marché au m²").classes(theme.SUBSECTION_TITLE_CLASSES)
-            with ui.row().classes(theme.GRID_CLASSES):
-                v_loyer_bas = theme.stat_card("Mini")
-                v_loyer_moyen = theme.stat_card("Moyen")
-                v_loyer_haut = theme.stat_card("Maxi")
-                v_fiabilite = theme.stat_card("Fiabilité (R²)")
-            with ui.row().classes(theme.GRID_CLASSES):
-                v_prix_total = theme.stat_card("Prix total estimé pour la surface")
-                v_loyer_total = theme.stat_card("Loyer mensuel estimé pour la surface")
-            note = ui.label("").classes(theme.HINT_CLASSES)
-            carte_rentabilite = CarteRentabilite()
-
-    async def on_estimer() -> None:
-        adresse = (state.get("adresse") or "").strip()
-        if not adresse:
-            status.set_text("Merci de saisir une adresse.")
-            return
-        status.set_text("Analyse en cours…")
-        results.visible = False
-
-        try:
-            geo = await market_data.geocoder_adresse(adresse)
-        except market_data.MarketDataError as exc:
-            status.set_text(f"Erreur : {exc}")
-            return
-
-        try:
-            comparables = await market_data.comparables_dvf(
-                geo["code_departement"], geo["lat"], geo["lon"], state["type_bien"],
-                int(state["rayon_metres"]), state.get("surface_m2"), bool(state.get("bien_neuf")),
-            )
-        except Exception as exc:  # noqa: BLE001
-            comparables = {"erreur": str(exc)}
-
-        try:
-            loyer = await market_data.loyer_marche(geo["code_insee"], state["type_bien"])
-        except Exception as exc:  # noqa: BLE001
-            loyer = {"erreur": str(exc)}
-        loyer = loyer or {}
-
-        status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
-
-        bloc_prix.afficher(comparables, geo)
-
-        v_loyer_bas.set_text(f"{loyer['loyer_m2_bas']:.2f} €/m²" if loyer.get("loyer_m2_bas") else "–")
-        v_loyer_moyen.set_text(f"{loyer['loyer_m2_moyen']:.2f} €/m²" if loyer.get("loyer_m2_moyen") else "Non disponible")
-        v_loyer_haut.set_text(f"{loyer['loyer_m2_haut']:.2f} €/m²" if loyer.get("loyer_m2_haut") else "–")
-        v_fiabilite.set_text(str(loyer.get("fiabilite_r2", "–")))
-
-        surface = state.get("surface_m2") or 0
-        v_prix_total.set_text(
-            eur(comparables["prix_m2_moyen"] * surface) if surface and comparables.get("prix_m2_moyen") else "–"
-        )
-        v_loyer_total.set_text(
-            eur(loyer["loyer_m2_moyen"] * surface) + "/mois" if surface and loyer.get("loyer_m2_moyen") else "–"
-        )
-
-        msg = ""
-        if loyer.get("nb_observations_commune") is not None and loyer["nb_observations_commune"] < 30:
-            msg += "⚠️ Peu d'observations pour cette commune : indicateur de loyer peu fiable. "
-        note.set_text(msg)
-
-        results.visible = True
-        carte_ventes.afficher(geo["lat"], geo["lon"], comparables)
-        await carte_rentabilite.afficher(geo["code_departement"], geo["lat"], geo["lon"], state["type_bien"])
-
-    btn_estimer.on_click(on_estimer)
-
-
-# =========================================================================
 # Vue particulier / investisseur : parcours complet en onglets
 # =========================================================================
-def _build_investor_view(profil_tabs, tab_agent) -> None:
+def _build_investor_view() -> None:
     market_state = default_market_state()
     sim_state = default_sim_state()
     profil_state = default_profil_state()
@@ -645,7 +520,7 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             structure_note = ui.label("").classes(theme.HINT_CLASSES + " mt-1")
 
         # -- Barre d'onglets --
-        with ui.tabs().props("dense").classes("w-full") as tabs:
+        with ui.tabs().props("dense").classes("w-full onglets-parcours") as tabs:
             tab_marche = ui.tab("Marché")
             tab_financement = ui.tab("Financement")
             tab_fiscalite = ui.tab("Revenus & fiscalité")
@@ -661,7 +536,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             for tab in tabs_ordre:
                 if tab.visible:
                     numero += 1
-                    tab.props(f'label="{numero}. {tab.props["name"]}"')
+                    # Espace insécable : le numéro reste collé au nom quand le libellé passe à la ligne.
+                    tab.props(f'label="{numero}.\u00a0{tab.props["name"]}"')
 
         def _bouton_onglet_suivant(tab_actuel) -> None:
             """Boutons Précédent / Suivant, qui sautent les onglets masqués."""
@@ -1587,6 +1463,20 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             else ""
         )
 
+    async def adapter_au_telephone() -> None:
+        """Sur téléphone, tableaux de résultats en mode cartes (une carte par
+        ligne, chaque valeur avec son libellé) : lisibles sans défilement
+        horizontal."""
+        try:
+            largeur = await ui.run_javascript("window.innerWidth", timeout=5)
+        except TimeoutError:
+            return
+        if largeur and largeur < 640:
+            for table in (table_regimes, table_stress, table_revente, table_achat_revente, table_stress_ar):
+                table.props("grid")
+
+    ui.timer(0.2, adapter_au_telephone, once=True)
+
     def appliquer_formule_dossier(cle_formule: str) -> None:
         _, retenus = FORMULES_DOSSIER[cle_formule]
         for cle in chapitres_state:
@@ -1712,7 +1602,8 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             construire_synthese()
 
     with ui.element("div").classes(
-        "barre-synthese-mobile fixed bottom-0 inset-x-0 z-40 border-t shadow-lg"
+        # Au-dessus des cartes Leaflet (calques jusqu'à z-index 1000).
+        "barre-synthese-mobile fixed bottom-0 inset-x-0 z-[2000] border-t shadow-lg"
     ):
         with ui.row().classes("w-full items-center gap-2 px-4 py-3 cursor-pointer no-wrap") as barre_entete:
             barre_pastille = ui.element("div").classes("w-3 h-3 rounded-full shrink-0")
@@ -1961,10 +1852,14 @@ def _build_investor_view(profil_tabs, tab_agent) -> None:
             v_occupation_moyen.set_text(pct(nuitee["taux_occupation_moyen"]) if nuitee.get("taux_occupation_moyen") else "–")
             v_occupation_haut.set_text(pct(nuitee["taux_occupation_haut"]) if nuitee.get("taux_occupation_haut") else "–")
         else:
-            v_loyer_bas.set_text(f"{loyer['loyer_m2_bas']:.2f} €/m²" if loyer.get("loyer_m2_bas") else "–")
-            v_loyer_moyen.set_text(f"{loyer['loyer_m2_moyen']:.2f} €/m²" if loyer.get("loyer_m2_moyen") else "Non disponible")
-            v_loyer_haut.set_text(f"{loyer['loyer_m2_haut']:.2f} €/m²" if loyer.get("loyer_m2_haut") else "–")
-            v_fiabilite.set_text(str(loyer.get("fiabilite_r2", "–")))
+            def loyer_m2(cle: str, absent: str = "–") -> str:
+                return f"{loyer[cle]:.2f}".replace(".", ",") + "\u00a0€/m²" if loyer.get(cle) else absent
+
+            v_loyer_bas.set_text(loyer_m2("loyer_m2_bas"))
+            v_loyer_moyen.set_text(loyer_m2("loyer_m2_moyen", "Non disponible"))
+            v_loyer_haut.set_text(loyer_m2("loyer_m2_haut"))
+            r2 = loyer.get("fiabilite_r2")
+            v_fiabilite.set_text(f"{r2:.2f}".replace(".", ",") if isinstance(r2, (int, float)) else "–")
 
         note = ""
         if not is_lcd and loyer.get("nb_observations_commune") is not None and loyer["nb_observations_commune"] < 30:

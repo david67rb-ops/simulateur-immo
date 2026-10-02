@@ -148,11 +148,12 @@ def verdict(inp: SimulationInput, resultat: dict) -> dict:
 
 
 def _eur(v: float) -> str:
-    return f"{v:,.0f} €".replace(",", " ")
+    # Espaces insécables : un montant n'est jamais coupé en fin de ligne.
+    return f"{v:,.0f}\u00a0€".replace(",", "\u00a0")
 
 
 def _pct(v: float, digits: int = 1) -> str:
-    return f"{v * 100:.{digits}f} %".replace(".", ",")
+    return f"{v * 100:.{digits}f}\u00a0%".replace(".", ",")
 
 
 def etapes_loyer_mensuel(resultat: dict) -> list[tuple[str, float]]:
