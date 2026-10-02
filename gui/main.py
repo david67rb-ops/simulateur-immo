@@ -449,18 +449,22 @@ def index_page() -> None:
         ui.run_javascript("Quasar.Dark.set(!Quasar.Dark.isActive)")
 
     with ui.column().classes("w-full max-w-6xl mx-auto gap-5 p-4"):
-        with ui.row().classes("w-full items-center justify-center relative mb-2"):
-            ui.button(icon="dark_mode", on_click=basculer_theme).props(
-                "flat round dense"
-            ).classes("absolute right-0")
-            with ui.column().classes("items-center gap-0"):
-                with ui.row().classes("items-center gap-2"):
+        with ui.element("div").classes("w-full relative mb-2"):
+            # Bouton du thème dans le coin, hors du flux : le titre reste centré
+            # sur la page, quelle que soit la largeur de l'écran.
+            ui.button(icon="dark_mode", on_click=basculer_theme).props("flat round dense").classes(
+                "absolute top-0 right-0"
+            )
+            with ui.column().classes("w-full items-center gap-1"):
+                # Logo à gauche du nom, compensé à droite par un espace de même
+                # largeur : le mot « Fiabimmo » est centré sur le sous-titre.
+                with ui.row().classes("items-center justify-center gap-2 no-wrap"):
                     ui.html(theme.LOGO_SVG).classes("shrink-0")
-                    with ui.column().classes("gap-0"):
-                        ui.label("Fiabimmo").classes("text-2xl font-bold leading-tight")
-                        ui.label("Simulateur de rentabilité immobilière").classes(
-                            "text-xs uppercase tracking-wider text-[color:var(--c-laiton)] font-semibold"
-                        )
+                    ui.label("Fiabimmo").classes("text-2xl font-bold leading-tight")
+                    ui.element("div").classes("shrink-0").style("width: 38px")
+                ui.label("Simulateur de rentabilité immobilière").classes(
+                    "text-xs uppercase tracking-wider text-[color:var(--c-laiton)] font-semibold text-center"
+                )
                 ui.label(
                     "Outil pédagogique — les résultats sont des estimations, pas un conseil fiscal personnalisé."
                 ).classes("text-sm text-gray-500 text-center mt-1")

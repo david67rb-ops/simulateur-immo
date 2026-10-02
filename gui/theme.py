@@ -113,8 +113,11 @@ def apply_theme() -> None:
           }
           /* Téléphone : les 6 onglets sur deux lignes, tous visibles (au lieu d'une barre qui
              défile et cache l'onglet en cours), et pas de double marge autour des cartes. */
+          /* Onglets : passent à la ligne quand la place manque (fenêtre étroite, app Mac) au lieu
+             d'une barre qui défile et cache des onglets. */
+          .onglets-parcours .q-tabs__content { flex-wrap: wrap; overflow: visible; transform: none !important; }
+          .onglets-parcours .q-tabs__arrow { display: none; }
           @media (max-width: 639px) {
-            .onglets-parcours .q-tabs__content { flex-wrap: wrap; overflow: visible; transform: none !important; }
             .onglets-parcours .q-tab { flex: 1 1 33%; min-height: 44px; padding: 0 4px; }
             .onglets-parcours .q-tab__label { font-size: 13px; text-transform: none; letter-spacing: 0; white-space: normal; line-height: 1.2; text-align: center; }
             .onglets-parcours .q-tabs__arrow { display: none; }
