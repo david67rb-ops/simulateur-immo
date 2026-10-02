@@ -113,6 +113,25 @@ def apply_theme() -> None:
           }
           /* Téléphone : les 6 onglets sur deux lignes, tous visibles (au lieu d'une barre qui
              défile et cache l'onglet en cours), et pas de double marge autour des cartes. */
+          /* Frise des étapes du parcours (remplace la barre d'onglets) et assistant. */
+          .frise-ligne { display: flex; align-items: flex-start; width: 100%; }
+          .frise-etape { display: flex; flex-direction: column; align-items: center; gap: 5px; cursor: pointer; min-width: 40px; }
+          .frise-rond { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+                        font-weight: 600; font-size: 14px; border: 2px solid var(--c-filet); color: #6b7280;
+                        background: var(--c-fond); transition: all 0.2s ease; }
+          .frise-etape:hover .frise-rond { border-color: var(--c-marque-texte); }
+          .frise-courant .frise-rond { background: var(--c-marque); border-color: var(--c-marque); color: #fff;
+                                      box-shadow: 0 0 0 4px color-mix(in srgb, var(--c-marque) 18%, transparent); }
+          .frise-fait .frise-rond { background: var(--c-ok); border-color: var(--c-ok); color: #fff; }
+          .frise-trait { flex: 1; height: 2px; background: var(--c-filet); margin-top: 16px; min-width: 8px; }
+          .frise-trait-fait { background: var(--c-ok); }
+          .frise-libelle { font-size: 12px; color: #6b7280; white-space: nowrap; }
+          .frise-courant .frise-libelle { color: var(--c-marque-texte); font-weight: 600; }
+          .etape-compteur { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--c-laiton); font-weight: 600; white-space: nowrap; }
+          .etape-titre { font-family: 'Sora', 'Public Sans', sans-serif; font-size: 1.15rem; font-weight: 600; }
+          .nav-etapes { position: sticky; bottom: 0; z-index: 30; padding: 10px 0; background: var(--c-fond); }
+          @media (max-width: 1023px) { .nav-etapes { bottom: 52px; } }
+          @media (max-width: 639px) { .frise-libelle { display: none; } }
           /* Onglets : passent à la ligne quand la place manque (fenêtre étroite, app Mac) au lieu
              d'une barre qui défile et cache des onglets. */
           .onglets-parcours .q-tabs__content { flex-wrap: wrap; overflow: visible; transform: none !important; }

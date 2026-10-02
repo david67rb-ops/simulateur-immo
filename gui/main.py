@@ -534,7 +534,9 @@ def _build_investor_view() -> None:
                 )
                 ui.label("Calculé automatiquement (modifiable)")
 
-        # -- Barre d'onglets --
+        # -- Étapes du parcours : les onglets Quasar pilotent les panneaux mais
+        # restent masqués ; la frise d'étapes et la barre Précédent / Suivant
+        # (assistant) les remplacent à l'écran. --
         with ui.tabs().props("dense").classes("w-full onglets-parcours") as tabs:
             tab_marche = ui.tab("Marché")
             tab_financement = ui.tab("Financement")
@@ -543,7 +545,9 @@ def _build_investor_view() -> None:
             tab_endettement = ui.tab("Endettement")
             tab_dossier = ui.tab("Dossier")
 
+        tabs.visible = False
         tabs_ordre = [tab_marche, tab_financement, tab_fiscalite, tab_resultats, tab_endettement, tab_dossier]
+        frise = ui.element("div").classes("frise-etapes w-full")
 
         def numeroter_onglets() -> None:
             # Numérotation continue des onglets visibles (Endettement est masqué sans crédit).
@@ -553,25 +557,6 @@ def _build_investor_view() -> None:
                     numero += 1
                     # Espace insécable : le numéro reste collé au nom quand le libellé passe à la ligne.
                     tab.props(f'label="{numero}.\u00a0{tab.props["name"]}"')
-
-        def _bouton_onglet_suivant(tab_actuel) -> None:
-            """Boutons Précédent / Suivant, qui sautent les onglets masqués."""
-
-            def _aller(sens: int) -> None:
-                idx = tabs_ordre.index(tab_actuel)
-                candidats = tabs_ordre[idx + 1 :] if sens > 0 else reversed(tabs_ordre[:idx])
-                for tab in candidats:
-                    if tab.visible:
-                        tab_panels.set_value(tab)
-                        return
-
-            with ui.row().classes("w-full justify-between mt-1"):
-                if tab_actuel is tabs_ordre[0]:
-                    ui.element("div")
-                else:
-                    ui.button("Précédent", icon="arrow_back", on_click=lambda: _aller(-1)).props("flat no-caps")
-                if tab_actuel is not tabs_ordre[-1]:
-                    ui.button("Suivant", icon="arrow_forward", on_click=lambda: _aller(1)).props("outline no-caps")
 
         with ui.tab_panels(tabs, value=tab_marche, animated=False).classes("w-full") as tab_panels:
             # -----------------------------------------------------------------
@@ -667,8 +652,6 @@ def _build_investor_view() -> None:
                         market_note = ui.label("").classes(theme.HINT_CLASSES)
                         carte_rentabilite = CarteRentabilite()
                         btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
-
-                _bouton_onglet_suivant(tab_marche)
 
             # -----------------------------------------------------------------
             # Onglet Financement (le bien + emprunt + spécifique achat-revente)
@@ -838,8 +821,6 @@ def _build_investor_view() -> None:
                                 max=15,
                             )
                     refs["fieldset_achat_revente"] = fieldset_achat_revente
-
-                _bouton_onglet_suivant(tab_financement)
 
             # -----------------------------------------------------------------
             # Onglet Revenus & fiscalité
@@ -1102,8 +1083,6 @@ def _build_investor_view() -> None:
                                 "cette marge nette.",
                             )
 
-                _bouton_onglet_suivant(tab_fiscalite)
-
             # -----------------------------------------------------------------
             # Onglet Résultats
             # -----------------------------------------------------------------
@@ -1279,8 +1258,6 @@ def _build_investor_view() -> None:
                         row_key="scenario",
                     ).props("flat bordered").classes("w-full")
 
-                _bouton_onglet_suivant(tab_resultats)
-
             # -----------------------------------------------------------------
             # Onglet Taux d'endettement
             # -----------------------------------------------------------------
@@ -1355,8 +1332,6 @@ def _build_investor_view() -> None:
                                     ui.element("div")
                         total_patrimoine = ui.label("").classes("text-sm font-semibold mt-2")
 
-                _bouton_onglet_suivant(tab_endettement)
-
             # -----------------------------------------------------------------
             # Onglet Dossier de financement
             # -----------------------------------------------------------------
@@ -1427,6 +1402,10 @@ def _build_investor_view() -> None:
                         theme.subsection_title("Aperçu du dossier")
                         # Pages du rapport Word affichées dans le navigateur (docx-preview).
                         apercu_pages = ui.element("div").classes("apercu-dossier w-full")
+
+        # Assistant : Précédent / Suivant (nommé d'après l'étape suivante),
+        # toujours visible en bas de l'écran.
+        nav_etapes = ui.row().classes("nav-etapes w-full justify-between items-center no-wrap gap-2")
 
         ui.element("div").classes("espace-barre-mobile h-16")  # place pour le bandeau mobile
 
@@ -1542,6 +1521,78 @@ def _build_investor_view() -> None:
         _, retenus = FORMULES_DOSSIER[cle_formule]
         for cle in chapitres_state:
             chapitres_state[cle] = cle in retenus
+
+    LIBELLES_COURTS = {
+        tab_marche: "Marché",
+        tab_financement: "Financement",
+        tab_fiscalite: "Revenus",
+        tab_resultats: "Résultats",
+        tab_endettement: "Endettement",
+        tab_dossier: "Dossier",
+    }
+    etapes_vues = {tab_marche}
+
+    def etapes_visibles() -> list:
+        return [tab for tab in tabs_ordre if tab.visible]
+
+    def etape_courante():
+        return next((tab for tab in tabs_ordre if onglet_actif(tab)), tab_marche)
+
+    def aller_a(tab) -> None:
+        tab_panels.set_value(tab)
+        # Sur téléphone, on remonte au début de l'étape.
+        ui.run_javascript(
+            "const f = document.querySelector('.frise-etapes');"
+            "if (f && f.getBoundingClientRect().top < 0) f.scrollIntoView({behavior: 'smooth', block: 'start'});"
+        )
+
+    def dessiner_etapes() -> None:
+        """Frise (étapes vues cochées, étape en cours mise en avant), titre
+        « Étape X sur N » et barre Précédent / Suivant."""
+        visibles = etapes_visibles()
+        courante = etape_courante()
+        if courante not in visibles:
+            courante = visibles[-1]
+        rang = visibles.index(courante)
+        frise.clear()
+        with frise:
+            with ui.element("div").classes("frise-ligne"):
+                for i, tab in enumerate(visibles):
+                    if i:
+                        ui.element("div").classes("frise-trait" + (" frise-trait-fait" if i <= rang else ""))
+                    etat = "courant" if tab is courante else ("fait" if tab in etapes_vues else "a-venir")
+                    with ui.element("div").classes(f"frise-etape frise-{etat}").on(
+                        "click", lambda t=tab: aller_a(t)
+                    ):
+                        with ui.element("div").classes("frise-rond"):
+                            if etat == "fait":
+                                ui.icon("check").classes("text-base")
+                            else:
+                                ui.label(str(i + 1))
+                        ui.label(LIBELLES_COURTS[tab]).classes("frise-libelle")
+            with ui.row().classes("items-baseline gap-2 mt-3 no-wrap"):
+                ui.label(f"Étape {rang + 1} sur {len(visibles)}").classes("etape-compteur")
+                ui.label(courante.props["name"]).classes("etape-titre")
+        nav_etapes.clear()
+        with nav_etapes:
+            if rang > 0:
+                precedente = visibles[rang - 1]
+                ui.button(LIBELLES_COURTS[precedente], icon="arrow_back", on_click=lambda: aller_a(precedente)).props(
+                    "flat no-caps"
+                )
+            else:
+                ui.element("div")
+            if rang < len(visibles) - 1:
+                suivante = visibles[rang + 1]
+                ui.button(f"Suivant : {LIBELLES_COURTS[suivante]}", on_click=lambda: aller_a(suivante)).props(
+                    'unelevated no-caps icon-right="arrow_forward"'
+                )
+
+    def sur_changement_etape(_e=None) -> None:
+        etapes_vues.add(etape_courante())
+        dessiner_etapes()
+
+    tab_panels.on_value_change(sur_changement_etape)
 
     def onglet_actif(tab) -> bool:
         # La valeur est l'onglet lui-même après un set_value(), son nom après un clic.
@@ -1708,6 +1759,7 @@ def _build_investor_view() -> None:
         numeroter_onglets()
         if not avec_credit and onglet_actif(tab_endettement):
             tab_panels.set_value(tab_dossier)
+        dessiner_etapes()
         libelle_nom = "Nom de l'emprunteur (optionnel)" if avec_credit else "Nom de l'investisseur (optionnel)"
         refs["field_nom_emprunteur"].props(f'label="{libelle_nom}"')
 
