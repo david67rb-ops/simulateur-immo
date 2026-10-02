@@ -19,6 +19,7 @@ from . import charts_export as charts
 from . import analyse
 from . import endettement as endet_mod
 from . import photos_dossier, saisonnalite
+from . import visuels_dossier as visuels
 from .chapitres_dossier import CHAPITRES_OBLIGATOIRES, LIGNES_PATRIMOINE, PARTIE_DU_CHAPITRE, PARTIES
 from .polices_word import integrer_polices
 from .schemas import ExportDossierInput, TypeProjet
@@ -46,7 +47,31 @@ VERT_HEX = "2D6A4F"
 ROUGE_HEX = "B23A32"
 FOND_TUILE_HEX = "EEF2F7"
 # (couleur du filet et du titre, fond) selon le niveau du verdict
-COULEURS_VERDICT = {"vert": ("2D6A4F", "E9F2ED"), "orange": ("B7791F", "FBF3E6"), "rouge": ("B23A32", "F8E9E7")}
+COULEURS_VERDICT = {
+    "vert": ("2D6A4F", "E9F2ED"),
+    "orange": ("B7791F", "FBF3E6"),
+    "rouge": ("B23A32", "F8E9E7"),
+    "neutre": ("1B3358", "EEF2F7"),
+}
+# Icône de chaque chapitre (Material Icons, comme les rubriques du simulateur).
+ICONES_CHAPITRES = {
+    "carte": "place",
+    "photos": "photo_camera",
+    "marche": "price_check",
+    "presentation": "home",
+    "charges": "receipt_long",
+    "loyer_mensuel": "account_balance_wallet",
+    "saisonnalite": "calendar_month",
+    "patrimoine": "show_chart",
+    "achat_revente": "swap_horiz",
+    "financement": "account_balance",
+    "profil": "person",
+    "endettement": "speed",
+    "avertissements": "warning",
+    "synthese": "dashboard",
+    "annexes": "fact_check",
+    "mentions": "info",
+}
 
 NS_W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
 NS_W14 = "http://schemas.microsoft.com/office/word/2010/wordml"
@@ -61,13 +86,16 @@ LARGEUR_CONTENU_CM = LARGEUR_PAGE_CM - 2 * MARGE_CM
 # chapitre et la rangée de tuiles, avec une marge de sécurité (le rendu exact
 # dépend de Word). Le bloc tableau + graphique doit tenir dans ce reste.
 HAUTEUR_UTILE_CM = HAUTEUR_PAGE_CM - 2 * MARGE_CM
-HAUTEUR_ENTETE_CHAPITRE_CM = 2.6  # dont le nom de la partie
+HAUTEUR_ENTETE_CHAPITRE_CM = 3.0  # fil des parties, puis numéro, titre et description
+HAUTEUR_A_RETENIR_CM = 1.3  # encadré « À retenir » sous l'en-tête
 HAUTEUR_TUILES_CM = 2.1
 HAUTEUR_NOTE_CM = 1.0
 HAUTEUR_VERDICT_CM = 2.6
 HAUTEUR_PHRASE_CM = 1.5  # le projet en une phrase (deux lignes)
 MARGE_SECURITE_CM = 1.0
-HAUTEUR_BLOC_CM = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_TUILES_CM - MARGE_SECURITE_CM
+HAUTEUR_BLOC_CM = (
+    HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_A_RETENIR_CM - HAUTEUR_TUILES_CM - MARGE_SECURITE_CM
+)
 # Hauteur d'une ligne de tableau clé/valeur selon sa densité (cm).
 HAUTEUR_LIGNE_CM = {"normal": 0.84, "compact": 0.64, "serre": 0.52}
 
@@ -88,6 +116,7 @@ LABELS_DIFFERE = {
 
 
 def _eur(v: float) -> str:
+    v = 0.0 if round(v) == 0 else v  # évite « -0 € »
     return f"{v:,.0f} €".replace(",", " ")
 
 
@@ -317,9 +346,21 @@ def _signet(paragraphe, nom: str, identifiant: int) -> None:
     paragraphe._p.append(fin)
 
 
-def _entete_chapitre(doc, numero: int, titre: str, description: str | None, partie: str | None = None) -> None:
-    """Numéro dans un pavé bleu, nom de la partie, titre et phrase
-    d'explication à côté."""
+def _entete_chapitre(
+    doc,
+    numero: int,
+    titre: str,
+    description: str | None,
+    partie: str | None = None,
+    parties: tuple[str, ...] = (),
+    icone: str | None = None,
+) -> None:
+    """Fil des parties du dossier (où en est le lecteur), puis numéro dans un
+    pavé bleu, icône, titre et phrase d'explication."""
+    if partie and parties:
+        p_fil = doc.add_paragraph()
+        p_fil.paragraph_format.space_after = Pt(7)
+        p_fil.add_run().add_picture(io.BytesIO(visuels.fil_parties(parties, partie)), height=Cm(0.62))
     table = doc.add_table(rows=1, cols=2)
     table.autofit = False
     _supprimer_bordures(table)
@@ -337,9 +378,11 @@ def _entete_chapitre(doc, numero: int, titre: str, description: str | None, part
     _cell_marges(cell_titre, haut=40, bas=60, gauche=260, droite=60)
     _bordures_cellule(cell_titre, bottom=(MARQUE_HEX, 12))
     p_titre = cell_titre.paragraphs[0]
-    if partie:
-        _texte(p_titre, partie.upper(), 8, LAITON, gras=True)
-        p_titre = cell_titre.add_paragraph()
+    if icone:
+        run_icone = p_titre.add_run()
+        run_icone.add_picture(io.BytesIO(visuels.icone(icone)), height=Cm(0.62))
+        run_icone.font.position = Pt(-3)  # icône alignée sur le milieu du titre
+        _texte(p_titre, "  ", 20, TEXTE_FONCE)
     _texte(p_titre, titre, 20, TEXTE_FONCE, gras=True)
     _signet(p_titre, f"chapitre_{numero:02d}", numero)
     if description:
@@ -347,6 +390,26 @@ def _entete_chapitre(doc, numero: int, titre: str, description: str | None, part
         p.paragraph_format.space_before = Pt(1)
         _texte(p, description, 10, GRIS_LIBELLE)
     _espace(doc, 14)
+
+
+def _a_retenir(doc, niveau: str, texte: str) -> None:
+    """Encadré « À retenir » : la conclusion du chapitre en une phrase, en
+    couleur selon qu'elle est favorable, à surveiller ou défavorable."""
+    filet, fond = COULEURS_VERDICT[niveau]
+    table = doc.add_table(rows=1, cols=1)
+    table.autofit = False
+    _supprimer_bordures(table)
+    table.columns[0].width = Cm(LARGEUR_CONTENU_CM)
+    cell = table.rows[0].cells[0]
+    cell.width = Cm(LARGEUR_CONTENU_CM)
+    _set_cell_background(cell, fond)
+    _bordures_cellule(cell, left=(filet, 36))
+    _cell_marges(cell, haut=90, bas=100, gauche=240, droite=240)
+    _texte(cell.paragraphs[0], "À RETENIR", 7.5, RGBColor.from_string(filet), gras=True)
+    p = cell.add_paragraph()
+    p.paragraph_format.space_before = Pt(1)
+    _texte(p, texte, 11.5, RGBColor.from_string(filet))
+    _espace(doc, 12)
 
 
 def _supprimer_bordures(table) -> None:
@@ -666,7 +729,7 @@ def _image_cascade_loyer(resultat: dict) -> bytes:
         [(etapes[0][0], etapes[0][1], True)]
         + [(libelle, v, False) for libelle, v in etapes[1:]]
         + [("Cash-flow net", cashflow, True)],
-        titre="Où va le loyer chaque mois (année 1)",
+        titre="Du loyer au cash-flow (mois moyen, année 1)",
     )
 
 
@@ -727,68 +790,142 @@ def phrase_projet(payload, inp, resultat: dict, is_achat_revente: bool) -> str:
     return phrase + "."
 
 
+def _bloc_tableau_de_bord(cell, icone: str, titre: str, niveau: str, lignes: list[tuple], largeur_cm: float) -> None:
+    """Un bloc de la synthèse : icône et titre, puis 3 lignes libellé / valeur
+    (valeur colorée si un sens est donné), filet de couleur selon le niveau."""
+    filet, _fond = COULEURS_VERDICT[niveau]
+    _set_cell_background(cell, FOND_TUILE_HEX)
+    _bordures_cellule(cell, left=(filet, 30))
+    _cell_marges(cell, haut=150, bas=170, gauche=260, droite=240)
+    p_titre = cell.paragraphs[0]
+    run = p_titre.add_run()
+    run.add_picture(io.BytesIO(visuels.icone(icone, couleur="#" + filet)), height=Cm(0.55))
+    run.font.position = Pt(-3)
+    _texte(p_titre, "  ", 13, PRIMARY_COLOR)
+    _texte(p_titre, titre, 13, PRIMARY_COLOR, gras=True)
+    p_titre.paragraph_format.space_after = Pt(5)
+    for libelle, valeur, *sens in lignes:
+        p = cell.add_paragraph()
+        _taquet_valeur(p, largeur_cm - 0.95)
+        _texte(p, libelle, 10, GRIS_LIBELLE)
+        couleur = TEXTE_FONCE if not sens or sens[0] is None else (VERT if sens[0] else ROUGE)
+        _texte(p, "\t" + valeur, 11.5, couleur, gras=True)
+        p.paragraph_format.space_before = Pt(3)
+
+
+def _taquet_valeur(paragraphe, position_cm: float) -> None:
+    paragraphe.paragraph_format.tab_stops.add_tab_stop(Cm(position_cm), WD_TAB_ALIGNMENT.RIGHT)
+
+
 def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
+    """Tableau de bord : le projet en une phrase, le verdict, puis 4 blocs
+    (le bien, la rentabilité ou l'opération, le financement, le long terme
+    ou la marge), chacun avec son repère de couleur."""
     p_phrase = doc.add_paragraph()
     _texte(p_phrase, phrase_projet(payload, inp, resultat, is_achat_revente), 12.5, TEXTE_FONCE)
     p_phrase.paragraph_format.space_after = Pt(10)
     _bandeau_verdict(doc, analyse.verdict(inp, resultat))
     cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
-    tuile_endettement = None
+    ecart = _ecart_au_marche(inp, payload.marche)
+
+    prix_m2 = f"{_eur(inp.prix_achat / inp.surface_m2)}/m²"
+    if ecart:
+        signe = "+" if ecart[0] > 0 else "−"
+        prix_m2 += f" ({signe}{_pct(abs(ecart[0]), 0)} vs quartier)" if abs(ecart[0]) >= 0.005 else " (médiane)"
+    bloc_bien = (
+        "home",
+        "Le bien",
+        _niveau_ecart(ecart[0]) if ecart else "neutre",
+        [("Prix d'achat", _eur(inp.prix_achat)), ("Prix au m²", prix_m2), ("Coût total de l'opération", _eur(cout_total))],
+    )
+
+    # Financement : taux d'endettement si le profil est renseigné, sinon part de l'apport.
+    part_apport = apport / cout_total if cout_total else 0
+    lignes_financement = [("Apport", f"{_eur(apport)} ({_pct(part_apport, 0)})")]
+    if montant_emprunte > 0:
+        credit = _eur(montant_emprunte)
+        if not is_achat_revente:
+            credit += f" · {inp.duree_credit_annees} ans à {_pct(inp.taux_credit_annuel, 2)}"
+        lignes_financement.append(("Crédit", credit))
+    else:
+        lignes_financement.append(("Crédit", "Aucun (fonds propres)"))
     if payload.profil is not None:
         r = _taux_endettement(payload, inp, resultat, is_achat_revente)
-        tuile_endettement = ("Taux d'endettement", _pct(r.taux_endettement), not r.depasse_seuil)
+        lignes_financement.append(("Taux d'endettement", _pct(r.taux_endettement), not r.depasse_seuil))
+        niveau_financement = "rouge" if r.depasse_seuil else ("orange" if r.seuil_hcsf - r.taux_endettement < 0.03 else "vert")
+    else:
+        if montant_emprunte > 0 and not is_achat_revente:
+            lignes_financement.append(("Mensualité", _eur(resultat["mensualite_credit_hors_assurance"]) + "/mois"))
+        niveau_financement = "neutre" if montant_emprunte <= 0 else ("vert" if part_apport >= 0.10 else "orange")
+    bloc_financement = ("account_balance", "Le financement", niveau_financement, lignes_financement)
 
     if is_achat_revente:
         ar = resultat["achat_revente"]
+        part = ar["marge_nette"] / cout_total if cout_total else 0
         tri = ar.get("tri_annualise")
-        tuiles = [
-            ("Marge nette", _eur(ar["marge_nette"]), ar["marge_nette"] >= 0),
-            (libelle_rentabilite_ar(ar["apport_reel"]), _pct(ar["rentabilite_operation_pct"]), ar["rentabilite_operation_pct"] >= 0),
-            ("TRI annualisé de l'apport", _pct(tri) if tri is not None else "n/a", tri >= 0 if tri is not None else None),
-            ("Coût total", _eur(cout_total), None),
-            ("Frais de portage", _eur(ar["frais_portage_total"]), None),
-            tuile_endettement or ("Impôt", _eur(ar["impot_total"]), None),
-        ]
-        image = _image_pont_marge(resultat)
-        lignes_projet = [("Durée de portage", f"{inp.duree_portage_mois} mois"), ("Prix de revente", _eur(ar["prix_revente"]))]
+        bloc_2 = (
+            "swap_horiz",
+            "L'opération",
+            "neutre",
+            [
+                ("Prix de revente", _eur(ar["prix_revente"])),
+                ("Durée de portage", f"{inp.duree_portage_mois} mois"),
+                ("Frais de portage", _eur(ar["frais_portage_total"])),
+            ],
+        )
+        bloc_4 = (
+            "show_chart",
+            "La marge",
+            "rouge" if part < 0 else ("orange" if part < 0.10 else "vert"),
+            [
+                ("Marge nette", _eur(ar["marge_nette"]), ar["marge_nette"] >= 0),
+                (libelle_rentabilite_ar(ar["apport_reel"]), _pct(ar["rentabilite_operation_pct"])),
+                ("TRI annualisé de l'apport", _pct(tri) if tri is not None else "n/a"),
+            ],
+        )
+        blocs = [bloc_bien, bloc_2, bloc_financement, bloc_4]
     else:
         regime = resultat["meilleur_regime"]
         cf = resultat["cashflow_mensuel_an1"]
         effort = resultat["effort_epargne_mensuel"]
         enrichissement = resultat["enrichissement_par_regime"][regime]
-        net_net = resultat["rendement_net_net_par_regime"][regime]
-        tuiles = [
-            ("Cash-flow net / mois", _eur(cf), cf >= 0),
-            ("Effort d'épargne / mois", _eur(effort) if effort > 0 else "Aucun", effort <= 0),
-            (f"Enrichissement {inp.duree_projection_annees} ans", _eur(enrichissement), enrichissement >= 0),
-            ("Rendement brut", _pct(resultat["rendement_brut"]), None),
-            ("Rendement net-net", _pct(net_net), net_net >= 0),
-            tuile_endettement or ("Coût total", _eur(cout_total), None),
-        ]
-        image = _image_cascade_loyer(resultat)
-        lignes_projet = [("Régime fiscal le plus favorable", libelle_regime(regime))]
-    _tuiles(doc, tuiles, taille_valeur=15)
+        couverture, _ = _couverture_loyer(resultat)
+        bloc_2 = (
+            "account_balance_wallet",
+            "La rentabilité",
+            "vert" if cf >= 0 else ("orange" if couverture >= 0.85 else "rouge"),
+            [
+                ("Cash-flow net / mois", _eur(cf), cf >= 0),
+                ("Rendement brut", _pct(resultat["rendement_brut"])),
+                ("Rendement net-net", _pct(resultat["rendement_net_net_par_regime"][regime])),
+            ],
+        )
+        bloc_4 = (
+            "show_chart",
+            f"Sur {inp.duree_projection_annees} ans",
+            "vert" if enrichissement > 0 else "rouge",
+            [
+                ("Enrichissement net", _eur(enrichissement), enrichissement > 0),
+                ("Effort d'épargne / mois", _eur(effort) if effort > 0 else "Aucun"),
+                ("Régime fiscal le plus favorable", libelle_regime(regime)),
+            ],
+        )
+        blocs = [bloc_bien, bloc_2, bloc_financement, bloc_4]
 
-    lignes = [
-        ("Type de projet", _label_type_projet(inp.type_projet.value)),
-        ("Structure juridique", _label_structure(inp.structure_juridique.value)),
-        ("Coût total de l'opération", _eur(cout_total), "total"),
-        ("Apport personnel", _eur(apport)),
-        ("Montant emprunté", _eur(montant_emprunte))
-        if montant_emprunte > 0
-        else ("Financement", "100 % fonds propres (sans crédit)"),
-    ]
-    if montant_emprunte > 0 and not is_achat_revente:
-        lignes.append(("Mensualité du crédit (hors assurance)", _eur(resultat["mensualite_credit_hors_assurance"]) + "/mois"))
-    lignes += lignes_projet
-    _ajouter_table_et_graphique(
-        doc,
-        lignes,
-        image,
-        largeur_table_cm=13.4,
-        largeur_image_cm=11.0,
-        hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_VERDICT_CM - HAUTEUR_PHRASE_CM,
-    )
+    largeur_bloc = (LARGEUR_CONTENU_CM - 0.5) / 2
+    for rang in range(2):
+        table = doc.add_table(rows=1, cols=3)
+        table.autofit = False
+        _supprimer_bordures(table)
+        for j, largeur in enumerate((largeur_bloc, 0.5, largeur_bloc)):
+            table.columns[j].width = Cm(largeur)
+            table.rows[0].cells[j].width = Cm(largeur)
+        for cell, (icone, titre, niveau, lignes) in zip(
+            (table.rows[0].cells[0], table.rows[0].cells[2]), blocs[2 * rang : 2 * rang + 2]
+        ):
+            cell.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+            _bloc_tableau_de_bord(cell, icone, titre, niveau, lignes, largeur_bloc)
+        _espace(doc, 9)
 
 
 def _section_presentation(doc, payload, inp, resultat, is_achat_revente):
@@ -1018,7 +1155,7 @@ def _section_carte(doc, marche: dict, carte_communes: bool):
     from .donnees_marche import periode_donnees
 
     comp = marche["comparables"]
-    hauteur = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_NOTE_CM - MARGE_SECURITE_CM
+    hauteur = HAUTEUR_UTILE_CM - HAUTEUR_ENTETE_CHAPITRE_CM - HAUTEUR_A_RETENIR_CM - HAUTEUR_NOTE_CM - MARGE_SECURITE_CM
     geojson = marche["communes_geojson"] if carte_communes else None
     if geojson:
         images = [
@@ -1328,7 +1465,9 @@ def _section_financement(doc, inp, resultat, is_achat_revente):
         lignes += _lignes_credit(inp, resultat, montant_emprunte, is_achat_revente)
     else:
         lignes.append(("Mode de financement", "100 % fonds propres (sans crédit)"))
-    image = charts.chart_donut([apport, montant_emprunte], ["Apport personnel", "Montant emprunté"], "Plan de financement", total_label="Coût total")
+    image = charts.chart_donut(
+        [apport, montant_emprunte], ["Apport personnel", "Montant emprunté"], "Apport et crédit", total_label="Coût total"
+    )
     _ajouter_table_et_graphique(doc, lignes, image)
 
 
@@ -1396,7 +1535,7 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
     charges_graphique = charges_items + [("Crédit (annuité)", annee1["mensualite_totale_credit"])]
     charges_graphique_non_nulles = [(l, v) for l, v in charges_graphique if v > 0]
     image = charts.chart_recettes_charges(
-        loyers_bruts_an1, charges_graphique_non_nulles, "Recettes et charges annuelles (crédit inclus)"
+        loyers_bruts_an1, charges_graphique_non_nulles, "Ce qui entre et ce qui sort (crédit inclus)"
     )
     _ajouter_table_et_graphique(doc, lignes, image, largeur_table_cm=14.5, largeur_image_cm=11.6)
 
@@ -1422,7 +1561,7 @@ def _section_loyer_mensuel(doc, resultat):
             ("Effort d'épargne / mois", _eur(effort) if effort > 0 else "Aucun", effort <= 0),
         ],
     )
-    lignes = [(libelle, ("+" if v >= 0 else "") + _eur(v)) for libelle, v in etapes]
+    lignes = [(libelle, ("+" if round(v) >= 0 else "") + _eur(v)) for libelle, v in etapes]
     lignes.append(("Cash-flow net mensuel", _eur(cashflow), "total"))
     _ajouter_table_et_graphique(doc, lignes, _image_cascade_loyer(resultat), hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM)
     _ajouter_note(
@@ -1606,12 +1745,19 @@ def _section_endettement(doc, inp, payload, resultat, is_achat_revente):
         ("Taux d'endettement", _pct(r.taux_endettement, 1), "total"),
         ("Seuil HCSF", _pct(r.seuil_hcsf, 0)),
     ]
-    image = charts.chart_barres(
-        [("Taux d'endettement du projet", r.taux_endettement)],
-        "Taux d'endettement vs seuil HCSF",
-        formatter=lambda v: _pct(v, 1),
+    couleur = visuels.ROUGE if r.depasse_seuil else (
+        visuels.ORANGE if r.seuil_hcsf - r.taux_endettement < 0.03 else visuels.VERT
+    )
+    image = visuels.jauge(
+        r.taux_endettement,
+        0.5,
+        couleur,
+        _pct(r.taux_endettement, 1),
+        "Taux d'endettement du foyer avec le projet",
         seuil=r.seuil_hcsf,
-        seuil_label=f"Seuil {_pct(r.seuil_hcsf, 0)}",
+        texte_seuil=f"Seuil des banques : {_pct(r.seuil_hcsf, 0)}",
+        texte_min="0 %",
+        texte_max="50 %",
     )
     _ajouter_table_et_graphique(doc, lignes, image)
 
@@ -1645,6 +1791,152 @@ def _section_mentions(doc):
 # ---------------------------------------------------------------------------
 # Point d'entrée
 # ---------------------------------------------------------------------------
+
+def _ecart_au_marche(inp, marche: dict | None) -> tuple[float, float] | None:
+    """(écart du prix au m² du projet à la médiane du quartier, médiane)."""
+    mediane = ((marche or {}).get("comparables") or {}).get("prix_m2_moyen")
+    if not mediane or not inp.surface_m2:
+        return None
+    return inp.prix_achat / inp.surface_m2 / mediane - 1, mediane
+
+
+def _niveau_ecart(ecart: float) -> str:
+    return "vert" if ecart < 0.03 else ("orange" if ecart < 0.10 else "rouge")
+
+
+def _couverture_loyer(resultat: dict) -> tuple[float, float]:
+    """(part des dépenses mensuelles couverte par le loyer, cash-flow net)."""
+    etapes = analyse.etapes_loyer_mensuel(resultat)
+    loyers = etapes[0][1]
+    cashflow = sum(v for _, v in etapes)
+    depenses = loyers - cashflow
+    return (loyers / depenses if depenses > 0 else 1.0), cashflow
+
+
+def phrases_a_retenir(payload, inp, resultat: dict, is_achat_revente: bool) -> dict[str, tuple[str, str]]:
+    """{chapitre: (niveau, phrase)} : la conclusion de chaque chapitre en une
+    phrase, celle que le banquier lit en premier. Niveaux : vert, orange,
+    rouge (favorable, à surveiller, défavorable) ou neutre (constat)."""
+    phrases: dict[str, tuple[str, str]] = {}
+    marche = payload.marche
+    cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
+
+    comp = (marche or {}).get("comparables") or {}
+    if comp.get("prix_m2_moyen"):
+        rayon = comp["rayon_utilise"]
+        rayon_txt = f"{rayon / 1000:g} km".replace(".", ",") if rayon >= 1000 else f"{rayon} m"
+        texte = f"{comp['nb_transactions']} ventes comparables dans un rayon de {rayon_txt} autour du bien"
+        commune = (marche or {}).get("commune_indicateurs") or {}
+        if inp.type_projet == TypeProjet.location_longue_duree and commune.get("rendement_brut"):
+            texte += f" ; rentabilité brute moyenne de la commune : {_pct(commune['rendement_brut'])}"
+        phrases["carte"] = ("neutre", texte + ".")
+    ecart = _ecart_au_marche(inp, marche)
+    if ecart:
+        e, mediane = ecart
+        if e <= -0.03:
+            texte = f"Prix d'achat {_pct(-e, 0)} sous la médiane des ventes du quartier ({_eur(mediane)}/m²) : un prix justifié."
+        elif e < 0.03:
+            texte = f"Prix d'achat dans la médiane des ventes du quartier ({_eur(mediane)}/m²) : un prix conforme au marché."
+        elif e < 0.10:
+            texte = f"Prix d'achat {_pct(e, 0)} au-dessus de la médiane du quartier ({_eur(mediane)}/m²) : une marge de négociation existe."
+        else:
+            texte = (
+                f"Prix d'achat {_pct(e, 0)} au-dessus de la médiane du quartier ({_eur(mediane)}/m²) : "
+                "à justifier (travaux, prestations) ou à négocier."
+            )
+        phrases["marche"] = (_niveau_ecart(e), texte)
+
+    frais = cout_total - inp.prix_achat
+    phrases["presentation"] = (
+        "neutre",
+        f"Coût total de l'opération : {_eur(cout_total)}, dont {_eur(frais)} de frais, travaux et équipement "
+        f"({_pct(frais / cout_total, 0)} du total)." if cout_total else "Coût total de l'opération à préciser.",
+    )
+
+    if is_achat_revente:
+        ar = resultat["achat_revente"]
+        part = ar["marge_nette"] / cout_total if cout_total else 0
+        tri = ar.get("tri_annualise")
+        texte = f"Marge nette de {_eur(ar['marge_nette'])}, soit {_pct(part)} du coût total"
+        texte += f" ; TRI annualisé de l'apport : {_pct(tri)}." if tri is not None else "."
+        phrases["achat_revente"] = ("rouge" if part < 0 else ("orange" if part < 0.10 else "vert"), texte)
+    else:
+        annee1 = resultat["annees"][0]
+        if annee1["loyers_bruts"]:
+            ratio = annee1["charges_hors_credit"] / annee1["loyers_bruts"]
+            constat = "un niveau maîtrisé" if ratio < 0.30 else ("un niveau à surveiller" if ratio < 0.45 else "elles pèsent lourd sur la rentabilité")
+            phrases["charges"] = (
+                "vert" if ratio < 0.30 else ("orange" if ratio < 0.45 else "rouge"),
+                f"Les charges hors crédit représentent {_pct(ratio, 0)} des loyers : {constat}.",
+            )
+        couverture, cashflow = _couverture_loyer(resultat)
+        if cashflow >= 0:
+            phrases["loyer_mensuel"] = (
+                "vert",
+                f"Le loyer couvre toutes les dépenses du bien et dégage {_eur(cashflow)} par mois.",
+            )
+        else:
+            phrases["loyer_mensuel"] = (
+                "orange" if couverture >= 0.85 else "rouge",
+                f"Le loyer couvre {_pct(couverture, 0)} des dépenses mensuelles : il reste {_eur(-cashflow)} "
+                "par mois à compléter.",
+            )
+        if inp.type_projet == TypeProjet.location_courte_duree:
+            saison = saisonnalite.analyse_mensuelle(inp, resultat)
+            nb = saison["mois_deficitaires"]
+            phrases["saisonnalite"] = (
+                ("vert", "Aucun mois déficitaire sur l'année : la saisonnalité est absorbée.")
+                if not nb
+                else (
+                    "orange",
+                    f"{nb} mois déficitaire{'s' if nb > 1 else ''} en basse saison : prévoir une réserve de "
+                    f"trésorerie de {_eur(saison['tresorerie_securite'])}.",
+                )
+            )
+        enrichissement = resultat["enrichissement_par_regime"][resultat["meilleur_regime"]]
+        n = inp.duree_projection_annees
+        phrases["patrimoine"] = (
+            ("vert", f"En {n} ans, l'opération enrichit l'investisseur de {_eur(enrichissement)} (revente nette, impôts et apport déduits).")
+            if enrichissement > 0
+            else ("rouge", f"Sur {n} ans, l'opération ferait perdre {_eur(-enrichissement)} (revente nette, impôts et apport déduits).")
+        )
+
+    if montant_emprunte > 0:
+        part_apport = apport / cout_total if cout_total else 0
+        texte = f"Apport de {_eur(apport)} ({_pct(part_apport, 0)} du coût total) et crédit de {_eur(montant_emprunte)}"
+        if not is_achat_revente:
+            texte += f" sur {inp.duree_credit_annees} ans à {_pct(inp.taux_credit_annuel, 2)}"
+        texte += "."
+        if part_apport < 0.05:
+            texte += " Les banques demandent souvent un apport couvrant au moins les frais."
+        phrases["financement"] = ("vert" if part_apport >= 0.10 else "orange", texte)
+    else:
+        phrases["financement"] = ("neutre", "Opération financée à 100 % en fonds propres, sans crédit.")
+
+    if payload.profil is not None:
+        p = payload.profil
+        texte = f"Revenus retenus par la banque : {_eur(p.revenus_nets_mensuels_foyer + p.autres_revenus_mensuels)} par mois"
+        if payload.patrimoine:
+            net = sum(l.valeur or 0 for l in payload.patrimoine) - sum(l.reste_du or 0 for l in payload.patrimoine)
+            texte += f" ; patrimoine net déclaré : {_eur(net)}"
+        phrases["profil"] = ("neutre", texte + ".")
+        r = _taux_endettement(payload, inp, resultat, is_achat_revente)
+        marge = r.seuil_hcsf - r.taux_endettement
+        if r.depasse_seuil:
+            phrases["endettement"] = (
+                "rouge",
+                f"Avec ce projet, le foyer atteint {_pct(r.taux_endettement)} d'endettement, au-delà du seuil de "
+                f"{_pct(r.seuil_hcsf, 0)} : à revoir (apport, durée du crédit ou prix).",
+            )
+        else:
+            points = f"{marge * 100:.1f}".replace(".", ",")
+            phrases["endettement"] = (
+                "vert" if marge >= 0.03 else "orange",
+                f"Avec ce projet, le foyer est à {_pct(r.taux_endettement)} d'endettement : {points} points sous le "
+                f"seuil de {_pct(r.seuil_hcsf, 0)}.",
+            )
+    return phrases
+
 
 # matplotlib (pyplot) n'est pas prévu pour tracer depuis plusieurs fils à la
 # fois : une génération à la fois (l'interface la lance hors de la boucle
@@ -1792,8 +2084,7 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             True,
             "synthese",
             "Synthèse du projet",
-            "Le bilan du projet : verdict, indicateurs clés et "
-            + ("décomposition de la marge." if is_achat_revente else "répartition du loyer chaque mois."),
+            "Le bilan du projet : le verdict, puis les chiffres clés de chaque partie.",
             lambda d: _section_synthese(d, payload, inp, resultat, is_achat_revente),
         ),
         (
@@ -1819,9 +2110,21 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
     ]
 
     _ajouter_sommaire(doc, sections)
+    parties_presentes = tuple(p for p in PARTIES if any(PARTIE_DU_CHAPITRE[cle] == p for cle, *_ in sections))
+    a_retenir = phrases_a_retenir(payload, inp, resultat, is_achat_revente)
     for i, (cle, titre, description, fn) in enumerate(sections, start=1):
         _nouvelle_page_chapitre(doc)
-        _entete_chapitre(doc, i, titre, description, partie=PARTIE_DU_CHAPITRE[cle])
+        _entete_chapitre(
+            doc,
+            i,
+            titre,
+            description,
+            partie=PARTIE_DU_CHAPITRE[cle],
+            parties=parties_presentes,
+            icone=ICONES_CHAPITRES.get(cle),
+        )
+        if cle in a_retenir:
+            _a_retenir(doc, *a_retenir[cle])
         fn(doc)
 
     integrer_polices(doc)

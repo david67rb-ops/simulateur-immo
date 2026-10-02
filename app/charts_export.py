@@ -279,7 +279,7 @@ def chart_patrimoine(lignes: list[dict]) -> bytes:
     ax.yaxis.set_major_formatter(lambda v, _pos: _eur(v))
     ax.xaxis.set_major_locator(MaxNLocator(integer=True))
     ax.set_xlabel("Année", fontsize=9.5, color="#555555")
-    ax.set_title("Évolution du patrimoine", fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
+    ax.set_title("Valeur du bien, dette et patrimoine net", fontsize=13, color=PRIMARY, fontfamily=TITRE, fontweight="bold", pad=10)
     ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=3)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
