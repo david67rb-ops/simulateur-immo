@@ -367,11 +367,12 @@ def _entete_chapitre(
         table.columns[i].width = Cm(largeur)
         cell.width = Cm(largeur)
         cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
-    _set_cell_background(cell_num, MARQUE_HEX)
-    _cell_marges(cell_num, haut=80, bas=80, gauche=60, droite=60)
+    # Pavé du numéro : image aux coins arrondis (une cellule Word reste carrée).
+    _cell_marges(cell_num, haut=0, bas=0, gauche=0, droite=0)
     p_num = cell_num.paragraphs[0]
-    p_num.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    _texte(p_num, f"{numero:02d}", 22, LAITON_CLAIR, gras=True)
+    p_num.alignment = WD_ALIGN_PARAGRAPH.LEFT
+    p_num.paragraph_format.space_after = Pt(0)
+    p_num.add_run().add_picture(io.BytesIO(visuels.pave_numero(numero)), height=Cm(1.55))
     _cell_marges(cell_titre, haut=40, bas=60, gauche=260, droite=60)
     _bordures_cellule(cell_titre, bottom=(MARQUE_HEX, 12))
     p_titre = cell_titre.paragraphs[0]
@@ -710,6 +711,7 @@ def _ajouter_page_de_garde(doc: Document, payload: ExportDossierInput, inp, resu
     # Bandeau bleu notaire : logo à gauche, titre du dossier et du projet à droite.
     bandeau = doc.add_table(rows=1, cols=2)
     bandeau.autofit = False
+    bandeau.alignment = WD_TABLE_ALIGNMENT.CENTER  # aligné sur les tuiles en dessous
     _supprimer_bordures(bandeau)
     largeurs = (3.6, LARGEUR_CONTENU_CM - 3.6)
     cell_logo, cell_titre = bandeau.rows[0].cells

@@ -146,3 +146,16 @@ def jauge(
     dessin.text((0, 76 * s), texte_min, font=petite, fill="#8A939C", anchor="lm")
     dessin.text((w, 76 * s), texte_max, font=petite, fill="#8A939C", anchor="rm")
     return _png(image, largeur_px * 2, 92 * 2)
+
+
+@lru_cache(maxsize=64)
+def pave_numero(numero: int, taille: int = 200) -> bytes:
+    """Numéro de chapitre dans un carré bleu notaire aux coins arrondis (Word
+    ne sait pas arrondir les angles d'une cellule de tableau)."""
+    t = taille * SURECH
+    image = Image.new("RGBA", (t, t), (0, 0, 0, 0))
+    dessin = ImageDraw.Draw(image)
+    dessin.rounded_rectangle([0, 0, t - 1, t - 1], radius=int(t * 0.22), fill=MARQUE)
+    police = _police("Sora-SemiBold.ttf", int(t * 0.46))
+    dessin.text((t / 2, t / 2), f"{numero:02d}", font=police, fill="#E9D8B0", anchor="mm")
+    return _png(image, taille, taille)
