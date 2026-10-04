@@ -16,7 +16,8 @@ import os
 import webbrowser
 from pathlib import Path
 
-from fastapi.responses import FileResponse
+from fastapi import Request
+from fastapi.responses import FileResponse, RedirectResponse
 from nicegui import app, native, run, ui
 from pydantic import ValidationError
 
@@ -113,6 +114,22 @@ def liste(options: dict, label: str, state: dict, cle: str, *, aide: str | None 
 
 def plus_d_options(titre: str = "Plus d'options"):
     return ui.expansion(titre, icon="tune").props("dense").classes("w-full text-sm")
+
+
+# Adresse officielle du site. L'ancienne adresse Render (*.onrender.com)
+# redirige vers elle : une seule adresse pour Google et pour les liens partagés.
+DOMAINE_PRINCIPAL = os.environ.get("IMMO_DOMAINE_PRINCIPAL", "credaura.fr")
+
+
+@app.middleware("http")
+async def rediriger_vers_domaine_principal(request: Request, call_next):
+    hote = request.headers.get("host", "").split(":")[0]
+    if DOMAINE_PRINCIPAL and hote.endswith(".onrender.com"):
+        cible = f"https://{DOMAINE_PRINCIPAL}{request.url.path}"
+        if request.url.query:
+            cible += f"?{request.url.query}"
+        return RedirectResponse(cible, status_code=301)
+    return await call_next(request)
 
 
 # Exemple de dossier fictif (scripts/generer_exemple_dossier.py), proposé
