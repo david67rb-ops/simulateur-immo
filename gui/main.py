@@ -13,7 +13,10 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import webbrowser
+from pathlib import Path
 
+from fastapi.responses import FileResponse
 from nicegui import app, native, run, ui
 from pydantic import ValidationError
 
@@ -110,6 +113,39 @@ def liste(options: dict, label: str, state: dict, cle: str, *, aide: str | None 
 
 def plus_d_options(titre: str = "Plus d'options"):
     return ui.expansion(titre, icon="tune").props("dense").classes("w-full text-sm")
+
+
+# Exemple de dossier fictif (scripts/generer_exemple_dossier.py), proposé
+# depuis l'en-tête, l'étape Dossier et les réponses automatiques des réseaux.
+EXEMPLE_DOSSIER_PDF = Path(__file__).resolve().parent.parent / "app" / "data" / "exemple-dossier" / "Exemple de dossier de financement.pdf"
+
+
+@app.get("/exemple-dossier")
+def exemple_dossier() -> FileResponse:
+    """Affiché dans le navigateur (pas téléchargé d'office) : adresse stable
+    pour les liens partagés, credaura.fr/exemple-dossier."""
+    return FileResponse(
+        EXEMPLE_DOSSIER_PDF,
+        media_type="application/pdf",
+        filename="Credaura - exemple de dossier de financement.pdf",
+        content_disposition_type="inline",
+    )
+
+
+def lien_exemple_dossier(texte: str, classes: str = "") -> None:
+    """Lien vers l'exemple de dossier. Sur le site, un vrai lien : une fenêtre
+    ouverte après un aller-retour au serveur serait bloquée par Safari sur
+    iPhone. Dans l'application de bureau, le PDF s'ouvre dans Aperçu."""
+    if app.native.main_window:
+        ui.button(texte, icon="description", on_click=lambda: webbrowser.open(EXEMPLE_DOSSIER_PDF.as_uri())).props(
+            "flat dense no-caps"
+        ).classes(classes)
+        return
+    with ui.element("a").props('href="/exemple-dossier" target="_blank" rel="noopener"').classes(
+        "lien-exemple inline-flex items-center gap-1 text-sm font-medium " + classes
+    ):
+        ui.icon("description", size="18px")
+        ui.html(texte)
 
 
 def ouvrir_lien_externe(url: str) -> None:
@@ -480,6 +516,7 @@ def index_page() -> None:
                 ui.label(
                     "Simulateur de rentabilité et dossier de financement immobilier · des estimations, pas un conseil."
                 ).classes("text-sm text-gray-500 text-center mt-2")
+                lien_exemple_dossier("Voir un exemple de dossier pour la banque", "mt-1")
 
         _build_investor_view()
 
@@ -1394,7 +1431,8 @@ def _build_investor_view() -> None:
                     ui.label(
                         "Génère un dossier Word pour la banque à partir de la simulation. Commence par générer un "
                         "aperçu pour vérifier les chiffres, puis télécharge le document."
-                    ).classes(theme.HINT_CLASSES + " mb-2")
+                    ).classes(theme.HINT_CLASSES)
+                    lien_exemple_dossier("Voir un exemple complet (projet fictif, PDF)", "self-start mt-1 mb-3")
 
                     with ui.row().classes(theme.GRID_CLASSES):
                         refs["field_nom_emprunteur"] = ui.input(
