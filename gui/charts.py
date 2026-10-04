@@ -43,7 +43,7 @@ def cashflow_chart_option(resultat: dict, regimes: list[str]) -> dict:
             }
         )
     return {
-        "tooltip": {"trigger": "axis"},
+        "tooltip": {"trigger": "axis", "confine": True},
         "legend": {"bottom": 0, "data": [libelle_regime(r) for r in regimes], "textStyle": _AXES_TEXTE},
         "grid": {"left": 10, "right": 20, "top": 20, "bottom": 50, "containLabel": True},
         # « An 1 », « An 2 »… à plat : ECharts n'affiche qu'une année sur deux ou trois
@@ -161,7 +161,7 @@ def patrimoine_option(resultat: dict, prix_achat: float, taux_revalorisation_bie
     patrimoine = [round(l["patrimoine_net"]) for l in lignes]
     serie = {"type": "line", "smooth": True, "showSymbol": False}
     return {
-        "tooltip": {"trigger": "axis"},
+        "tooltip": {"trigger": "axis", "confine": True},
         "legend": {"bottom": 0, "textStyle": _AXES_TEXTE},
         "grid": {"left": 10, "right": 20, "top": 20, "bottom": 50, "containLabel": True},
         "xAxis": {"type": "category", "data": annees, "axisLabel": {"fontSize": 10, **_AXES_TEXTE}},
@@ -186,7 +186,7 @@ def saisonnalite_option(saison: dict) -> dict:
     lignes = saison["lignes"]
     mois = [l["mois"] for l in lignes]
     return {
-        "tooltip": {"trigger": "axis"},
+        "tooltip": {"trigger": "axis", "confine": True},
         "legend": {"bottom": 0, "textStyle": _AXES_TEXTE},
         "grid": {"left": 10, "right": 20, "top": 20, "bottom": 40, "containLabel": True},
         "xAxis": {"type": "category", "data": mois, "axisLabel": {"interval": 0, "fontSize": 10, **_AXES_TEXTE}},

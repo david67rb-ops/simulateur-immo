@@ -608,6 +608,7 @@ def _build_investor_view() -> None:
 
     def marquer_profil_renseigne() -> None:
         ctx["profil_renseigne"] = True
+        marquer_fait(tab_endettement)
     refs: dict[str, ui.element] = {}
     # Champs calculés automatiquement que le client a corrigés à la main.
     saisis: set[str] = set()
@@ -766,7 +767,7 @@ def _build_investor_view() -> None:
             # -----------------------------------------------------------------
             # Onglet Financement (le bien + emprunt + spécifique achat-revente)
             # -----------------------------------------------------------------
-            with ui.tab_panel(tab_financement):
+            with ui.tab_panel(tab_financement) as panneau_financement:
                 with theme.section_card():
                     theme.subsection_title("Le bien")
                     with ui.row().classes(theme.GRID_CLASSES):
@@ -935,7 +936,7 @@ def _build_investor_view() -> None:
             # -----------------------------------------------------------------
             # Onglet Revenus & fiscalité
             # -----------------------------------------------------------------
-            with ui.tab_panel(tab_fiscalite):
+            with ui.tab_panel(tab_fiscalite) as panneau_fiscalite:
                 with theme.section_card() as carte_revenus:
                     theme.subsection_title("Revenus et charges")
                     with ui.row().classes(theme.GRID_CLASSES):
@@ -1369,7 +1370,7 @@ def _build_investor_view() -> None:
             # -----------------------------------------------------------------
             # Onglet Taux d'endettement
             # -----------------------------------------------------------------
-            with ui.tab_panel(tab_endettement):
+            with ui.tab_panel(tab_endettement) as panneau_endettement:
                 with theme.section_card():
                     ui.label(
                         "Calcule le taux d'endettement du foyer à partir de la simulation (onglets précédents), "
@@ -1639,7 +1640,17 @@ def _build_investor_view() -> None:
         tab_endettement: "Endettement",
         tab_dossier: "Dossier",
     }
-    etapes_vues = {tab_marche}
+    # Étapes cochées sur la frise : seulement celles réellement remplies, pas
+    # celles qu'on a simplement ouvertes.
+    #   Marché : étude de marché lancée ;
+    #   Financement, Revenus, Endettement : une valeur saisie au clavier ;
+    #   Résultats : consultés ; Dossier : aperçu ou document généré.
+    etapes_faites: set = set()
+
+    def marquer_fait(tab) -> None:
+        if tab not in etapes_faites:
+            etapes_faites.add(tab)
+            dessiner_etapes()
 
     def etapes_visibles() -> list:
         return [tab for tab in tabs_ordre if tab.visible]
@@ -1669,7 +1680,7 @@ def _build_investor_view() -> None:
                 for i, tab in enumerate(visibles):
                     if i:
                         ui.element("div").classes("frise-trait" + (" frise-trait-fait" if i <= rang else ""))
-                    etat = "courant" if tab is courante else ("fait" if tab in etapes_vues else "a-venir")
+                    etat = "courant" if tab is courante else ("fait" if tab in etapes_faites else "a-venir")
                     with ui.element("div").classes(f"frise-etape frise-{etat}").on(
                         "click", lambda t=tab: aller_a(t)
                     ):
@@ -1699,10 +1710,18 @@ def _build_investor_view() -> None:
                 )
 
     def sur_changement_etape(_e=None) -> None:
-        etapes_vues.add(etape_courante())
+        if etape_courante() is tab_resultats:
+            etapes_faites.add(tab_resultats)
         dessiner_etapes()
 
     tab_panels.on_value_change(sur_changement_etape)
+    # Les saisies au clavier des champs d'une étape remontent jusqu'à son panneau.
+    for panneau, etape in (
+        (panneau_financement, tab_financement),
+        (panneau_fiscalite, tab_fiscalite),
+        (panneau_endettement, tab_endettement),
+    ):
+        panneau.on("input", lambda _e, t=etape: marquer_fait(t), args=[], throttle=1.0)
 
     def onglet_actif(tab) -> bool:
         # La valeur est l'onglet lui-même après un set_value(), son nom après un clic.
@@ -2103,6 +2122,7 @@ def _build_investor_view() -> None:
         if sim_state["profil_saisonnalite"] == saisonnalite.REGION:
             appliquer_saisonnalite_region()
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
+        marquer_fait(tab_marche)
 
         bloc_prix.afficher(comparables, geo)
         comparer_prix_au_marche()
@@ -2200,14 +2220,22 @@ def _build_investor_view() -> None:
     def render_verdict(v: dict) -> None:
         remplir_verdict(verdict_resultats, v)
 
-    def texte_prix_max(pm: dict | None, objectif_libelle: str) -> str:
+    def afficher_prix_max(carte, pm: dict | None, objectif_libelle: str, sinon: str = "–") -> None:
+        """Le prix en gros, l'objectif en petit dessous (une seule taille de
+        chiffre d'une carte à l'autre)."""
+        detail = ""
         if pm is None:
-            return "–"
-        if pm["statut"] == "inatteignable":
-            return "Objectif inatteignable"
-        if pm["statut"] == "non_limitant":
-            return f"> {eur(pm['prix_max'])}"
-        return f"{eur(pm['prix_max'])} ({objectif_libelle} {eur(pm['objectif'])})"
+            texte = sinon
+        elif pm["statut"] == "inatteignable":
+            texte = "Objectif inatteignable"
+        elif pm["statut"] == "non_limitant":
+            texte = f"> {eur(pm['prix_max'])}"
+        else:
+            texte = eur(pm["prix_max"])
+            detail = f"pour un {objectif_libelle}\u00a0{eur(pm['objectif'])}"
+        carte.set_text(texte)
+        carte.detail.set_text(detail)
+        carte.detail.visible = bool(detail)
 
     def render_results_location(inp, resultat: dict) -> None:
         results_placeholder.visible = False
@@ -2235,10 +2263,11 @@ def _build_investor_view() -> None:
             if resultat["montant_emprunte"] > 0
             else "Aucune (fonds propres)"
         )
-        v_prix_max.set_text(
-            texte_prix_max(analyse.prix_achat_maximum(inp), "cash-flow ≥")
-            if inp.avec_credit
-            else "Sans objet sans crédit"
+        afficher_prix_max(
+            v_prix_max,
+            analyse.prix_achat_maximum(inp) if inp.avec_credit else None,
+            "cash-flow ≥",
+            sinon="Sans objet sans crédit",
         )
         detail_location.set_text(
             f"Indicateurs calculés pour le régime le plus favorable : {libelle_regime(meilleur)}, "
@@ -2342,9 +2371,7 @@ def _build_investor_view() -> None:
         v_ar_cash_final.set_text(eur(ar["cash_final_investisseur"]))
         v_ar_portage.set_text(eur(ar["frais_portage_total"]))
         pm = analyse.prix_achat_maximum(inp)
-        v_ar_prix_max.set_text(
-            texte_prix_max(pm, "marge ≥") if pm is not None else "Renseigne un prix de revente visé"
-        )
+        afficher_prix_max(v_ar_prix_max, pm, "marge ≥", sinon="Renseigne un prix de revente visé")
 
         table_achat_revente.rows = [
             {"k": "Coût total d'acquisition", "v": eur(ar["cout_total_acquisition"])},
@@ -2667,6 +2694,7 @@ def _build_investor_view() -> None:
             (f"Aperçu du dossier ({nb_pages} pages) : " if nb_pages else "Aperçu du dossier : ")
             + "vérifie-le ci-dessous puis télécharge-le au format Word."
         )
+        marquer_fait(tab_dossier)
 
     btn_generer_dossier.on_click(on_generer_apercu)
 
@@ -2705,6 +2733,7 @@ def _build_investor_view() -> None:
         else:
             ui.download(contenu, "Credaura - dossier de financement.docx")
             dossier_status.set_text("Dossier téléchargé.")
+        marquer_fait(tab_dossier)
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
 

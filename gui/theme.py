@@ -145,6 +145,8 @@ def apply_theme() -> None:
             .grid:has(> .stat-card) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
             .grid:has(> .stat-card .text-3xl) { grid-template-columns: minmax(0, 1fr); }
             .stat-card { padding: 10px 12px; }
+            /* Intitulés sur deux lignes au plus : les chiffres d'une même ligne restent alignés. */
+            .stat-card:not(:has(.text-3xl)) .entete-stat { min-height: 2.5em; }
             .stat-card .valeur.text-xl { font-size: 1.1rem; line-height: 1.45rem; }
             /* Tableaux en mode cartes (une carte par ligne) : lisibles sans défilement horizontal. */
             .q-table__grid-content .q-table__grid-item { width: 100%; padding: 4px 0; }
@@ -164,6 +166,9 @@ def apply_theme() -> None:
           :root { --c-fond-calcule: #e8f0fa; --c-bord-calcule: #a9c3e3; --c-texte-calcule: #2f5d93; }
           .body--dark { --c-fond-calcule: rgba(58, 100, 158, 0.22); --c-bord-calcule: #3a649e; --c-texte-calcule: #9dbbe2; }
           /* Verdict : un repère de couleur par critère (rentabilité, prix, financement). */
+          /* Bulles d'aide ⓘ (ouvertes au clic ou au toucher). */
+          .aide-icone { padding: 4px; margin: -4px; flex-shrink: 0; }
+          .aide-bulle { padding: 10px 12px; line-height: 1.4; }
           /* Lien vers l'exemple de dossier (en-tête, étape Dossier). */
           .lien-exemple { color: var(--c-marque-texte); text-decoration: none; }
           .lien-exemple:hover { text-decoration: underline; }
@@ -189,22 +194,31 @@ def apply_theme() -> None:
 
 
 def aide(texte: str) -> None:
-    """Petite icône ⓘ affichant une explication au survol (appui long sur mobile)."""
-    ui.icon("info_outline", size="16px").classes("text-gray-400 cursor-help").tooltip(texte).props(
-        'aria-label="Aide"'
-    )
+    """Petite icône ⓘ : l'explication s'ouvre d'un clic ou d'un toucher (pas
+    d'appui long sur téléphone), et se referme en touchant ailleurs."""
+    with ui.icon("info_outline", size="18px").classes("aide-icone text-gray-400 cursor-pointer").props(
+        'aria-label="Aide" role="button" tabindex="0"'
+    ).on("click.stop", lambda: None):
+        with ui.menu().props("max-width=300px anchor='bottom middle' self='top middle'"):
+            ui.label(texte).classes("aide-bulle text-sm")
 
 
 def stat_card(label: str, initial: str = "–", aide_texte: str | None = None, grand: bool = False) -> ui.label:
     """Petite carte 'métrique' (fond teinté, valeur en gros). Renvoie le label
     de valeur pour pouvoir le mettre à jour ensuite (`.set_text(...)`)."""
     with ui.column().classes("stat-card gap-0"):
-        with ui.row().classes("items-center gap-1 no-wrap"):
-            libelle = ui.label(label).classes("text-xs text-gray-500")
+        # Intitulé à gauche, ⓘ calé en haut à droite : les cartes d'une même
+        # ligne gardent leurs chiffres alignés, même si un intitulé passe sur
+        # deux lignes.
+        with ui.row().classes("entete-stat w-full items-start justify-between gap-1 no-wrap"):
+            libelle = ui.label(label).classes("text-xs text-gray-500 leading-snug")
             if aide_texte:
                 aide(aide_texte)
         value = ui.label(initial).classes("valeur " + ("text-3xl font-bold" if grand else "text-xl font-bold"))
+        detail = ui.label("").classes("detail-stat text-xs text-gray-500 leading-snug")
+        detail.visible = False
     value.libelle = libelle  # pour changer l'intitulé selon le contexte
+    value.detail = detail  # précision sous le chiffre (« pour un cash-flow ≥ 0 € »)
     return value
 
 
