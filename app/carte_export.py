@@ -67,7 +67,7 @@ def _fond_de_carte(x0: float, y0: float, largeur: int, hauteur: int, zoom: int):
     tx0, ty0 = int(x0 // TAILLE_TUILE), int(y0 // TAILLE_TUILE)
     tx1, ty1 = int((x0 + largeur) // TAILLE_TUILE), int((y0 + hauteur) // TAILLE_TUILE)
     positions = [(tx, ty) for tx in range(tx0, tx1 + 1) for ty in range(ty0, ty1 + 1)]
-    with httpx.Client(timeout=10, headers={"User-Agent": "Fiabimmo (dossier de financement)"}) as client:
+    with httpx.Client(timeout=10, headers={"User-Agent": "Credaura (dossier de financement)"}) as client:
         with ThreadPoolExecutor(max_workers=8) as pool:
             contenus = list(pool.map(lambda p: _tuile(client, zoom, *p), positions))
     if not any(contenus):

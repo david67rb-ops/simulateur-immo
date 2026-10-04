@@ -4,7 +4,8 @@ identique dans Word, LibreOffice et l'aperçu du navigateur :
 - icône de chapitre (police Material Icons, comme le simulateur) ;
 - fil des parties en tête de page (parties passées cochées, partie en cours
   mise en avant, comme la frise d'étapes du simulateur) ;
-- jauge horizontale avec seuil (taux d'endettement…)."""
+- jauge horizontale avec seuil (taux d'endettement…) ;
+- logo Credaura (couverture du rapport, icône de l'application)."""
 from __future__ import annotations
 
 import io
@@ -15,6 +16,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 POLICES = Path(__file__).parent / "fonts"
 MARQUE, LAITON, VERT, ROUGE, ORANGE = "#1B3358", "#A8823B", "#2D6A4F", "#B23A32", "#B7791F"
+LAITON_CLAIR = "#C9A45E"  # laiton éclairci, lisible sur le bleu notaire
 GRIS, GRIS_CLAIR, TEXTE = "#5B6672", "#DDE3EA", "#1F2833"
 SURECH = 4  # suréchantillonnage : bords nets une fois l'image réduite par Word
 
@@ -146,6 +148,21 @@ def jauge(
     dessin.text((0, 76 * s), texte_min, font=petite, fill="#8A939C", anchor="lm")
     dessin.text((w, 76 * s), texte_max, font=petite, fill="#8A939C", anchor="rm")
     return _png(image, largeur_px * 2, 92 * 2)
+
+
+@lru_cache(maxsize=16)
+def logo(taille: int = 256, laiton: str = LAITON) -> bytes:
+    """Logo Credaura (maison dans un sceau d'or), mêmes proportions que le SVG
+    de l'interface (gui/theme.LOGO_SVG, repère 64 × 64)."""
+    s = taille * SURECH / 64
+    image = Image.new("RGBA", (taille * SURECH,) * 2, (0, 0, 0, 0))
+    dessin = ImageDraw.Draw(image)
+    dessin.rounded_rectangle([0, 0, 64 * s - 1, 64 * s - 1], radius=15 * s, fill=MARQUE)
+    r, e = 23 * s, 2.4 * s
+    dessin.ellipse([32 * s - r - e / 2, 32.5 * s - r - e / 2, 32 * s + r + e / 2, 32.5 * s + r + e / 2], outline=laiton, width=round(e))
+    dessin.polygon([(32 * s, 19 * s), (44.5 * s, 29.5 * s), (44.5 * s, 43.5 * s), (19.5 * s, 43.5 * s), (19.5 * s, 29.5 * s)], fill="white")
+    dessin.rounded_rectangle([28.8 * s, 35 * s, 35.2 * s, 43.5 * s], radius=0.8 * s, fill=MARQUE)
+    return _png(image, taille, taille)
 
 
 @lru_cache(maxsize=64)

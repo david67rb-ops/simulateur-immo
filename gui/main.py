@@ -1,4 +1,4 @@
-"""Fiabimmo, application NiceGUI : simulateur de rentabilité immobilière & étude de
+"""Credaura, application NiceGUI : simulateur de rentabilité immobilière & étude de
 marché. Toute la logique métier vit dans le package `app` (inchangée) ;
 ce module ne fait que construire l'interface et appeler ces fonctions.
 
@@ -461,19 +461,25 @@ def index_page() -> None:
             ui.button(icon="dark_mode", on_click=basculer_theme).props("flat round dense").classes(
                 "absolute top-0 right-0"
             )
-            with ui.column().classes("w-full items-center gap-1"):
-                # Logo à gauche du nom, compensé à droite par un espace de même
-                # largeur : le mot « Fiabimmo » est centré sur le sous-titre.
-                with ui.row().classes("items-center justify-center gap-2 no-wrap"):
-                    ui.html(theme.LOGO_SVG).classes("shrink-0")
-                    ui.label("Fiabimmo").classes("text-2xl font-bold leading-tight")
-                    ui.element("div").classes("shrink-0").style("width: 38px")
-                ui.label("Simulateur de rentabilité immobilière").classes(
-                    "text-xs uppercase tracking-wider text-[color:var(--c-laiton)] font-semibold text-center"
-                )
+            # Sur téléphone, le bloc du logo descend sous le bouton du thème
+            # (sinon le bouton touche la signature).
+            with ui.column().classes("w-full items-center gap-1 pt-9 sm:pt-0"):
+                # Logo puis le nom et la signature, centrés l'un sur l'autre
+                # (bloc validé sur la planche des logos, piste B3).
+                with ui.row().classes("items-center justify-center gap-3 no-wrap"):
+                    ui.html(theme.LOGO_SVG.replace('width="38" height="38"', 'width="46" height="46"')).classes("shrink-0")
+                    with ui.column().classes("items-center gap-1"):
+                        ui.html('Cred<span class="text-[color:var(--c-laiton)]">aura</span>').classes(
+                            "text-2xl font-bold leading-none"
+                        )
+                        # La marge négative annule l'espacement ajouté après la
+                        # dernière lettre : la signature reste centrée sous le nom.
+                        ui.label("Convaincre mon banquier").classes(
+                            "text-xs uppercase font-semibold leading-none text-[color:var(--c-laiton)]"
+                        ).style("letter-spacing: 0.16em; margin-right: -0.16em")
                 ui.label(
-                    "Outil de simulation : les résultats sont des estimations, pas un conseil."
-                ).classes("text-sm text-gray-500 text-center mt-1")
+                    "Simulateur de rentabilité et dossier de financement immobilier · des estimations, pas un conseil."
+                ).classes("text-sm text-gray-500 text-center mt-2")
 
         _build_investor_view()
 
@@ -2625,7 +2631,7 @@ def _build_investor_view() -> None:
 
             choix = await app.native.main_window.create_file_dialog(
                 dialog_type=webview.FileDialog.SAVE,
-                save_filename="Fiabimmo - dossier de financement.docx",
+                save_filename="Credaura - dossier de financement.docx",
                 file_types=("Documents Word (*.docx)",),
             )
             # Sur macOS, le dialogue d'enregistrement renvoie un chemin (str),
@@ -2642,14 +2648,14 @@ def _build_investor_view() -> None:
                 return
             dossier_status.set_text(f"Dossier enregistré : {chemin}")
         else:
-            ui.download(contenu, "Fiabimmo - dossier de financement.docx")
+            ui.download(contenu, "Credaura - dossier de financement.docx")
             dossier_status.set_text("Dossier téléchargé.")
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Fiabimmo, simulateur de rentabilité immobilière")
+    parser = argparse.ArgumentParser(description="Credaura, simulateur de rentabilité et dossier de financement immobilier")
     parser.add_argument("--web", action="store_true", help="Lance dans le navigateur au lieu d'une fenêtre native")
     parser.add_argument("--port", type=int, default=None)
     parser.add_argument("--host", type=str, default=None)
@@ -2677,7 +2683,8 @@ def main() -> None:
     host = args.host or ("0.0.0.0" if web_mode else "localhost")
 
     ui.run(
-        title="Fiabimmo",
+        title="Credaura",
+        favicon=theme.LOGO_SVG,
         native=not web_mode,
         window_size=(1180, 900) if not web_mode else None,
         reload=False,

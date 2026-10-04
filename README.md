@@ -1,4 +1,4 @@
-# Fiabimmo — simulateur de rentabilité immobilière
+# Credaura — simulateur de rentabilité et dossier de financement immobilier
 
 Application 100 % Python ([NiceGUI](https://nicegui.io) — plus de HTML/CSS/JS
 séparés), utilisable en fenêtre de bureau native ou en application web
@@ -28,7 +28,7 @@ achat-revente) :
 
 ### Au quotidien (macOS) : double-clic
 
-Une vraie application macOS autonome est disponible : **`Fiabimmo.app`**,
+Une vraie application macOS autonome est disponible : **`Credaura.app`**,
 installée dans /Applications par `./build_macos_app.sh`. Aucune installation
 de Python ou de dépendances n'est nécessaire pour l'utiliser — double-clic,
 ou glisse-la dans le Dock.

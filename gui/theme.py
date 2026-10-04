@@ -27,15 +27,15 @@ NEGATIVE = "var(--c-ko)"
 DOSSIER_POLICES = Path(__file__).resolve().parent.parent / "app" / "fonts"
 app.add_static_files("/polices", DOSSIER_POLICES)
 
-# Logo : silhouette de maison + courbe ascendante (rentabilité), badge à coins
-# arrondis bleu notaire, courbe laiton.
+# Logo Credaura : une maison dans un sceau d'or (l'« aura », le cachet
+# d'approbation), sur un badge bleu notaire à coins arrondis. Même dessin que
+# app/visuels_dossier.logo() (rapport Word, icône de l'application).
 LOGO_SVG = f"""
-<svg width="38" height="38" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo Fiabimmo">
-  <rect width="64" height="64" rx="16" fill="{MARQUE_HEX}"/>
-  <path d="M32 13 L49 27.5 V47 H15 V27.5 Z" fill="#FFFFFF"/>
-  <rect x="27" y="35" width="10" height="12" fill="{MARQUE_HEX}"/>
-  <polyline points="13,42 24,29 32,34 47,16" fill="none" stroke="{LAITON_HEX}" stroke-width="3.4" stroke-linecap="round" stroke-linejoin="round"/>
-  <polygon points="47,16 39,17.5 45.5,23" fill="{LAITON_HEX}"/>
+<svg width="38" height="38" viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Logo Credaura">
+  <rect width="64" height="64" rx="15" fill="{MARQUE_HEX}"/>
+  <circle cx="32" cy="32.5" r="23" fill="none" stroke="{LAITON_HEX}" stroke-width="2.4"/>
+  <path d="M32 19 L44.5 29.5 V43.5 H19.5 V29.5 Z" fill="#FFFFFF"/>
+  <rect x="28.8" y="35" width="6.4" height="8.5" rx="0.8" fill="{MARQUE_HEX}"/>
 </svg>
 """.strip()
 

@@ -82,8 +82,8 @@ def chapitres_disponibles(type_projet: str, avec_credit: bool) -> list[str]:
 
 # Mention légale : en bas du simulateur et dans le chapitre Mentions du dossier.
 MENTION_LEGALE = (
-    "Fiabimmo produit des calculs à partir des données saisies. Ce n'est ni un conseil en investissement, en "
-    "financement ou en fiscalité, ni une offre de prêt. Fiabimmo n'est ni un établissement de crédit, ni un intermédiaire en "
+    "Credaura produit des calculs à partir des données saisies. Ce n'est ni un conseil en investissement, en "
+    "financement ou en fiscalité, ni une offre de prêt. Credaura n'est ni un établissement de crédit, ni un intermédiaire en "
     "opérations de banque et en services de paiement (IOBSP, article L. 519-1 du Code monétaire et financier) : "
     "il ne propose aucun crédit et ne met en relation avec aucun établissement. La banque reste seule décisionnaire."
 )

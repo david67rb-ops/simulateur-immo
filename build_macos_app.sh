@@ -1,5 +1,5 @@
 #!/bin/bash
-# Construit "Fiabimmo.app", une application macOS autonome :
+# Construit "Credaura.app", une application macOS autonome :
 # aucune installation de Python ni de dépendances n'est requise pour la
 # lancer, il suffit de double-cliquer dessus.
 #
@@ -38,26 +38,43 @@ NICEGUI_DIR="$(python3 -c 'import nicegui, os; print(os.path.dirname(nicegui.__f
 # le dossier docx/parts doit donc exister dans l'app, sinon Errno 2.
 DOCX_DIR="$(python3 -c 'import docx, os; print(os.path.dirname(docx.__file__))')"
 
+# Icône de l'application : le logo Credaura (app/visuels_dossier.logo), décliné
+# dans les tailles attendues par macOS puis assemblé par iconutil.
+ICONSET="$BUILD_DIR/Credaura.iconset"
+mkdir -p "$ICONSET"
+python3 - "$ICONSET" <<'PY'
+import sys
+from pathlib import Path
+from app.visuels_dossier import logo
+dossier = Path(sys.argv[1])
+for taille in (16, 32, 64, 128, 256, 512):
+    (dossier / f"icon_{taille}x{taille}.png").write_bytes(logo(taille))
+    (dossier / f"icon_{taille}x{taille}@2x.png").write_bytes(logo(taille * 2))
+PY
+iconutil -c icns "$ICONSET" -o "$BUILD_DIR/Credaura.icns"
+
 echo "Construction en cours (plusieurs minutes, dépendances lourdes : pandas/pyarrow/matplotlib)..."
 python3 -m PyInstaller \
-    --name "Fiabimmo" \
+    --name "Credaura" \
+    --icon "$BUILD_DIR/Credaura.icns" \
     --windowed \
     --add-data "${NICEGUI_DIR}:nicegui" \
     --collect-data docx \
     --add-data "${DOCX_DIR}/parts/__init__.py:docx/parts" \
-    --add-data "app/data:app/data" \
-    --add-data "app/fonts:app/fonts" \
-    --osx-bundle-identifier com.davidlehmann.fiabimmo \
+    --add-data "$PWD/app/data:app/data" \
+    --add-data "$PWD/app/fonts:app/fonts" \
+    --osx-bundle-identifier com.davidlehmann.credaura \
     --distpath "$BUILD_DIR/dist" \
     --workpath "$BUILD_DIR/build" \
+    --specpath "$BUILD_DIR" \
     --noconfirm \
     main.py
 
-INSTALL_PATH="/Applications/Fiabimmo.app"
-# Ancien nom de l'application (avant le passage à la marque Fiabimmo).
-rm -rf "/Applications/Simulateur Immobilier.app"
+INSTALL_PATH="/Applications/Credaura.app"
+# Anciens noms de l'application (avant le passage à la marque Credaura).
+rm -rf "/Applications/Simulateur Immobilier.app" "/Applications/Fiabimmo.app"
 rm -rf "$INSTALL_PATH"
-cp -R "$BUILD_DIR/dist/Fiabimmo.app" "$INSTALL_PATH"
+cp -R "$BUILD_DIR/dist/Credaura.app" "$INSTALL_PATH"
 xattr -cr "$INSTALL_PATH" || true
 
 echo

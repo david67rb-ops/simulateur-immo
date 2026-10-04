@@ -352,24 +352,3 @@ def chart_marche(
     for cote in ("top", "right", "left"):
         ax.spines[cote].set_visible(False)
     return _fig_to_png(fig)
-
-
-def logo_png() -> bytes:
-    """Logo de l'application (maison + courbe ascendante), mêmes proportions
-    que le SVG de l'interface (repère 64 × 64)."""
-    from matplotlib.patches import FancyBboxPatch, Polygon, Rectangle
-
-    fig = plt.figure(figsize=(1, 1))
-    ax = fig.add_axes([0, 0, 1, 1])
-    ax.set_xlim(0, 64)
-    ax.set_ylim(64, 0)
-    ax.axis("off")
-    ax.add_patch(FancyBboxPatch((0, 0), 64, 64, boxstyle="round,pad=0,rounding_size=16", fc=PRIMARY, ec="none"))
-    ax.add_patch(Polygon([(32, 13), (49, 27.5), (49, 47), (15, 47), (15, 27.5)], closed=True, fc="white", ec="none"))
-    ax.add_patch(Rectangle((27, 35), 10, 12, fc=PRIMARY, ec="none"))
-    ax.plot([13, 24, 32, 47], [42, 29, 34, 16], color=ACCENT, linewidth=3.8, solid_capstyle="round", solid_joinstyle="round")
-    ax.add_patch(Polygon([(47, 16), (39, 17.5), (45.5, 23)], closed=True, fc=ACCENT, ec="none"))
-    buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=300, transparent=True)
-    plt.close(fig)
-    return buf.getvalue()
