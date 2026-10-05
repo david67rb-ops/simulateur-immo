@@ -42,7 +42,7 @@ from app.chapitres_dossier import (
 )
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
-from . import apercus_dossier, offre, theme
+from . import apercus_dossier, offre, pages_legales, theme
 from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
@@ -542,7 +542,8 @@ def index_page() -> None:
             "Fiscalité : barème IR 2026 sur revenus 2025, IS 2026, réforme LMNP (loi de finances 2025, art. 84). "
             "Voir le README pour les hypothèses détaillées."
         ).classes(theme.HINT_CLASSES + " text-center mt-2")
-        ui.label(MENTION_LEGALE).classes(theme.HINT_CLASSES + " text-center mb-4")
+        ui.label(MENTION_LEGALE).classes(theme.HINT_CLASSES + " text-center")
+        pages_legales.liens_legaux(nouvel_onglet=True)
 
 
 # =========================================================================
