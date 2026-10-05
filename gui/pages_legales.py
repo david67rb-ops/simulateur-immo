@@ -12,12 +12,12 @@ from app.chapitres_dossier import MENTION_LEGALE
 
 from . import theme
 
-# --- Éditeur (champ vide = « à compléter », affiché en évidence) -----------
+# --- Éditeur (adresse vide = éditeur non professionnel, avant l'immatriculation)
 EDITEUR_NOM = "David Lehmann"
 EDITEUR_STATUT = ""  # ex. « entrepreneur individuel », après immatriculation
 EDITEUR_ADRESSE = ""
 EDITEUR_SIRET = ""
-CONTACT_EMAIL = ""
+CONTACT_EMAIL = "credaura.contact@gmail.com"
 
 HEBERGEUR = (
     "Render Services, Inc., 525 Brannan Street, Suite 300, San Francisco, CA 94107, "
@@ -26,10 +26,6 @@ HEBERGEUR = (
 MISE_A_JOUR = "5 octobre 2026"
 
 A_COMPLETER = '<span style="background:#fde68a;color:#7c2d12;padding:0 4px;border-radius:4px">à compléter</span>'
-
-
-def _ou_a_completer(valeur: str) -> str:
-    return valeur or A_COMPLETER
 
 
 def _contact() -> str:
@@ -80,7 +76,19 @@ def _pied(colonne) -> None:
 def page_mentions_legales() -> None:
     colonne = _gabarit("Mentions légales")
     editeur = EDITEUR_NOM + (f", {EDITEUR_STATUT}" if EDITEUR_STATUT else "")
-    siret = f"SIRET : {EDITEUR_SIRET}." if EDITEUR_SIRET else "SIRET : en cours d'immatriculation."
+    if EDITEUR_ADRESSE:
+        identite = f"Adresse : {EDITEUR_ADRESSE}<br>\nContact : {_contact()}<br>\n" + (
+            f"SIRET : {EDITEUR_SIRET}." if EDITEUR_SIRET else "SIRET : en cours d'immatriculation."
+        )
+    else:
+        # Avant l'immatriculation : éditeur non professionnel, dispensé de
+        # publier son adresse (LCEN, art. 6) ; elle est connue de l'hébergeur.
+        identite = (
+            f"Contact : {_contact()}<br>\n"
+            "Activité en cours d'immatriculation. Éditeur à titre non professionnel : conformément à "
+            "l'article 6 de la loi pour la confiance dans l'économie numérique, son adresse n'est pas "
+            "publiée ; son identité est connue de l'hébergeur."
+        )
     with colonne:
         ui.markdown(
             f"""
@@ -88,9 +96,7 @@ def page_mentions_legales() -> None:
 
 Le site credaura.fr est édité par {editeur}.
 
-Adresse : {_ou_a_completer(EDITEUR_ADRESSE)}<br>
-Contact : {_contact()}<br>
-{siret}
+{identite}
 
 Directeur de la publication : {EDITEUR_NOM}.
 
