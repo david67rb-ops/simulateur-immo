@@ -68,7 +68,7 @@ def _pied(colonne) -> None:
     with colonne:
         ui.separator().classes("mt-6")
         with ui.row().classes("w-full justify-between items-center"):
-            ui.html('<a href="/" class="lien-exemple text-sm">← Revenir au simulateur</a>')
+            ui.html('<a href="/" class="lien-exemple text-sm">← Revenir à l\'accueil</a>')
         liens_legaux()
 
 

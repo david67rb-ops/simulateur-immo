@@ -42,7 +42,7 @@ from app.chapitres_dossier import (
 )
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
-from . import apercus_dossier, offre, pages_legales, theme
+from . import accueil, apercus_dossier, offre, pages_legales, theme
 from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
@@ -507,7 +507,34 @@ def index_page() -> None:
         # perdant les classes responsives (toute la mise en page se décale).
         ui.run_javascript("Quasar.Dark.set(!Quasar.Dark.isActive)")
 
-    with ui.column().classes("w-full max-w-6xl mx-auto gap-5 p-4"):
+    # Sur le site, la page s'ouvre sur l'accueil ; le simulateur complet est
+    # derrière, déjà rempli quand on passe par le formulaire. L'application de
+    # bureau ouvre directement le simulateur.
+    sur_le_site = not app.native.main_window
+    if sur_le_site:
+        # Accueil pleine largeur (sans les marges par défaut de NiceGUI). En
+        # CSS : ui.query modifierait les classes après coup, ce qui fait
+        # perdre à Tailwind (généré dans le navigateur) les styles de la page.
+        ui.add_css(".nicegui-content { padding: 0 !important; gap: 0 !important; }")
+
+        # Masqués par une classe et non par set_visibility : un élément
+        # invisible n'est pas dans la page, et Tailwind (généré dans le
+        # navigateur) ne produirait pas ses styles à l'affichage.
+        ui.add_css(".masque { display: none !important; }")
+
+        def ouvrir_simulateur() -> None:
+            page_accueil.classes(add="masque")
+            simulateur.classes(remove="masque")
+            ui.run_javascript("window.scrollTo(0, 0)")
+
+        async def verifier(valeurs: dict) -> None:
+            ouvrir_simulateur()
+            await demarrer_depuis_accueil(**valeurs)
+
+        page_accueil = accueil.construire_accueil(verifier, ouvrir_simulateur)
+
+    simulateur = ui.column().classes("w-full max-w-6xl mx-auto gap-5 p-4" + (" masque" if sur_le_site else ""))
+    with simulateur:
         with ui.element("div").classes("w-full relative mb-2"):
             # Bouton du thème dans le coin, hors du flux : le titre reste centré
             # sur la page, quelle que soit la largeur de l'écran.
@@ -535,7 +562,7 @@ def index_page() -> None:
                 ).classes("text-sm text-gray-500 text-center mt-2")
                 lien_exemple_dossier("Voir un exemple de dossier pour la banque", "mt-1")
 
-        _build_investor_view()
+        demarrer_depuis_accueil = _build_investor_view()
 
         ui.label(
             "Sources marché : API Adresse (BAN), DVF géolocalisé (data.gouv.fr), Carte des loyers DHUP/ANIL. "
@@ -549,7 +576,7 @@ def index_page() -> None:
 # =========================================================================
 # Vue particulier / investisseur : parcours complet en onglets
 # =========================================================================
-def _build_investor_view() -> None:
+def _build_investor_view():
     market_state = default_market_state()
     sim_state = default_sim_state()
     profil_state = default_profil_state()
@@ -2737,6 +2764,35 @@ def _build_investor_view() -> None:
         marquer_fait(tab_dossier)
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
+
+    # =====================================================================
+    # Démarrage depuis la page d'accueil : le formulaire « Vérifie ton
+    # projet » préremplit le simulateur et lance l'étude de marché. Les
+    # valeurs passent par la mémoire du serveur, jamais par l'adresse de la
+    # page (rien dans les journaux).
+    # =====================================================================
+    async def demarrer_depuis_accueil(adresse: str, type_bien: str, surface: float, prix: float, loyer: float | None) -> None:
+        market_state["adresse"] = adresse
+        ms_adresse.set_value(adresse)
+        market_state["type_bien"] = sim_state["type_bien"] = type_bien
+        ms_type.set_value(type_bien)
+        market_state["surface_m2"] = sim_state["surface_m2"] = surface
+        ms_surface.set_value(surface)
+        sim_state["prix_achat"] = round(prix)
+        prix_achat_input.set_value(sim_state["prix_achat"])
+        ctx["prix_renseigne"] = True
+        recalc_notaire()
+        if loyer:
+            sim_state["loyer_mensuel_hors_charges"] = round(loyer)
+            field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
+        await on_analyser_marche()
+        estime = (ctx.get("last_market_result") or {}).get("loyer_mensuel_estime")
+        if not loyer and estime:
+            # Sans loyer saisi : le loyer du marché, modifiable ensuite.
+            sim_state["loyer_mensuel_hors_charges"] = estime
+            field_loyer.set_value(estime)
+
+    return demarrer_depuis_accueil
 
 
 def main() -> None:
