@@ -128,7 +128,7 @@ RESULTAT = f"""
         <span style="font-family:Sora,sans-serif;font-weight:700;font-size:26px;color:#2D6A4F">Projet solide</span>
       </div>
       <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:14px">
-        {_critere("#2D6A4F", "Prix", "5 % sous la médiane des ventes du quartier")}
+        {_critere("#2D6A4F", "Prix", "4 % sous la médiane des ventes du quartier")}
         {_critere("#2D6A4F", "Rentabilité", "cash-flow positif, +46 € par mois après crédit, charges et impôts")}
         {_critere("#8A94A0", "Financement", "ajoute tes revenus pour connaître ton taux d'endettement")}
       </ul>

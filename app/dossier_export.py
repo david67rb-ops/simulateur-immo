@@ -317,8 +317,41 @@ def _tuiles(container, tuiles: list[tuple[str, str, bool | None]], largeur_cm: f
     _espace(container, 10)
 
 
-def _bandeau_verdict(doc, verdict: dict) -> None:
-    filet, fond = COULEURS_VERDICT[verdict["niveau"]]
+# Pastille d'un critère pas encore évalué (gris, comme sur le site).
+GRIS_NEUTRE = "9AA3AD"
+
+
+def _pour_la_banque(payload) -> bool:
+    """Le dossier est-il destiné à la banque ? Oui sauf la formule
+    « Personnel », sans les chapitres profil, endettement et pièces à fournir
+    (ni sans crédit : pas de banque à convaincre)."""
+    if payload.chapitres is None:
+        return True
+    return bool({"profil", "endettement", "annexes"} & set(payload.chapitres))
+
+
+def _texte_repere_banque(critere: dict, inp, resultat: dict) -> str:
+    """Pour la banque, des faits sans jugement : « Effort d'épargne de
+    141 €/mois » plutôt que « Effort d'épargne important »."""
+    if critere["nom"] == "Rentabilité":
+        cf = resultat["cashflow_mensuel_an1"]
+        if cf >= 0:
+            return f"cash-flow net de +{_eur(cf)} par mois après crédit, charges et impôts"
+        return f"effort d'épargne de {_eur(-cf)} par mois après crédit, charges et impôts"
+    if critere["nom"] == "Marge":
+        ar = resultat["achat_revente"]
+        part = ar["marge_nette"] / ar["cout_total_acquisition"] if ar["cout_total_acquisition"] else 0
+        return f"marge nette de {_eur(ar['marge_nette'])}, soit {_pct(part)} du coût total de l'opération"
+    texte = critere["texte"].replace(", souvent jugé faible", "")
+    return texte[0].lower() + texte[1:]
+
+
+def _bandeau_reperes(doc, v: dict, inp, resultat: dict, pour_banque: bool) -> None:
+    """En tête de synthèse, les trois repères du projet (rentabilité ou
+    marge, prix, financement), chacun avec sa pastille de couleur. Pour la
+    banque : titre neutre et faits ; formule Personnel : le verdict du site
+    (projet solide, à renforcer, à revoir)."""
+    filet, fond = COULEURS_VERDICT["neutre" if pour_banque else v["niveau"]]
     table = doc.add_table(rows=1, cols=1)
     table.autofit = False
     table.alignment = WD_TABLE_ALIGNMENT.CENTER
@@ -328,11 +361,26 @@ def _bandeau_verdict(doc, verdict: dict) -> None:
     cell.width = Cm(LARGEUR_CONTENU_CM)
     _set_cell_background(cell, fond)
     _bordures_cellule(cell, left=(filet, 36))
-    _cell_marges(cell, haut=140, bas=140, gauche=260, droite=260)
-    _texte(cell.paragraphs[0], verdict["titre"], 15, RGBColor.from_string(filet), gras=True)
+    _cell_marges(cell, haut=140, bas=150, gauche=260, droite=260)
+    titre = "Les 3 repères du projet" if pour_banque else v["titre"]
+    _texte(cell.paragraphs[0], titre, 15, RGBColor.from_string(filet), gras=True)
+    cell.paragraphs[0].paragraph_format.space_after = Pt(4)
+    for critere in v["criteres"]:
+        p = cell.add_paragraph()
+        p.paragraph_format.space_before = Pt(3)
+        couleur = GRIS_NEUTRE if critere["niveau"] == "neutre" else COULEURS_VERDICT[critere["niveau"]][0]
+        _texte(p, "●  ", 11, RGBColor.from_string(couleur))
+        if pour_banque:
+            texte = _texte_repere_banque(critere, inp, resultat)
+        else:
+            # « Effort d'épargne modéré : 141 €/mois » → « effort d'épargne modéré, 141 €/mois ».
+            texte = critere["texte"].replace(" : ", ", ")
+            texte = texte[0].lower() + texte[1:]
+        _texte(p, critere["nom"], 10.5, TEXTE_FONCE, gras=True)
+        _texte(p, f" : {texte}", 10.5, TEXTE_FONCE)
     p = cell.add_paragraph()
-    p.paragraph_format.space_before = Pt(2)
-    _texte(p, verdict["detail"], 10, GRIS_LIBELLE)
+    p.paragraph_format.space_before = Pt(6)
+    _texte(p, v["detail"], 9.5, GRIS_LIBELLE)
     _espace(doc, 10)
 
 
@@ -870,15 +918,19 @@ def _taquet_valeur(paragraphe, position_cm: float) -> None:
 
 
 def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
-    """Tableau de bord : le projet en une phrase, le verdict, puis 4 blocs
+    """Tableau de bord : le projet en une phrase, les 3 repères, puis 4 blocs
     (le bien, la rentabilité ou l'opération, le financement, le long terme
     ou la marge), chacun avec son repère de couleur."""
     p_phrase = doc.add_paragraph()
     _texte(p_phrase, phrase_projet(payload, inp, resultat, is_achat_revente), 12.5, TEXTE_FONCE)
     p_phrase.paragraph_format.space_after = Pt(10)
-    _bandeau_verdict(doc, analyse.verdict(inp, resultat))
-    cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
     ecart = _ecart_au_marche(inp, payload.marche)
+    endettement = _taux_endettement(payload, inp, resultat, is_achat_revente) if payload.profil is not None else None
+    v = analyse.verdict_global(
+        inp, resultat, ecart[0] if ecart else None, endettement, raison_prix="étude de marché non réalisée"
+    )
+    _bandeau_reperes(doc, v, inp, resultat, _pour_la_banque(payload))
+    cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
 
     prix_m2 = f"{_eur(inp.prix_achat / inp.surface_m2)}/m²"
     if ecart:
@@ -2137,7 +2189,7 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             True,
             "synthese",
             "Synthèse du projet",
-            "Le bilan du projet : le verdict, puis les chiffres clés de chaque partie.",
+            "Le bilan du projet : les repères essentiels, puis les chiffres clés de chaque partie.",
             lambda d: _section_synthese(d, payload, inp, resultat, is_achat_revente),
         ),
         (
