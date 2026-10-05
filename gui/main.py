@@ -43,6 +43,7 @@ from app.chapitres_dossier import (
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import accueil, apercus_dossier, offre, pages_legales, theme
+from . import page_contact  # noqa: F401  (enregistre la page /contact)
 from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option

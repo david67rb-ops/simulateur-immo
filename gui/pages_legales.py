@@ -40,11 +40,15 @@ def liens_legaux(nouvel_onglet: bool = False) -> None:
         return
     cible = ' target="_blank" rel="noopener"' if nouvel_onglet else ""
     with ui.row().classes("w-full justify-center gap-x-5 gap-y-1 text-xs mb-4"):
-        for adresse, texte in (("/mentions-legales", "Mentions légales"), ("/confidentialite", "Confidentialité")):
+        for adresse, texte in (
+            ("/contact", "Nous contacter"),
+            ("/mentions-legales", "Mentions légales"),
+            ("/confidentialite", "Confidentialité"),
+        ):
             ui.html(f'<a href="{adresse}"{cible} class="lien-exemple">{texte}</a>')
 
 
-def _gabarit(titre: str):
+def _gabarit(titre: str, date: bool = True):
     """En-tête commun (logo qui ramène au simulateur) et colonne de lecture."""
     theme.apply_theme()
     ui.dark_mode(value=None)
@@ -60,7 +64,8 @@ def _gabarit(titre: str):
             ui.html(theme.LOGO_SVG)
             ui.html('Cred<span class="text-[color:var(--c-laiton)]">aura</span>').classes("text-xl font-bold")
         ui.label(titre).classes("text-3xl font-bold titre-sora")
-        ui.label(f"Dernière mise à jour : {MISE_A_JOUR}").classes(theme.HINT_CLASSES)
+        if date:
+            ui.label(f"Dernière mise à jour : {MISE_A_JOUR}").classes(theme.HINT_CLASSES)
     return colonne
 
 
@@ -157,9 +162,12 @@ Aucune mesure d'audience, aucune publicité, aucun cookie tiers.
   patrimoine, photos du bien. Ils servent uniquement au calcul du taux d'endettement et au dossier de financement.
 - **Données techniques** : adresse IP, type de navigateur, pages demandées, date et heure. Elles sont
   enregistrées par l'hébergeur pour faire fonctionner et sécuriser le site.
+- **Vos messages, si vous écrivez** (page [Nous contacter](/contact)) : votre adresse e-mail et le contenu
+  du message, pour vous répondre.
 
 Base légale : la fourniture du service que vous demandez (article 6.1.b du RGPD) pour votre projet et
-votre situation ; l'intérêt légitime à assurer la sécurité du site (article 6.1.f) pour les données techniques.
+votre situation ; l'intérêt légitime à assurer la sécurité du site (article 6.1.f) pour les données techniques et à
+répondre aux messages reçus.
 
 ## Combien de temps
 
@@ -170,6 +178,8 @@ votre situation ; l'intérêt légitime à assurer la sécurité du site (articl
   en mémoire le temps de l'afficher, à une adresse à usage unique.
 - Les journaux techniques de l'hébergeur sont conservés pour une durée limitée, selon sa propre politique.
   Ils ne contiennent pas les informations que vous saisissez.
+- Les messages reçus par e-mail sont conservés le temps de traiter votre demande ; vous pouvez demander
+  leur suppression à tout moment.
 
 ## Qui y a accès
 
@@ -184,6 +194,8 @@ appel à des prestataires techniques, chacun pour une seule raison :
   votre navigateur y charge les fonds de carte, ce qui lui transmet votre adresse IP.
 - **jsDelivr** (réseau de diffusion de fichiers) : votre navigateur y charge les deux bibliothèques qui
   affichent l'aperçu du dossier, ce qui lui transmet votre adresse IP.
+- **Google** (messagerie Gmail, États-Unis, adhérent au Data Privacy Framework) : reçoit les messages
+  que vous envoyez à l'adresse de contact.
 
 Les liens vers des sites extérieurs (recherches de prix, annonces) ne transmettent rien tant que vous
 ne cliquez pas dessus.

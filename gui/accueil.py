@@ -13,7 +13,6 @@ from typing import Awaitable, Callable
 
 from nicegui import ui
 
-from . import pages_legales
 
 BLEU, ENCRE, LAITON, LAITON_CLAIR, LAITON_FONCE = "#1B3358", "#13243F", "#A8823B", "#E9D8B0", "#86662A"
 
@@ -49,6 +48,12 @@ LOGO = (
     '<svg width="44" height="44" viewBox="0 0 64 64" aria-hidden="true"><rect width="64" height="64" rx="15" fill="#22406B"/>'
     '<circle cx="32" cy="32.5" r="23" fill="none" stroke="#C9A45E" stroke-width="2.4"/>'
     '<path d="M32 19 L44.5 29.5 V43.5 H19.5 V29.5 Z" fill="#FFFFFF"/><rect x="28.8" y="35" width="6.4" height="8.5" rx="0.8" fill="#22406B"/></svg>'
+)
+RESEAUX = (
+    ("https://www.instagram.com/credaura.fr/", "Instagram"),
+    ("https://www.tiktok.com/@credaura.fr", "TikTok"),
+    ("https://www.facebook.com/profile.php?id=61595308522377", "Facebook"),
+    ("https://www.youtube.com/@credaura.fr1", "YouTube"),
 )
 # Dans l'ordre des sections de la page.
 LIENS_MENU = (
@@ -263,7 +268,6 @@ def _faq() -> str:
         f"<details{' open' if i == 0 else ''}><summary>{q}</summary><p>{r}</p></details>"
         for i, (q, r) in enumerate(QUESTIONS)
     )
-    contact = pages_legales.CONTACT_EMAIL
     return f"""
 <section id="faq" style="background:#FFFFFF;border-top:1px solid #E6ECF3">
   <div class="bloc" style="padding-top:clamp(48px,7vw,88px);padding-bottom:clamp(48px,7vw,88px)">
@@ -273,22 +277,18 @@ def _faq() -> str:
       <h2 class="titre-section">Tes questions, mes réponses</h2>
     </div>
     <div style="display:flex;flex-direction:column;border-top:1px solid #DCE3EC">{questions}</div>
-    <p class="gris">Une autre question&#8239;? <a href="mailto:{contact}" style="font-weight:600">Écris-moi</a>.</p>
+    <p class="gris">Une autre question&#8239;? <a href="/contact" style="font-weight:600">Écris-moi</a>.</p>
   </div>
   </div>
 </section>"""
 
 
 def _pied() -> str:
-    contact = pages_legales.CONTACT_EMAIL
     liens = (
-        (f"mailto:{contact}", "Nous contacter"),
+        ("/contact", "Nous contacter"),
         ("/mentions-legales", "Mentions légales"),
         ("/confidentialite", "Confidentialité"),
-        ("https://www.instagram.com/credaura.fr/", "Instagram"),
-        ("https://www.tiktok.com/@credaura.fr", "TikTok"),
-        ("https://www.facebook.com/profile.php?id=61595308522377", "Facebook"),
-        ("https://www.youtube.com/@credaura.fr1", "YouTube"),
+        *RESEAUX,
     )
     html_liens = "".join(f'<a href="{h}" style="color:#FFFFFF">{t}</a>' for h, t in liens)
     return f"""
