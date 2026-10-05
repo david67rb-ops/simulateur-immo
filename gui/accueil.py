@@ -50,9 +50,10 @@ LOGO = (
     '<circle cx="32" cy="32.5" r="23" fill="none" stroke="#C9A45E" stroke-width="2.4"/>'
     '<path d="M32 19 L44.5 29.5 V43.5 H19.5 V29.5 Z" fill="#FFFFFF"/><rect x="28.8" y="35" width="6.4" height="8.5" rx="0.8" fill="#22406B"/></svg>'
 )
+# Dans l'ordre des sections de la page.
 LIENS_MENU = (
+    ("#resultat", "Le dossier"),
     ("#comment", "Comment ça marche"),
-    ("#dossier", "Le dossier"),
     ("#tarifs", "Tarifs"),
     ("#faq", "FAQ"),
 )
@@ -286,6 +287,8 @@ def _pied() -> str:
         ("/confidentialite", "Confidentialité"),
         ("https://www.instagram.com/credaura.fr/", "Instagram"),
         ("https://www.tiktok.com/@credaura.fr", "TikTok"),
+        ("https://www.facebook.com/profile.php?id=61595308522377", "Facebook"),
+        ("https://www.youtube.com/@credaura.fr1", "YouTube"),
     )
     html_liens = "".join(f'<a href="{h}" style="color:#FFFFFF">{t}</a>' for h, t in liens)
     return f"""
