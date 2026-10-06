@@ -10,7 +10,7 @@ from nicegui import app, ui
 
 from app.chapitres_dossier import MENTION_LEGALE
 
-from . import theme
+from . import statistiques, theme
 
 # --- Éditeur (adresse vide = éditeur non professionnel, avant l'immatriculation)
 EDITEUR_NOM = "David Lehmann"
@@ -51,6 +51,7 @@ def liens_legaux(nouvel_onglet: bool = False) -> None:
 def _gabarit(titre: str, date: bool = True):
     """En-tête commun (logo qui ramène au simulateur) et colonne de lecture."""
     theme.apply_theme()
+    statistiques.installer()
     ui.dark_mode(value=None)
     ui.add_css(
         ".texte-legal h2 { font-family: Sora, sans-serif; font-size: 1.15rem; font-weight: 600; line-height: 1.3; margin: 1.6em 0 0.4em; }"
@@ -143,12 +144,24 @@ Le détail figure dans la [politique de confidentialité](/confidentialite).
 @ui.page("/confidentialite", title="Confidentialité · Credaura")
 def page_confidentialite() -> None:
     colonne = _gabarit("Politique de confidentialité")
+    # Paragraphes sur la mesure d'audience, seulement quand elle est active.
+    if statistiques.CODE:
+        en_bref = "Une mesure d'audience anonyme, sans cookie ; aucune publicité, aucun cookie tiers."
+        prestataire = (
+            "- **GoatCounter** (statistiques de fréquentation) : votre navigateur y charge un petit script qui compte "
+            "les pages vues, la provenance et le type d'appareil, sans cookie ni identifiant ; il reçoit votre "
+            "adresse IP, qu'il n'enregistre pas. Sont aussi comptés, sans aucun contenu, le lancement d'une "
+            "vérification et le téléchargement d'un dossier.\n"
+        )
+    else:
+        en_bref = "Aucune mesure d'audience, aucune publicité, aucun cookie tiers."
+        prestataire = ""
     with colonne:
         ui.markdown(
             f"""
 **En bref :** Credaura ne vous demande ni compte ni adresse e-mail, et ne conserve aucune des informations
 que vous saisissez. Elles servent au calcul et à votre dossier, puis disparaissent quand vous quittez la page.
-Aucune mesure d'audience, aucune publicité, aucun cookie tiers.
+{en_bref}
 
 ## Responsable du traitement
 
@@ -196,7 +209,7 @@ appel à des prestataires techniques, chacun pour une seule raison :
   affichent l'aperçu du dossier, ce qui lui transmet votre adresse IP.
 - **Google** (messagerie Gmail, États-Unis, adhérent au Data Privacy Framework) : reçoit les messages
   que vous envoyez à l'adresse de contact.
-
+{prestataire}
 Les liens vers des sites extérieurs (recherches de prix, annonces) ne transmettent rien tant que vous
 ne cliquez pas dessus.
 

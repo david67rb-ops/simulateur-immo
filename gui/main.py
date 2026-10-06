@@ -44,6 +44,7 @@ from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import accueil, apercus_dossier, offre, pages_legales, theme
 from . import page_contact  # noqa: F401  (enregistre la page /contact)
+from . import statistiques
 from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
@@ -499,6 +500,7 @@ def message_erreur(exc: Exception) -> str:
 def index_page() -> None:
     theme.apply_theme()
     apercus_dossier.installer()
+    statistiques.installer()
     # None = mode auto : suit le réglage clair/sombre de l'ordinateur ou du téléphone.
     ui.dark_mode(value=None)
 
@@ -2152,6 +2154,7 @@ def _build_investor_view():
             appliquer_saisonnalite_region()
         market_status.set_text(f"Adresse localisée : {geo['label']} (INSEE {geo['code_insee']})")
         marquer_fait(tab_marche)
+        statistiques.evenement("verification", "Vérification d'un projet")
 
         bloc_prix.afficher(comparables, geo)
         comparer_prix_au_marche()
@@ -2762,6 +2765,7 @@ def _build_investor_view():
         else:
             ui.download(contenu, "Credaura - dossier de financement.docx")
             dossier_status.set_text("Dossier téléchargé.")
+            statistiques.evenement("dossier-telecharge", "Dossier téléchargé")
         marquer_fait(tab_dossier)
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
