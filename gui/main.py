@@ -42,7 +42,7 @@ from app.chapitres_dossier import (
 )
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
-from . import accueil, apercus_dossier, offre, pages_legales, theme
+from . import accueil, apercus_dossier, avis, offre, pages_legales, theme
 from . import page_contact  # noqa: F401  (enregistre la page /contact)
 from . import statistiques
 from .progression import Progression
@@ -1536,6 +1536,8 @@ def _build_investor_view():
                         btn_telecharger_dossier.visible = False
                     dossier_status = ui.label("").classes(theme.HINT_CLASSES)
                     progres_dossier = Progression()
+                    # Avis de testeur, proposé après le premier téléchargement (site seulement).
+                    carte_avis = avis.construire_carte()
 
                     apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
                     apercu_dossier.visible = False
@@ -2766,6 +2768,8 @@ def _build_investor_view():
             ui.download(contenu, "Credaura - dossier de financement.docx")
             dossier_status.set_text("Dossier téléchargé.")
             statistiques.evenement("dossier-telecharge", "Dossier téléchargé")
+            if carte_avis is not None:
+                carte_avis.visible = True
         marquer_fait(tab_dossier)
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
