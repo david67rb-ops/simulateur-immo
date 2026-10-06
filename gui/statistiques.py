@@ -12,7 +12,7 @@ import os
 from nicegui import app, ui
 
 # Code du compte : https://<code>.goatcounter.com
-CODE = os.environ.get("IMMO_GOATCOUNTER", "")
+CODE = os.environ.get("IMMO_GOATCOUNTER", "credaura")
 
 
 def actif() -> bool:
