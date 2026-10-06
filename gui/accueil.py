@@ -27,9 +27,23 @@ CSS = """
 .nav-mobile { display: none; position: relative; }
 .nav-mobile summary { list-style: none; cursor: pointer; width: 44px; height: 44px; border-radius: 10px; border: 1.5px solid rgba(233, 216, 176, 0.5); display: flex; align-items: center; justify-content: center; }
 .nav-mobile summary::-webkit-details-marker { display: none; }
-.nav-mobile .menu-deroulant { position: absolute; right: 0; top: 52px; z-index: 20; background: #FFFFFF; border-radius: 12px; padding: 8px; min-width: 230px; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(8, 20, 40, 0.3); }
-.nav-mobile .menu-deroulant a { color: #13243F; text-decoration: none; padding: 12px 14px; border-radius: 8px; }
-.nav-mobile .menu-deroulant a:hover { background: #F0F3F7; }
+.nav-mobile .menu-deroulant { position: absolute; right: 0; top: 52px; z-index: 20; background: #FFFFFF; border-radius: 12px; padding: 8px; min-width: 260px; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(8, 20, 40, 0.3); }
+.nav-mobile .menu-deroulant a { color: #13243F; text-decoration: none; padding: 12px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.nav-mobile .menu-deroulant a + a { border-top: 1px solid #EEF2F7; }
+.nav-mobile .menu-deroulant a:hover, .nav-mobile .menu-deroulant a:active { background: #F0F3F7; }
+.nav-mobile[open] summary { background: rgba(233, 216, 176, 0.15); }
+.nav-mobile[open] .ic-menu, .nav-mobile:not([open]) .ic-fermer { display: none; }
+/* Ouverture du menu : le panneau se déplie depuis le bouton, puis les rubriques arrivent une à une. */
+.nav-mobile[open] .menu-deroulant { transform-origin: top right; animation: menu-apparait 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.nav-mobile[open] .menu-deroulant a { animation: rubrique-apparait 0.3s ease-out both; }
+.nav-mobile[open] .menu-deroulant a:nth-child(2) { animation-delay: 0.04s; }
+.nav-mobile[open] .menu-deroulant a:nth-child(3) { animation-delay: 0.08s; }
+.nav-mobile[open] .menu-deroulant a:nth-child(4) { animation-delay: 0.12s; }
+.nav-mobile[open] .ic-fermer { animation: croix-apparait 0.22s ease-out both; }
+@keyframes menu-apparait { from { opacity: 0; transform: translateY(-8px) scale(0.94); } to { opacity: 1; transform: none; } }
+@keyframes rubrique-apparait { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+@keyframes croix-apparait { from { opacity: 0; transform: rotate(-90deg); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .nav-mobile .menu-deroulant, .nav-mobile .menu-deroulant a, .nav-mobile .ic-fermer { animation: none !important; } }
 @media (max-width: 760px) { .nav-liens { display: none !important; } .nav-mobile { display: block; } }
 .carte-verif { background: #FFFFFF; color: #13243F; }
 .body--dark .carte-verif { background: #151C27; color: #E6ECF3; }
@@ -55,6 +69,10 @@ RESEAUX = (
     ("https://www.facebook.com/profile.php?id=61595308522377", "Facebook"),
     ("https://www.youtube.com/@credaura.fr1", "YouTube"),
 )
+CHEVRON = (
+    '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A8823B" stroke-width="2.2" '
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M9 6l6 6-6 6"/></svg>'
+)
 # Dans l'ordre des sections de la page.
 LIENS_MENU = (
     ("#resultat", "Le dossier"),
@@ -67,8 +85,9 @@ LIENS_MENU = (
 def _entete() -> str:
     liens = "".join(f'<a href="{h}" style="color:#FFFFFF;text-decoration:none">{t}</a>' for h, t in LIENS_MENU)
     # Le menu se referme quand on choisit une rubrique.
-    liens_menu = "".join(f'<a href="{h}" onclick="this.closest(\'details\').open=false">{t}</a>' for h, t in LIENS_MENU)
-    exemple = '<a href="/exemple-dossier" target="_blank" rel="noopener"'
+    liens_menu = "".join(
+        f'<a href="{h}" onclick="this.closest(\'details\').open=false"><span>{t}</span>{CHEVRON}</a>' for h, t in LIENS_MENU
+    )
     return f"""
 <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 32px">
   <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#FFFFFF">{LOGO}
@@ -79,11 +98,13 @@ def _entete() -> str:
   </a>
   <nav class="nav-liens" aria-label="Navigation principale" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;font-size:15px">
     {liens}
-    {exemple} style="color:{ENCRE};background:{LAITON_CLAIR};text-decoration:none;font-weight:600;padding:10px 16px;border-radius:10px">Voir un exemple de dossier</a>
   </nav>
   <details class="nav-mobile">
-    <summary aria-label="Ouvrir le menu"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg></summary>
-    <div class="menu-deroulant">{liens_menu}{exemple}>Voir un exemple de dossier</a></div>
+    <summary aria-label="Menu">
+      <svg class="ic-menu" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+      <svg class="ic-fermer" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </summary>
+    <div class="menu-deroulant">{liens_menu}</div>
   </details>
 </header>"""
 
@@ -154,7 +175,7 @@ RESULTAT = f"""
       </ul>
       <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
         <a href="#verifier" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:10px">Obtenir mon dossier · offert pendant la bêta</a>
-        <a href="/exemple-dossier" target="_blank" rel="noopener" style="color:{LAITON_CLAIR};font-weight:600">Voir un exemple complet</a>
+        <a href="/exemple-dossier" target="_blank" rel="noopener" style="color:{LAITON_CLAIR};font-weight:600;text-decoration:none;padding:12px 16px;border-radius:10px;border:1.5px solid rgba(233,216,176,0.55)">Voir un exemple de dossier complet</a>
       </div>
     </div>
   </div>
@@ -309,6 +330,11 @@ def construire_accueil(
     """Construit la page d'accueil et renvoie son conteneur (masqué une fois
     le simulateur ouvert)."""
     ui.add_css(CSS)
+    # Menu du téléphone : se referme aussi quand on touche ailleurs sur la page.
+    ui.add_body_html(
+        "<script>document.addEventListener('click', e => document.querySelectorAll('.nav-mobile[open]')"
+        ".forEach(d => { if (!d.contains(e.target)) d.open = false; }));</script>"
+    )
     racine = ui.element("div").classes("accueil")
     with racine:
         ui.html(
