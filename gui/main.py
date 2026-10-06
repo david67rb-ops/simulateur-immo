@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import logging
 import os
 import webbrowser
 from pathlib import Path
@@ -56,6 +57,13 @@ from .state import (
     default_profil_state,
     default_sim_state,
 )
+
+# Journaux du serveur sans les informations saisies : en mode détaillé, httpx
+# écrirait chaque adresse appelée, dont l'adresse du bien envoyée au service
+# de géocodage. On le limite aux avertissements, quel que soit le réglage
+# général des journaux (promesse de la politique de confidentialité).
+for _journal in ("httpx", "httpcore"):
+    logging.getLogger(_journal).setLevel(logging.WARNING)
 
 TYPE_PROJET_OPTIONS = {
     "location_longue_duree": "Location longue durée",
