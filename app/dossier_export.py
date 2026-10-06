@@ -2049,12 +2049,36 @@ def phrases_a_retenir(payload, inp, resultat: dict, is_achat_revente: bool) -> d
 _VERROU_GENERATION = threading.Lock()
 
 
-def generer_dossier_word(payload: ExportDossierInput) -> bytes:
+def generer_dossier_word(payload: ExportDossierInput, chapitres_lisibles: int | None = None) -> bytes:
+    """`chapitres_lisibles` : aperçu gratuit, seuls les N premiers chapitres
+    sont rédigés ; les suivants gardent leur titre mais pas leur contenu (le
+    serveur n'envoie jamais les pages payantes, le flou seul se contourne)."""
     with _VERROU_GENERATION:
-        return _generer_dossier_word(payload)
+        return _generer_dossier_word(payload, chapitres_lisibles)
 
 
-def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
+def _section_reservee(doc) -> None:
+    """Contenu d'un chapitre hors de l'aperçu gratuit."""
+    filet, fond = COULEURS_VERDICT["neutre"]
+    table = doc.add_table(rows=1, cols=1)
+    table.autofit = False
+    table.alignment = WD_TABLE_ALIGNMENT.CENTER
+    _supprimer_bordures(table)
+    table.columns[0].width = Cm(LARGEUR_CONTENU_CM)
+    cell = table.rows[0].cells[0]
+    cell.width = Cm(LARGEUR_CONTENU_CM)
+    _set_cell_background(cell, fond)
+    _bordures_cellule(cell, left=(filet, 36))
+    _cell_marges(cell, haut=120, bas=120, gauche=240, droite=240)
+    _texte(cell.paragraphs[0], "Ce chapitre figure dans le dossier complet.", 11.5, RGBColor.from_string(filet), gras=True)
+    _espace(doc, 8)
+    for largeur in (100, 92, 97, 60, 0, 95, 88, 99, 70):
+        p = doc.add_paragraph()
+        if largeur:
+            _texte(p, "\u2588" * largeur, 6, RGBColor(0xE3, 0xE8, 0xEF))
+
+
+def _generer_dossier_word(payload: ExportDossierInput, chapitres_lisibles: int | None = None) -> bytes:
     inp = payload.simulation
     if not inp.avec_credit:
         # Sans crédit, pas d'emprunteur ni de taux d'endettement à présenter.
@@ -2229,6 +2253,9 @@ def _generer_dossier_word(payload: ExportDossierInput) -> bytes:
             parties=parties_presentes,
             icone=ICONES_CHAPITRES.get(cle),
         )
+        if chapitres_lisibles is not None and i > chapitres_lisibles:
+            _section_reservee(doc)
+            continue
         if cle in a_retenir:
             _a_retenir(doc, *a_retenir[cle])
         fn(doc)

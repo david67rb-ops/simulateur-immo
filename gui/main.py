@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import webbrowser
+from datetime import date
 from pathlib import Path
 
 from fastapi import Request
@@ -24,12 +25,14 @@ from pydantic import ValidationError
 
 from app import (
     analyse,
+    codes,
     donnees_marche,
     endettement as endet_mod,
     listing_parser,
     market_data,
     notaire,
     photos_dossier,
+    projet_signe,
     saisonnalite,
     schemas,
     simulation,
@@ -45,6 +48,7 @@ from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import accueil, apercus_dossier, avis, offre, pages_legales, theme
 from . import page_contact  # noqa: F401  (enregistre la page /contact)
+from . import page_admin  # noqa: F401  (enregistre la page /admin/codes)
 from . import statistiques
 from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
@@ -606,6 +610,9 @@ def _build_investor_view():
         # Idem pour les revenus du foyer (3 000 € par défaut) : le taux
         # d'endettement n'entre dans le verdict qu'une fois saisis.
         "profil_renseigne": False,
+        # Mode payant : dossier ouvert avec un code ou un fichier projet,
+        # lié à l'adresse du bien ({"adresse", "dossier_id", "jusqu_au", "code"}).
+        "debloque": None,
     }
 
     COULEURS_VERDICT = {"vert": theme.POSITIVE, "orange": theme.ACCENT, "rouge": theme.NEGATIVE, "neutre": "#9AA3AD"}
@@ -1491,6 +1498,27 @@ def _build_investor_view():
                     ).classes(theme.HINT_CLASSES)
                     lien_exemple_dossier("Voir un exemple complet (projet fictif, PDF)", "self-start mt-1 mb-3")
 
+                    # Mode payant : ouvrir le dossier avec un code (éteint pendant la bêta).
+                    bloc_code = ui.column().classes("w-full gap-2 rounded-xl p-4 mb-3").style(
+                        "background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)"
+                    )
+                    bloc_code.visible = offre.MODE_PAYANT
+                    with bloc_code:
+                        ui.label("Ouvrir ton dossier complet").classes("font-semibold")
+                        ui.label(
+                            "L'aperçu montre le début du dossier. Entre ton code de dossier pour l'ouvrir en entier : "
+                            "un dossier est décompté pour ce bien, que tu peux ensuite modifier et retélécharger "
+                            "pendant 30 jours."
+                        ).classes("text-sm")
+                        with ui.row().classes("items-center gap-2 w-full"):
+                            champ_code = (
+                                ui.input("Code de dossier", placeholder="CRED-XXXX-XXXX")
+                                .props("outlined dense")
+                                .classes("flex-1 min-w-[200px]")
+                            )
+                            btn_code = ui.button("Ouvrir le dossier").props("unelevated no-caps")
+                        code_status = ui.label("").classes("text-sm")
+
                     with ui.row().classes(theme.GRID_CLASSES):
                         refs["field_nom_emprunteur"] = ui.input(
                             "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
@@ -1547,12 +1575,30 @@ def _build_investor_view():
                     # Avis de testeur, proposé après le premier téléchargement (site seulement).
                     carte_avis = avis.construire_carte()
 
+
                     apercu_dossier = ui.column().classes("w-full gap-2 mt-2")
                     apercu_dossier.visible = False
                     with apercu_dossier:
                         theme.subsection_title("Aperçu du dossier")
                         # Pages du rapport Word affichées dans le navigateur (docx-preview).
                         apercu_pages = ui.element("div").classes("apercu-dossier w-full")
+
+                    theme.subsection_title("Ton projet")
+                    ui.element("div").classes("h-1")
+                    ui.label(
+                        "Rien n'est conservé sur le site : enregistre ton projet sur ton appareil pour le rouvrir "
+                        "plus tard et le modifier."
+                    ).classes(theme.HINT_CLASSES)
+                    with ui.row().classes("items-center gap-3 flex-wrap"):
+                        btn_enregistrer_projet = ui.button("Enregistrer mon projet", icon="save").props(
+                            "outline no-caps"
+                        )
+                        upload_projet = (
+                            ui.upload(auto_upload=True, max_file_size=2_000_000, label="Ouvrir un projet")
+                            .props('accept=".credaura,application/json" flat bordered color="primary" hide-upload-btn')
+                            .classes("uploader-projet max-w-xs")
+                        )
+                    projet_status = ui.label("").classes(theme.HINT_CLASSES)
 
         # Assistant : Précédent / Suivant (nommé d'après l'étape suivante),
         # toujours visible en bas de l'écran.
@@ -2319,7 +2365,8 @@ def _build_investor_view():
         )
 
         avertissements_box.clear()
-        for a in resultat.get("avertissements") or []:
+        avertissements = resultat.get("avertissements") or []
+        for a in avertissements:
             with avertissements_box:
                 ui.label("⚠️ " + a).classes(
                     "w-full text-sm rounded-xl p-3 border"
@@ -2649,12 +2696,12 @@ def _build_investor_view():
             (libelle_mensualite, eur(mensualite) + "/mois"),
         ]
 
-    async def generer_contenu_dossier(terminer: bool = True) -> bytes:
+    async def generer_contenu_dossier(terminer: bool = True, chapitres_lisibles: int | None = None) -> bytes:
         """Le dossier Word tel qu'il sera téléchargé (aperçu et téléchargement),
         avec barre de chargement pendant toute la préparation."""
         progres_dossier.demarrer()
         try:
-            contenu = await _generer_contenu_dossier()
+            contenu = await _generer_contenu_dossier(chapitres_lisibles)
         except Exception:
             progres_dossier.terminer()
             raise
@@ -2662,7 +2709,7 @@ def _build_investor_view():
             progres_dossier.terminer()
         return contenu
 
-    async def _generer_contenu_dossier() -> bytes:
+    async def _generer_contenu_dossier(chapitres_lisibles: int | None = None) -> bytes:
         # Importé ici plutôt qu'au démarrage : entraîne matplotlib (via
         # app.charts_export), coûteux à charger et inutile tant qu'aucun
         # dossier Word n'est généré.
@@ -2705,13 +2752,17 @@ def _build_investor_view():
         # Hors de la boucle d'événements : graphiques, cartes et fond IGN
         # prennent quelques secondes, l'application reste réactive.
         progres_dossier.etape(progres_dossier.valeur, 0.88)  # reprend où en est la barre
-        return await run.io_bound(dossier_export.generer_dossier_word, payload)
+        return await run.io_bound(dossier_export.generer_dossier_word, payload, chapitres_lisibles)
 
     async def on_generer_apercu() -> None:
         dossier_status.set_text("Génération de l'aperçu du dossier…")
         btn_generer_dossier.disable()
         try:
-            contenu = await generer_contenu_dossier(terminer=False)
+            # Mode payant, dossier pas encore ouvert : aperçu limité aux premiers chapitres.
+            apercu_partiel = not dossier_ouvert()
+            contenu = await generer_contenu_dossier(
+                terminer=False, chapitres_lisibles=offre.CHAPITRES_APERCU if apercu_partiel else None
+            )
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
             return
@@ -2725,22 +2776,31 @@ def _build_investor_view():
         try:
             nb_pages = await ui.run_javascript(
                 f"return await window.afficherApercuDossier({json.dumps(url)}, 'c{apercu_pages.id}', "
-                f"{json.dumps(offre.PAGES_APERCU_LISIBLES)})",
+                f"{json.dumps(offre.PAGES_APERCU_LISIBLES if apercu_partiel else None)})",
                 timeout=60,
             )
         except TimeoutError:
             nb_pages = None
         finally:
             progres_dossier.terminer()
+        debut = f"Aperçu du dossier ({nb_pages} pages) : " if nb_pages else "Aperçu du dossier : "
         dossier_status.set_text(
-            (f"Aperçu du dossier ({nb_pages} pages) : " if nb_pages else "Aperçu du dossier : ")
-            + "vérifie-le ci-dessous puis télécharge-le au format Word."
+            debut
+            + (
+                f"les {offre.PAGES_APERCU_LISIBLES} premières pages sont lisibles ; entre ton code pour ouvrir la suite."
+                if apercu_partiel
+                else "vérifie-le ci-dessous puis télécharge-le au format Word."
+            )
         )
         marquer_fait(tab_dossier)
 
     btn_generer_dossier.on_click(on_generer_apercu)
 
     async def on_telecharger_dossier() -> None:
+        if not dossier_ouvert():
+            dossier_status.set_text("Entre ton code de dossier ci-dessus pour télécharger le dossier complet.")
+            ui.notify("Entre ton code de dossier pour télécharger le dossier complet.", type="warning")
+            return
         dossier_status.set_text("Génération du dossier Word…")
         try:
             contenu = await generer_contenu_dossier()
@@ -2781,6 +2841,146 @@ def _build_investor_view():
         marquer_fait(tab_dossier)
 
     btn_telecharger_dossier.on_click(on_telecharger_dossier)
+
+    # =====================================================================
+    # Mode payant : dossier ouvert avec un code, lié à l'adresse du bien
+    # =====================================================================
+    def adresse_du_bien() -> str:
+        brut = dossier_meta_state["adresse_bien"].strip() or (market_state.get("adresse") or "").strip()
+        return " ".join(brut.lower().split())
+
+    def dossier_ouvert() -> bool:
+        """Toujours vrai pendant la bêta. En mode payant : un code (ou un
+        fichier projet) a ouvert le dossier de ce bien il y a moins de 30 jours."""
+        if not offre.MODE_PAYANT:
+            return True
+        d = ctx["debloque"]
+        return bool(d) and d["adresse"] == adresse_du_bien() and date.today().isoformat() <= d["jusqu_au"]
+
+    async def on_utiliser_code() -> None:
+        code = codes.normaliser(champ_code.value or "")
+        if not code:
+            code_status.set_text("Le code est de la forme CRED-XXXX-XXXX.")
+            return
+        adresse = adresse_du_bien()
+        if not adresse:
+            code_status.set_text("Indique d'abord l'adresse du bien (étape Marché) : le dossier lui est rattaché.")
+            return
+        if dossier_ouvert():
+            code_status.set_text("Le dossier de ce bien est déjà ouvert : aucun dossier n'a été décompté.")
+            return
+        dossier_id = projet_signe.nouvel_identifiant()
+        accorde, message = codes.ouvrir_dossier(code, dossier_id)
+        code_status.set_text(message)
+        if not accorde:
+            return
+        ctx["debloque"] = {
+            "adresse": adresse,
+            "dossier_id": dossier_id,
+            "jusqu_au": projet_signe.limite_modification(),
+            "code": code,
+        }
+        statistiques.evenement("dossier-ouvert", "Dossier ouvert avec un code")
+        derniere_saisie["signature"] = None  # réafficher les points de vigilance en détail
+        if apercu_dossier.visible:
+            await on_generer_apercu()
+
+    btn_code.on_click(on_utiliser_code)
+
+    # =====================================================================
+    # Fichier projet signé : enregistrer et rouvrir son projet
+    # =====================================================================
+    async def enregistrer_sur_l_appareil(contenu: bytes, nom: str, types: tuple[str, ...]) -> str | None:
+        """Téléchargement dans le navigateur, ou dialogue d'enregistrement dans
+        l'application de bureau. Renvoie le chemin choisi (bureau) ou le nom."""
+        if not app.native.main_window:
+            ui.download(contenu, nom)
+            return nom
+        import webview
+
+        choix = await app.native.main_window.create_file_dialog(
+            dialog_type=webview.FileDialog.SAVE, save_filename=nom, file_types=types
+        )
+        chemin = choix if isinstance(choix, str) else (choix[0] if choix else None)
+        if chemin:
+            with open(chemin, "wb") as f:
+                f.write(contenu)
+        return chemin
+
+    async def on_enregistrer_projet() -> None:
+        ouvert = offre.MODE_PAYANT and dossier_ouvert()
+        etat = {
+            "sim": sim_state,
+            "marche": market_state,
+            "profil": profil_state,
+            "meta": dossier_meta_state,
+            "patrimoine": patrimoine_state,
+            "chapitres": chapitres_state,
+            "prix_renseigne": ctx["prix_renseigne"],
+            "profil_renseigne": ctx["profil_renseigne"],
+            "dossier": ctx["debloque"] if ouvert else None,
+        }
+        contenu = projet_signe.exporter(
+            etat,
+            ctx["debloque"]["dossier_id"] if ouvert else projet_signe.nouvel_identifiant(),
+            ctx["debloque"]["jusqu_au"] if ouvert else None,
+        )
+        try:
+            nom = await enregistrer_sur_l_appareil(
+                contenu, f"Credaura - projet du {date.today().strftime('%d-%m-%Y')}.credaura", ("Projet Credaura (*.credaura)",)
+            )
+        except OSError as exc:
+            projet_status.set_text(f"Erreur lors de l'enregistrement : {exc}")
+            return
+        if nom:
+            projet_status.set_text(
+                "Projet enregistré : ouvre-le ici plus tard pour reprendre où tu en étais."
+                + (
+                    f" Ton dossier se modifie et se retélécharge sans nouveau code jusqu'au "
+                    f"{date.fromisoformat(ctx['debloque']['jusqu_au']).strftime('%d/%m/%Y')}."
+                    if ouvert
+                    else ""
+                )
+            )
+
+    btn_enregistrer_projet.on_click(on_enregistrer_projet)
+
+    async def on_ouvrir_projet(e) -> None:
+        try:
+            contenu = projet_signe.importer(e.content.read())
+        except projet_signe.FichierProjetInvalide as exc:
+            projet_status.set_text(str(exc))
+            upload_projet.reset()
+            return
+        etat = contenu["etat"]
+        # Mise à jour en place : les champs du simulateur restent liés aux mêmes dictionnaires.
+        for cible, cle in (
+            (sim_state, "sim"),
+            (market_state, "marche"),
+            (profil_state, "profil"),
+            (dossier_meta_state, "meta"),
+            (chapitres_state, "chapitres"),
+        ):
+            for k, v in (etat.get(cle) or {}).items():
+                if k in cible:
+                    cible[k] = v
+        for k, ligne in (etat.get("patrimoine") or {}).items():
+            if k in patrimoine_state and isinstance(ligne, dict):
+                patrimoine_state[k].update(ligne)
+        ctx["prix_renseigne"] = bool(etat.get("prix_renseigne"))
+        if etat.get("profil_renseigne"):
+            marquer_profil_renseigne()
+        dossier = etat.get("dossier")
+        ctx["debloque"] = dossier if dossier and projet_signe.encore_modifiable(contenu) else None
+        derniere_saisie["signature"] = None
+        upload_projet.reset()
+        enregistre = date.fromisoformat(contenu["enregistre_le"]).strftime("%d/%m/%Y")
+        projet_status.set_text(f"Projet du {enregistre} rouvert.")
+        if market_state.get("adresse"):
+            await on_analyser_marche()
+            projet_status.set_text(f"Projet du {enregistre} rouvert, étude de marché mise à jour.")
+
+    upload_projet.on_upload(on_ouvrir_projet)
 
     # =====================================================================
     # Démarrage depuis la page d'accueil : le formulaire « Vérifie ton

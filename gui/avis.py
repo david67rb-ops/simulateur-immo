@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from nicegui import app, ui
 
-from . import statistiques, theme
+from . import offre, statistiques, theme
 from .pages_legales import CONTACT_EMAIL
 
 ISSUES_BANQUE = (
@@ -62,8 +62,9 @@ def construire_carte() -> ui.element | None:
             ui.icon("rate_review", size="26px").classes("text-[color:var(--c-laiton)]")
             ui.label("Ton avis de testeur").classes("text-lg font-semibold titre-sora")
         ui.label(
-            "Pendant la bêta, le dossier est offert : en échange, ton avis m'aide à améliorer Credaura. "
-            "Quatre questions, deux minutes. Il part depuis ta messagerie : rien n'est enregistré sur le site."
+            ("Ton avis m'aide à améliorer Credaura. " if offre.MODE_PAYANT else
+             "Pendant la bêta, le dossier est offert : en échange, ton avis m'aide à améliorer Credaura. ")
+            + "Quatre questions, deux minutes. Il part depuis ta messagerie : rien n'est enregistré sur le site."
         ).classes("text-sm")
 
         ui.label("Le dossier t'a-t-il été utile ?").classes("text-sm font-semibold mt-1")

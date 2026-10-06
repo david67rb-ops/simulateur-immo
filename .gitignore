@@ -11,3 +11,5 @@ app/data_cache/
 build/
 dist/
 Simulateur Immobilier.app/
+# Codes de dossiers en développement (en production : disque Render)
+donnees-locales/
