@@ -45,7 +45,8 @@ CSS = """
 .nav-mobile.ouvert .menu-deroulant a:nth-child(5) { transition-delay: 0.16s; }
 .nav-mobile .menu-deroulant a + a { border-top: 1px solid #EEF2F7; }
 .nav-mobile .menu-deroulant a:hover, .nav-mobile .menu-deroulant a:active { background: #F0F3F7; }
-.nav-mobile .menu-deroulant a.menu-simulateur { background: #A8823B; color: #FFFFFF; font-weight: 700; margin-top: 6px; border-top: 0; }
+.nav-mobile .menu-deroulant a.menu-simulateur { background: #A8823B; color: #FFFFFF; font-weight: 700; margin-bottom: 6px; }
+.nav-mobile .menu-deroulant a.menu-simulateur + a { border-top: 0; }
 @keyframes croix-apparait { from { opacity: 0; transform: rotate(-90deg); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .nav-mobile .menu-deroulant, .nav-mobile .menu-deroulant a { transition: none; } .nav-mobile .ic-fermer { animation: none !important; } }
 .boutons-dossier a { text-align: center; }
@@ -96,14 +97,15 @@ LIENS_MENU = (
 def _entete() -> str:
     liens = "".join(f'<a href="{h}" style="color:#FFFFFF;text-decoration:none">{t}</a>' for h, t in LIENS_MENU)
     # Le menu se referme quand on choisit une rubrique.
-    liens_menu = "".join(
-        f'<a href="{h}" onclick="this.closest(\'.nav-mobile\').classList.remove(\'ouvert\')"><span>{t}</span>{CHEVRON}</a>'
-        for h, t in LIENS_MENU
-    )
-    liens_menu += (
+    # Le simulateur d'abord : c'est l'action principale.
+    liens_menu = (
         f'<a href="#simulateur" class="menu-simulateur" onclick="{OUVRIR_SIMULATEUR}"><span>Ouvrir le simulateur</span>'
         + CHEVRON.replace("#A8823B", "#FFFFFF")
         + "</a>"
+    )
+    liens_menu += "".join(
+        f'<a href="{h}" onclick="this.closest(\'.nav-mobile\').classList.remove(\'ouvert\')"><span>{t}</span>{CHEVRON}</a>'
+        for h, t in LIENS_MENU
     )
     return f"""
 <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 32px">
@@ -114,8 +116,8 @@ def _entete() -> str:
     </span>
   </a>
   <nav class="nav-liens" aria-label="Navigation principale" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;font-size:15px">
-    {liens}
     <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="color:{ENCRE};background:{LAITON_CLAIR};text-decoration:none;font-weight:600;padding:10px 16px;border-radius:10px">Ouvrir le simulateur</a>
+    {liens}
   </nav>
   <div class="nav-mobile">
     <button type="button" class="bouton-menu" aria-label="Menu" aria-expanded="false" onclick="basculerMenu(this)">
