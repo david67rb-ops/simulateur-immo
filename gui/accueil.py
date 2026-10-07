@@ -13,6 +13,8 @@ from typing import Awaitable, Callable
 
 from nicegui import ui
 
+from . import theme
+
 
 BLEU, ENCRE, LAITON, LAITON_CLAIR, LAITON_FONCE = "#1B3358", "#13243F", "#A8823B", "#E9D8B0", "#86662A"
 
@@ -25,25 +27,32 @@ CSS = """
 .accueil .titre-section { font-family: Sora, sans-serif; font-weight: 600; font-size: clamp(26px, 3vw, 36px); line-height: 1.2; }
 .accueil .gris { color: #4A5563; }
 .nav-mobile { display: none; position: relative; }
-.nav-mobile summary { list-style: none; cursor: pointer; width: 44px; height: 44px; border-radius: 10px; border: 1.5px solid rgba(233, 216, 176, 0.5); display: flex; align-items: center; justify-content: center; }
-.nav-mobile summary::-webkit-details-marker { display: none; }
-.nav-mobile .menu-deroulant { position: absolute; right: 0; top: 52px; z-index: 20; background: #FFFFFF; border-radius: 12px; padding: 8px; min-width: 260px; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(8, 20, 40, 0.3); }
-.nav-mobile .menu-deroulant a { color: #13243F; text-decoration: none; padding: 12px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.nav-mobile .bouton-menu { width: 44px; height: 44px; padding: 0; border-radius: 10px; border: 1.5px solid rgba(233, 216, 176, 0.5); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 0.2s; }
+.nav-mobile .bouton-menu:focus { outline: none; }
+.nav-mobile .bouton-menu:focus-visible { outline: 2px solid #E9D8B0; outline-offset: 2px; }
+.nav-mobile.ouvert .bouton-menu { background: rgba(233, 216, 176, 0.15); }
+.nav-mobile .ic-fermer, .nav-mobile.ouvert .ic-menu { display: none; }
+.nav-mobile.ouvert .ic-fermer { display: block; animation: croix-apparait 0.22s ease-out both; }
+/* Menu toujours présent dans la page, masqué par transparence : il s'ouvre et se referme en douceur,
+   sans laisser de trace à l'écran sur iPhone. */
+.nav-mobile .menu-deroulant { position: absolute; right: 0; top: 52px; z-index: 20; background: #FFFFFF; border-radius: 12px; padding: 8px; min-width: 260px; display: flex; flex-direction: column; box-shadow: 0 16px 40px rgba(8, 20, 40, 0.3); transform-origin: top right; opacity: 0; visibility: hidden; transform: translateY(-8px) scale(0.96); pointer-events: none; transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 0.22s; }
+.nav-mobile.ouvert .menu-deroulant { opacity: 1; visibility: visible; transform: none; pointer-events: auto; transition: opacity 0.2s ease, transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s; }
+.nav-mobile .menu-deroulant a { color: #13243F; text-decoration: none; padding: 12px 14px; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 16px; -webkit-tap-highlight-color: transparent; opacity: 0; transform: translateX(10px); transition: opacity 0.25s ease, transform 0.25s ease; }
+.nav-mobile.ouvert .menu-deroulant a { opacity: 1; transform: none; }
+.nav-mobile.ouvert .menu-deroulant a:nth-child(2) { transition-delay: 0.04s; }
+.nav-mobile.ouvert .menu-deroulant a:nth-child(3) { transition-delay: 0.08s; }
+.nav-mobile.ouvert .menu-deroulant a:nth-child(4) { transition-delay: 0.12s; }
+.nav-mobile.ouvert .menu-deroulant a:nth-child(5) { transition-delay: 0.16s; }
 .nav-mobile .menu-deroulant a + a { border-top: 1px solid #EEF2F7; }
 .nav-mobile .menu-deroulant a:hover, .nav-mobile .menu-deroulant a:active { background: #F0F3F7; }
-.nav-mobile[open] summary { background: rgba(233, 216, 176, 0.15); }
-.nav-mobile[open] .ic-menu, .nav-mobile:not([open]) .ic-fermer { display: none; }
-/* Ouverture du menu : le panneau se déplie depuis le bouton, puis les rubriques arrivent une à une. */
-.nav-mobile[open] .menu-deroulant { transform-origin: top right; animation: menu-apparait 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.nav-mobile[open] .menu-deroulant a { animation: rubrique-apparait 0.3s ease-out both; }
-.nav-mobile[open] .menu-deroulant a:nth-child(2) { animation-delay: 0.04s; }
-.nav-mobile[open] .menu-deroulant a:nth-child(3) { animation-delay: 0.08s; }
-.nav-mobile[open] .menu-deroulant a:nth-child(4) { animation-delay: 0.12s; }
-.nav-mobile[open] .ic-fermer { animation: croix-apparait 0.22s ease-out both; }
-@keyframes menu-apparait { from { opacity: 0; transform: translateY(-8px) scale(0.94); } to { opacity: 1; transform: none; } }
-@keyframes rubrique-apparait { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
+.nav-mobile .menu-deroulant a.menu-simulateur { background: #A8823B; color: #FFFFFF; font-weight: 700; margin-top: 6px; border-top: 0; }
 @keyframes croix-apparait { from { opacity: 0; transform: rotate(-90deg); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .nav-mobile .menu-deroulant, .nav-mobile .menu-deroulant a, .nav-mobile .ic-fermer { animation: none !important; } }
+@media (prefers-reduced-motion: reduce) { .nav-mobile .menu-deroulant, .nav-mobile .menu-deroulant a { transition: none; } .nav-mobile .ic-fermer { animation: none !important; } }
+.boutons-dossier a { text-align: center; }
+@media (max-width: 760px) { .boutons-dossier a { flex: 1 1 100%; } }
+/* Fenêtre « il manque… » du formulaire, dans la charte. */
+.carte-manque { max-width: 320px; padding: 24px 22px !important; border-radius: 18px !important; border-top: 5px solid #A8823B; color: #13243F; }
+.body--dark .carte-manque { color: #E6ECF3; }
 @media (max-width: 760px) { .nav-liens { display: none !important; } .nav-mobile { display: block; } }
 .carte-verif { background: #FFFFFF; color: #13243F; }
 .body--dark .carte-verif { background: #151C27; color: #E6ECF3; }
@@ -69,6 +78,8 @@ RESEAUX = (
     ("https://www.facebook.com/profile.php?id=61595308522377", "Facebook"),
     ("https://www.youtube.com/@credaura.fr1", "YouTube"),
 )
+# Ouvre le simulateur complet (événement traité par le serveur, voir index_page).
+OUVRIR_SIMULATEUR = "this.closest('.nav-mobile')?.classList.remove('ouvert'); emitEvent('ouvrir_simulateur'); return false;"
 CHEVRON = (
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A8823B" stroke-width="2.2" '
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M9 6l6 6-6 6"/></svg>'
@@ -86,7 +97,13 @@ def _entete() -> str:
     liens = "".join(f'<a href="{h}" style="color:#FFFFFF;text-decoration:none">{t}</a>' for h, t in LIENS_MENU)
     # Le menu se referme quand on choisit une rubrique.
     liens_menu = "".join(
-        f'<a href="{h}" onclick="this.closest(\'details\').open=false"><span>{t}</span>{CHEVRON}</a>' for h, t in LIENS_MENU
+        f'<a href="{h}" onclick="this.closest(\'.nav-mobile\').classList.remove(\'ouvert\')"><span>{t}</span>{CHEVRON}</a>'
+        for h, t in LIENS_MENU
+    )
+    liens_menu += (
+        f'<a href="#simulateur" class="menu-simulateur" onclick="{OUVRIR_SIMULATEUR}"><span>Ouvrir le simulateur</span>'
+        + CHEVRON.replace("#A8823B", "#FFFFFF")
+        + "</a>"
     )
     return f"""
 <header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 32px">
@@ -98,14 +115,15 @@ def _entete() -> str:
   </a>
   <nav class="nav-liens" aria-label="Navigation principale" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;font-size:15px">
     {liens}
+    <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="color:{ENCRE};background:{LAITON_CLAIR};text-decoration:none;font-weight:600;padding:10px 16px;border-radius:10px">Ouvrir le simulateur</a>
   </nav>
-  <details class="nav-mobile">
-    <summary aria-label="Menu">
+  <div class="nav-mobile">
+    <button type="button" class="bouton-menu" aria-label="Menu" aria-expanded="false" onclick="basculerMenu(this)">
       <svg class="ic-menu" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
       <svg class="ic-fermer" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
-    </summary>
+    </button>
     <div class="menu-deroulant">{liens_menu}</div>
-  </details>
+  </div>
 </header>"""
 
 
@@ -173,8 +191,8 @@ RESULTAT = f"""
         <li>Profil de l'emprunteur et taux d'endettement</li>
         <li>La liste des pièces à fournir à la banque</li>
       </ul>
-      <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-        <a href="#verifier" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:10px">Obtenir mon dossier · offert pendant la bêta</a>
+      <div class="boutons-dossier" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+        <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:10px">Obtenir mon dossier · offert pendant la bêta</a>
         <a href="/exemple-dossier" target="_blank" rel="noopener" style="color:{LAITON_CLAIR};font-weight:600;text-decoration:none;padding:12px 16px;border-radius:10px;border:1.5px solid rgba(233,216,176,0.55)">Voir un exemple de dossier complet</a>
       </div>
     </div>
@@ -332,8 +350,12 @@ def construire_accueil(
     ui.add_css(CSS)
     # Menu du téléphone : se referme aussi quand on touche ailleurs sur la page.
     ui.add_body_html(
-        "<script>document.addEventListener('click', e => document.querySelectorAll('.nav-mobile[open]')"
-        ".forEach(d => { if (!d.contains(e.target)) d.open = false; }));</script>"
+        "<script>"
+        "window.basculerMenu = b => { const n = b.closest('.nav-mobile'); const o = n.classList.toggle('ouvert');"
+        " b.setAttribute('aria-expanded', o); };"
+        "document.addEventListener('click', e => document.querySelectorAll('.nav-mobile.ouvert').forEach(n => {"
+        " if (!n.contains(e.target)) { n.classList.remove('ouvert'); n.querySelector('.bouton-menu').setAttribute('aria-expanded', false); } }));"
+        "</script>"
     )
     racine = ui.element("div").classes("accueil")
     with racine:
@@ -372,27 +394,53 @@ def _formulaire(on_verifier: Callable[[dict], Awaitable[None]], on_simulateur: C
             "spread no-caps unelevated toggle-color=primary"
         ).classes("w-full")
         with ui.element("div").classes("w-full").style("display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px"):
-            surface = ui.number("Surface (m²)", min=1).props("outlined").classes("w-full")
-            prix = ui.number("Prix affiché (€)", min=1).props("outlined").classes("w-full")
-        loyer = ui.number("Loyer prévu (€/mois, facultatif)", min=0).props("outlined").classes("w-full")
+            surface = ui.number("Surface", min=1).props('outlined inputmode=decimal suffix="m²"').classes("w-full")
+            prix = theme.ChampMontant("Prix affiché", suffixe="€", nullable=True).props("outlined").classes("w-full")
+        loyer = theme.ChampMontant("Loyer prévu (facultatif)", suffixe="€/mois", nullable=True).props("outlined").classes(
+            "w-full"
+        )
         ui.label("Sans loyer, j'utilise le loyer du marché.").classes("gris text-xs -mt-2")
 
+        obligatoires = (
+            ("l'adresse", adresse, lambda: (adresse.value or "").strip()),
+            ("la surface", surface, lambda: surface.value),
+            ("le prix", prix, lambda: prix.lire(prix.value)),
+        )
+        for _nom, champ, _valeur in obligatoires:
+            # Le champ signalé redevient normal dès qu'on le remplit.
+            champ.on("update:model-value", lambda _e, c=champ: c.props(remove="error error-message no-error-icon"))
+
+        # Message « il manque… » : une petite fenêtre au centre de l'écran.
+        a_completer = {"champ": None}
+
+        def completer() -> None:
+            fenetre_manque.close()
+            if a_completer["champ"] is not None:
+                a_completer["champ"].run_method("focus")
+
+        with ui.dialog() as fenetre_manque, ui.card().classes("carte-manque items-center text-center gap-3"):
+            ui.icon("edit_note", size="40px").classes("text-[color:#A8823B]")
+            texte_manque = ui.label("").classes("text-base")
+            ui.button("Compléter", on_click=completer).props("unelevated no-caps color=primary").classes("w-full")
+
         async def verifier() -> None:
-            manque = [
-                nom
-                for nom, champ in (("l'adresse", adresse), ("la surface", surface), ("le prix", prix))
-                if not champ.value
-            ]
+            manque = [(nom, champ) for nom, champ, valeur in obligatoires if not valeur()]
             if manque:
-                ui.notify("Il manque " + ", ".join(manque) + ".", type="warning")
+                for _nom, champ in manque:
+                    champ.props('error error-message="À compléter" no-error-icon')
+                noms = [nom for nom, _champ in manque]
+                liste = noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
+                texte_manque.set_text(f"Il manque encore {liste} pour vérifier ton projet.")
+                a_completer["champ"] = manque[0][1]
+                fenetre_manque.open()
                 return
             await on_verifier(
                 {
                     "adresse": adresse.value.strip(),
                     "type_bien": type_bien.value,
                     "surface": float(surface.value),
-                    "prix": float(prix.value),
-                    "loyer": float(loyer.value) if loyer.value else None,
+                    "prix": prix.lire(prix.value),
+                    "loyer": loyer.lire(loyer.value),
                 }
             )
 

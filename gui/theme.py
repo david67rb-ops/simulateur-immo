@@ -183,6 +183,9 @@ def apply_theme() -> None:
           .maj-flash { animation: maj-flash 1.2s ease-out; border-radius: 6px; }
           /* Import des photos du dossier : pas de liste de fichiers, les miniatures suffisent. */
           .uploader-photos .q-uploader__list, .uploader-projet .q-uploader__list, .uploader-projet .q-uploader__subtitle { display: none; }
+          /* iPhone : un champ en dessous de 16 px fait zoomer la page à la saisie, et la page reste
+             ensuite décalée. */
+          @media (max-width: 760px) { .q-field__native, .q-field__input, .q-select__dropdown-icon + input { font-size: 16px !important; } }
           /* Patrimoine du foyer : une ligne par poste (nature, détail, valeur, reste dû) sur ordinateur. */
           .grille-patrimoine { display: grid; grid-template-columns: 1fr; gap: 0.5rem; }
           @media (min-width: 640px) {
@@ -191,6 +194,41 @@ def apply_theme() -> None:
         </style>
         """
     )
+
+
+MASQUE_MILLIERS = "### ### ### ###"
+
+
+class ChampMontant(ui.input):
+    """Montant en euros, chiffres groupés par trois pendant la saisie
+    (315 000) : le masque est appliqué dans le navigateur, le serveur reçoit
+    les chiffres seuls (pas d'aller-retour qui ferait sauter le curseur)."""
+
+    def __init__(self, label: str = "", *, suffixe: str | None = None, nullable: bool = False, **kwargs) -> None:
+        super().__init__(label, **kwargs)
+        self._nullable = nullable
+        self.props(f'mask="{MASQUE_MILLIERS}" reverse-fill-mask unmasked-value inputmode=numeric')
+        if suffixe:
+            self.props(f'suffix="{suffixe}"')
+
+    def lire(self, texte) -> float | None:
+        chiffres = "".join(c for c in str(texte or "") if c.isdigit())
+        if not chiffres:
+            return None if self._nullable else 0.0
+        return float(chiffres)
+
+    def ecrire(self, valeur) -> str:
+        if valeur is None or valeur == "":
+            return ""
+        return str(int(round(float(valeur))))
+
+    def set_value(self, value) -> None:
+        if isinstance(value, (int, float)):
+            value = self.ecrire(value)
+        super().set_value(value)
+
+    def lier(self, state: dict, cle: str) -> "ChampMontant":
+        return self.bind_value(state, cle, forward=self.lire, backward=self.ecrire)
 
 
 def aide(texte: str) -> None:

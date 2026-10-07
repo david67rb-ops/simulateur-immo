@@ -103,15 +103,28 @@ def pct(v, digits: int = 2) -> str:
     return f"{v * 100:.{digits}f}\u00a0%".replace(".", ",")
 
 
-def champ(label: str, state: dict, cle: str, *, suffixe: str | None = None, aide: str | None = None, **kwargs):
+def champ(
+    label: str,
+    state: dict,
+    cle: str,
+    *,
+    suffixe: str | None = None,
+    aide: str | None = None,
+    negatif: bool = False,
+    **kwargs,
+):
     """Champ numérique standard du formulaire, lié à `state[cle]`, avec unité
-    affichée à droite et icône d'aide facultative."""
-    field = (
-        ui.number(label, value=state[cle], suffix=suffixe, **kwargs)
-        .bind_value(state, cle)
-        .props("outlined dense")
-        .classes("w-full")
-    )
+    affichée à droite et icône d'aide facultative. Les montants en euros
+    (positifs) s'affichent groupés par trois chiffres : 315 000."""
+    if suffixe and "€" in suffixe and not negatif:
+        field = theme.ChampMontant(label, suffixe=suffixe).lier(state, cle).props("outlined dense").classes("w-full")
+    else:
+        field = (
+            ui.number(label, value=state[cle], suffix=suffixe, **kwargs)
+            .bind_value(state, cle)
+            .props("outlined dense")
+            .classes("w-full")
+        )
     if aide:
         with field.add_slot("append"):
             theme.aide(aide)
@@ -535,12 +548,31 @@ def index_page() -> None:
         # Masqués par une classe et non par set_visibility : un élément
         # invisible n'est pas dans la page, et Tailwind (généré dans le
         # navigateur) ne produirait pas ses styles à l'affichage.
-        ui.add_css(".masque { display: none !important; }")
+        ui.add_css(
+            ".masque { display: none !important; }"
+            # Passage accueil → simulateur : le simulateur monte en glissant ;
+            # retour : l'accueil réapparaît en fondu. Sans effet si le
+            # téléphone demande de réduire les animations.
+            "@keyframes simulateur-monte { from { opacity: 0; transform: translateY(56px); } to { opacity: 1; transform: none; } }"
+            "@keyframes accueil-revient { from { opacity: 0; transform: translateY(-16px); } to { opacity: 1; transform: none; } }"
+            ".anim-entree { animation: simulateur-monte 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) backwards; }"
+            ".anim-retour { animation: accueil-revient 0.35s ease-out backwards; }"
+            "@media (prefers-reduced-motion: reduce) { .anim-entree, .anim-retour { animation: none; } }"
+        )
 
         def ouvrir_simulateur() -> None:
-            page_accueil.classes(add="masque")
-            simulateur.classes(remove="masque")
-            ui.run_javascript("window.scrollTo(0, 0)")
+            page_accueil.classes(add="masque", remove="anim-retour")
+            simulateur.classes(add="anim-entree", remove="masque")
+            ui.run_javascript("window.scrollTo({top: 0, behavior: 'instant'})")
+
+        def retour_accueil() -> None:
+            simulateur.classes(add="masque", remove="anim-entree")
+            page_accueil.classes(add="anim-retour", remove="masque")
+            ui.run_javascript("window.scrollTo({top: 0, behavior: 'instant'})")
+
+        # Liens de l'accueil (menu, « Obtenir mon dossier ») : simple HTML qui
+        # appelle emitEvent('ouvrir_simulateur') dans le navigateur.
+        ui.on("ouvrir_simulateur", lambda _e: ouvrir_simulateur())
 
         async def verifier(valeurs: dict) -> None:
             ouvrir_simulateur()
@@ -556,6 +588,10 @@ def index_page() -> None:
             ui.button(icon="dark_mode", on_click=basculer_theme).props("flat round dense").classes(
                 "absolute top-0 right-0"
             )
+            if sur_le_site:
+                ui.button("Accueil", icon="arrow_back", on_click=lambda: retour_accueil()).props(
+                    "flat dense no-caps"
+                ).classes("absolute top-0 left-0")
             # Sur téléphone, le bloc du logo descend sous le bouton du thème
             # (sinon le bouton touche la signature).
             with ui.column().classes("w-full items-center gap-1 pt-9 sm:pt-0"):
@@ -575,7 +611,6 @@ def index_page() -> None:
                 ui.label(
                     "Simulateur de rentabilité et dossier de financement immobilier · des estimations, pas un conseil."
                 ).classes("text-sm text-gray-500 text-center mt-2")
-                lien_exemple_dossier("Voir un exemple de dossier pour la banque", "mt-1")
 
         demarrer_depuis_accueil = _build_investor_view()
 
@@ -610,6 +645,9 @@ def _build_investor_view():
         # Idem pour les revenus du foyer (3 000 € par défaut) : le taux
         # d'endettement n'entre dans le verdict qu'une fois saisis.
         "profil_renseigne": False,
+        # Loyer saisi par le client (accueil ou étape Revenus) : jamais écrasé
+        # par le loyer de marché.
+        "loyer_renseigne": False,
         # Mode payant : dossier ouvert avec un code ou un fichier projet,
         # lié à l'adresse du bien ({"adresse", "dossier_id", "jusqu_au", "code"}).
         "debloque": None,
@@ -754,6 +792,15 @@ def _build_investor_view():
                             .props("outlined dense")
                             .classes("w-full")
                         )
+                        # Prix affiché dès l'étape 1 (même valeur que « Prix d'achat » au financement) :
+                        # les informations de l'accueil se retrouvent toutes ici.
+                        ms_prix = (
+                            theme.ChampMontant("Prix affiché", suffixe="€")
+                            .lier(sim_state, "prix_achat")
+                            .props("outlined dense")
+                            .classes("w-full")
+                        )
+                        ms_prix.on("update:model-value", lambda: on_prix_saisi())
                         ms_rayon = (
                             ui.number("Rayon de recherche (m)", value=market_state["rayon_metres"], min=100, step=100)
                             .bind_value(market_state, "rayon_metres")
@@ -995,6 +1042,7 @@ def _build_investor_view():
                             aide="Loyer hors charges récupérables sur le locataire.",
                         )
                         refs["field_loyer"] = field_loyer
+                        field_loyer.on("update:model-value", lambda: ctx.update(loyer_renseigne=True))
                         field_prix_nuitee = champ("Prix moyen par nuitée", sim_state, "prix_nuitee", suffixe="€", min=0)
                         refs["field_prix_nuitee"] = field_prix_nuitee
                         field_taux_occupation = champ(
@@ -1228,6 +1276,7 @@ def _build_investor_view():
                                 sim_state,
                                 "objectif_cashflow_mensuel",
                                 suffixe="€/mois",
+                                negatif=True,
                                 aide="Sert à calculer le prix d'achat maximum : le prix le plus élevé qui garde "
                                 "ce cash-flow en année 1.",
                             )
@@ -1236,6 +1285,7 @@ def _build_investor_view():
                                 sim_state,
                                 "objectif_marge_nette",
                                 suffixe="€",
+                                negatif=True,
                                 aide="Sert à calculer le prix d'achat maximum : le prix le plus élevé qui garde "
                                 "cette marge nette.",
                             )
@@ -1424,19 +1474,14 @@ def _build_investor_view():
                     ).classes(theme.HINT_CLASSES + " mb-2")
 
                     with ui.row().classes(theme.GRID_CLASSES):
-                        ui.number(
-                            "Revenus nets mensuels du foyer (€)", value=profil_state["revenus_nets_mensuels_foyer"], min=0
-                        ).bind_value(profil_state, "revenus_nets_mensuels_foyer").props("outlined dense").classes(
-                            "w-full"
-                        ).on("update:model-value", marquer_profil_renseigne)
-                        ui.number(
-                            "Autres revenus mensuels (€)", value=profil_state["autres_revenus_mensuels"], min=0
-                        ).bind_value(profil_state, "autres_revenus_mensuels").props("outlined dense").classes("w-full").on("update:model-value", marquer_profil_renseigne)
-                        ui.number(
-                            "Mensualités de crédits existants (€)",
-                            value=profil_state["mensualites_credits_existants"],
-                            min=0,
-                        ).bind_value(profil_state, "mensualites_credits_existants").props("outlined dense").classes("w-full").on("update:model-value", marquer_profil_renseigne)
+                        for libelle_profil, cle_profil in (
+                            ("Revenus nets mensuels du foyer", "revenus_nets_mensuels_foyer"),
+                            ("Autres revenus mensuels", "autres_revenus_mensuels"),
+                            ("Mensualités de crédits existants", "mensualites_credits_existants"),
+                        ):
+                            theme.ChampMontant(libelle_profil, suffixe="€/mois").lier(profil_state, cle_profil).props(
+                                "outlined dense"
+                            ).classes("w-full").on("update:model-value", marquer_profil_renseigne)
 
                     with ui.row().classes("gap-3 mt-3"):
                         btn_endettement = ui.button("Calculer le taux d'endettement").props("unelevated")
@@ -1476,13 +1521,13 @@ def _build_investor_view():
                                 ui.input("Établissement / détail").bind_value(ligne_patrimoine, "detail").props(
                                     "outlined dense"
                                 )
-                                ui.number("Valeur (€)", min=0).bind_value(ligne_patrimoine, "valeur").props(
-                                    "outlined dense"
-                                ).on_value_change(lambda _e: maj_total_patrimoine())
+                                theme.ChampMontant("Valeur", suffixe="€", nullable=True).lier(
+                                    ligne_patrimoine, "valeur"
+                                ).props("outlined dense").on_value_change(lambda _e: maj_total_patrimoine())
                                 if avec_reste_du:
-                                    ui.number("Reste dû (€)", min=0).bind_value(ligne_patrimoine, "reste_du").props(
-                                        "outlined dense"
-                                    ).on_value_change(lambda _e: maj_total_patrimoine())
+                                    theme.ChampMontant("Reste dû", suffixe="€", nullable=True).lier(
+                                        ligne_patrimoine, "reste_du"
+                                    ).props("outlined dense").on_value_change(lambda _e: maj_total_patrimoine())
                                 else:
                                     ui.element("div")
                         total_patrimoine = ui.label("").classes("text-sm font-semibold mt-2")
@@ -1746,12 +1791,7 @@ def _build_investor_view():
         return next((tab for tab in tabs_ordre if onglet_actif(tab)), tab_marche)
 
     def aller_a(tab) -> None:
-        tab_panels.set_value(tab)
-        # Sur téléphone, on remonte au début de l'étape.
-        ui.run_javascript(
-            "const f = document.querySelector('.frise-etapes');"
-            "if (f && f.getBoundingClientRect().top < 0) f.scrollIntoView({behavior: 'smooth', block: 'start'});"
-        )
+        tab_panels.set_value(tab)  # sur_changement_etape remonte au début de l'étape
 
     def dessiner_etapes() -> None:
         """Frise (étapes vues cochées, étape en cours mise en avant), titre
@@ -1800,6 +1840,12 @@ def _build_investor_view():
         if etape_courante() is tab_resultats:
             etapes_faites.add(tab_resultats)
         dessiner_etapes()
+        # Nouvelle étape : on arrive en haut (frise et titre), jamais au milieu
+        # ou en bas de la page, quel que soit le bouton qui a changé d'étape.
+        ui.run_javascript(
+            "setTimeout(() => { const f = document.querySelector('.frise-etapes');"
+            "if (f && f.getBoundingClientRect().top < 0) f.scrollIntoView({behavior: 'smooth', block: 'start'}); }, 50)"
+        )
 
     tab_panels.on_value_change(sur_changement_etape)
     # Les saisies au clavier des champs d'une étape remontent jusqu'à son panneau.
@@ -2262,7 +2308,9 @@ def _build_investor_view():
         sim_state["type_bien"] = market_state["type_bien"]
         sim_state["surface_m2"] = market_state["surface_m2"]
         sim_state["bien_neuf"] = bool(market_state.get("bien_neuf"))
-        if result.get("prix_marche_estime"):
+        # Le prix et le loyer saisis par le client sont conservés : seules les
+        # valeurs encore « par défaut » prennent celles du marché.
+        if result.get("prix_marche_estime") and not ctx["prix_renseigne"]:
             sim_state["prix_achat"] = result["prix_marche_estime"]
             prix_achat_input.set_value(sim_state["prix_achat"])
             recalc_notaire()
@@ -2273,10 +2321,15 @@ def _build_investor_view():
             if result.get("taux_occupation_estime"):
                 sim_state["taux_occupation_pct"] = result["taux_occupation_estime"] * 100
                 field_taux_occupation.set_value(sim_state["taux_occupation_pct"])
-        elif result.get("loyer_mensuel_estime"):
+        elif result.get("loyer_mensuel_estime") and not ctx["loyer_renseigne"]:
             sim_state["loyer_mensuel_hors_charges"] = result["loyer_mensuel_estime"]
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
-        ui.notify("Valeurs de marché appliquées dans l'onglet Financement.", type="positive")
+        conserves = [nom for nom, cle in (("ton prix", "prix_renseigne"), ("ton loyer", "loyer_renseigne")) if ctx[cle]]
+        ui.notify(
+            "Valeurs du marché appliquées"
+            + (f" ({' et '.join(conserves)} conservé{'s' if len(conserves) > 1 else ''})." if conserves else "."),
+            type="positive",
+        )
         tab_panels.set_value(tab_financement)
 
     btn_use_market.on_click(on_use_market)
@@ -3002,6 +3055,7 @@ def _build_investor_view():
         if loyer:
             sim_state["loyer_mensuel_hors_charges"] = round(loyer)
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
+            ctx["loyer_renseigne"] = True
         await on_analyser_marche()
         estime = (ctx.get("last_market_result") or {}).get("loyer_mensuel_estime")
         if not loyer and estime:
