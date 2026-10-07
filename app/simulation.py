@@ -264,9 +264,15 @@ def _simuler_location(inp: SimulationInput) -> dict:
             resultat_annee.cashflow_apres_impot["micro-foncier"] = (
                 cashflow_avant_impot - r_micro.total_prelevements
             )
+            # Location nue au réel : les travaux (entretien, réparation,
+            # amélioration) se déduisent l'année où ils sont payés, ici
+            # l'année 1 ; l'éventuel déficit suit la règle du déficit foncier.
+            # Hypothèse : pas de travaux de construction ou d'agrandissement,
+            # qui ne seraient pas déductibles.
+            travaux_deductibles = inp.montant_travaux if annee == 1 else 0.0
             r_reel = fisc.foncier_reel(
                 loyers_bruts,
-                charges_hors_credit,
+                charges_hors_credit + travaux_deductibles,
                 interets + frais_emprunt_deductibles,
                 inp.taux_marginal_imposition,
                 deficit_foncier_report,
@@ -372,6 +378,10 @@ def _simuler_location(inp: SimulationInput) -> dict:
                 amortissement_bati_travaux_deduit_cumule if regime == "LMNP-reel" else 0.0
             )
             prix_acquisition_retenu = prix_acquisition_base - reintegration
+            if regime == "foncier-reel":
+                # Travaux déjà déduits des revenus fonciers : ils ne
+                # s'ajoutent pas au prix d'acquisition de la plus-value.
+                prix_acquisition_retenu -= inp.montant_travaux
             plus_value_brute = max(valeur_revente - prix_acquisition_retenu, 0.0)
             abat_ir = abattement_ir_plus_value(n)
             abat_ps = abattement_ps_plus_value(n)

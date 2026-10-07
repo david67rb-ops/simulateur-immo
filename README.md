@@ -226,6 +226,10 @@ ce cas. Ça fonctionne en revanche bien sur les sites des réseaux d'agences
 - Déficit foncier (régime réel, location nue) : la part liée aux intérêts
   d'emprunt n'est imputable que sur des revenus fonciers futurs ; le reste est
   imputable sur le revenu global dans la limite de 10 700 €/an.
+- Travaux en location nue au régime réel : supposés d'entretien, de réparation
+  ou d'amélioration, donc déduits des loyers l'année 1 (pas de travaux de
+  construction ou d'agrandissement, non déductibles) ; déjà déduits, ils ne
+  s'ajoutent pas au prix d'acquisition dans le calcul de la plus-value.
 - LMNP réel / SCI à l'IS : amortissement linéaire du bâti (hors quote-part de
   terrain), des travaux capitalisés et du mobilier. En LMNP réel (BIC non
   pro), l'amortissement ne peut pas créer ou aggraver un déficit (report

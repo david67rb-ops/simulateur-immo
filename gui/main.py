@@ -889,7 +889,8 @@ def _build_investor_view():
                             "montant_travaux",
                             suffixe="€",
                             min=0,
-                            aide="Travaux réalisés à l'achat. Amortissables en LMNP au réel et en SCI à l'IS.",
+                            aide="Travaux réalisés à l'achat. Location nue au réel : déduits des loyers l'année 1 "
+                            "(entretien, réparation, amélioration). LMNP au réel et SCI à l'IS : amortis.",
                         )
                         refs["field_mobilier"] = champ(
                             "Mobilier",
