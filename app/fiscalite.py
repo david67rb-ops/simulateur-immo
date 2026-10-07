@@ -100,30 +100,45 @@ def foncier_reel(
     tmi: float,
     deficit_reporte_entrant: float = 0.0,
 ) -> ResultatFiscalAnnuel:
-    charges_totales = charges_deductibles_hors_interets + interets_emprunt
-    resultat = loyers_annuels_bruts - charges_totales - deficit_reporte_entrant
-    if resultat >= 0:
-        revenu_imposable = resultat
-        impot = revenu_imposable * tmi
-        ps = revenu_imposable * PS_TAUX_LOCATION_NUE
+    """Régime réel (art. 28 et 156 du CGI). Les intérêts d'emprunt s'imputent
+    d'abord sur les loyers : la part du déficit qu'ils créent ne se reporte
+    que sur les revenus fonciers futurs. Le déficit dû aux autres charges
+    s'impute sur le revenu global dans la limite de 10 700 €/an (économie
+    d'impôt calculée au TMI), l'excédent se reporte sur les revenus fonciers
+    futurs. Les déficits reportés des années passées ne s'imputent que sur un
+    revenu foncier positif."""
+    revenu_net_annee = loyers_annuels_bruts - charges_deductibles_hors_interets - interets_emprunt
+    if revenu_net_annee >= 0:
+        resultat = revenu_net_annee - deficit_reporte_entrant
+        if resultat >= 0:
+            revenu_imposable = resultat
+            impot = revenu_imposable * tmi
+            ps = revenu_imposable * PS_TAUX_LOCATION_NUE
+            return ResultatFiscalAnnuel(
+                regime="foncier-reel",
+                revenu_imposable=revenu_imposable,
+                impot_revenu=impot,
+                prelevements_sociaux=ps,
+                total_prelevements=impot + ps,
+            )
+        # Revenu de l'année entièrement absorbé par les déficits reportés.
         return ResultatFiscalAnnuel(
             regime="foncier-reel",
-            revenu_imposable=revenu_imposable,
-            impot_revenu=impot,
-            prelevements_sociaux=ps,
-            total_prelevements=impot + ps,
+            revenu_imposable=0.0,
+            impot_revenu=0.0,
+            prelevements_sociaux=0.0,
+            total_prelevements=0.0,
+            deficit_reportable_revenus_futurs=-resultat,
         )
-    # Déficit : la part liée aux intérêts n'est imputable que sur des
-    # revenus fonciers futurs ; le reste est imputable sur le revenu global
-    # dans la limite de 10 700 €/an, l'économie d'impôt correspondante est
-    # calculée au TMI.
-    deficit_total = -resultat
-    deficit_hors_interets = max(
-        0.0, loyers_annuels_bruts - charges_deductibles_hors_interets
+    # Déficit de l'année : d'abord la part due aux intérêts (ce qui dépasse
+    # les loyers), puis celle due aux autres charges.
+    deficit_annee = -revenu_net_annee
+    deficit_interets = max(0.0, interets_emprunt - loyers_annuels_bruts)
+    deficit_autres_charges = deficit_annee - deficit_interets
+    deficit_imputable_global = min(deficit_autres_charges, PLAFOND_IMPUTATION_DEFICIT_FONCIER)
+    deficit_report_futur = (
+        deficit_interets + (deficit_autres_charges - deficit_imputable_global) + deficit_reporte_entrant
     )
-    deficit_hors_interets = min(deficit_hors_interets, deficit_total)
-    deficit_imputable_global = min(deficit_hors_interets, PLAFOND_IMPUTATION_DEFICIT_FONCIER)
-    deficit_report_futur = deficit_total - deficit_imputable_global
     economie_impot = deficit_imputable_global * tmi
     return ResultatFiscalAnnuel(
         regime="foncier-reel",
