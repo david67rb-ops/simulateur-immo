@@ -51,9 +51,6 @@ CSS = """
 @media (prefers-reduced-motion: reduce) { .nav-mobile .menu-deroulant, .nav-mobile .menu-deroulant a { transition: none; } .nav-mobile .ic-fermer { animation: none !important; } }
 .boutons-dossier a { text-align: center; }
 @media (max-width: 760px) { .boutons-dossier a { flex: 1 1 100%; } }
-/* Fenêtre « il manque… » du formulaire, dans la charte. */
-.carte-manque { max-width: 320px; padding: 24px 22px !important; border-radius: 18px !important; border-top: 5px solid #A8823B; color: #13243F; }
-.body--dark .carte-manque { color: #E6ECF3; }
 @media (max-width: 760px) { .nav-liens { display: none !important; } .nav-mobile { display: block; } }
 .carte-verif { background: #FFFFFF; color: #13243F; }
 .body--dark .carte-verif { background: #151C27; color: #E6ECF3; }
@@ -194,7 +191,7 @@ RESULTAT = f"""
         <li>La liste des pièces à fournir à la banque</li>
       </ul>
       <div class="boutons-dossier" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
-        <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:13px 18px;border-radius:10px">Obtenir mon dossier · offert pendant la bêta</a>
+        <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:10px;line-height:1.3;text-wrap:balance">Renseigne ton projet et obtiens ton dossier<span style="display:block;font-size:12.5px;font-weight:500;opacity:0.9">offert pendant la bêta</span></a>
         <a href="/exemple-dossier" target="_blank" rel="noopener" style="color:{LAITON_CLAIR};font-weight:600;text-decoration:none;padding:12px 16px;border-radius:10px;border:1.5px solid rgba(233,216,176,0.55)">Voir un exemple de dossier complet</a>
       </div>
     </div>
@@ -409,32 +406,19 @@ def _formulaire(on_verifier: Callable[[dict], Awaitable[None]], on_simulateur: C
             ("le prix", prix, lambda: prix.lire(prix.value)),
         )
         for _nom, champ, _valeur in obligatoires:
-            # Le champ signalé redevient normal dès qu'on le remplit.
-            champ.on("update:model-value", lambda _e, c=champ: c.props(remove="error error-message no-error-icon"))
+            theme.effacer_signalement_a_la_saisie(champ)
 
         # Message « il manque… » : une petite fenêtre au centre de l'écran.
-        a_completer = {"champ": None}
-
-        def completer() -> None:
-            fenetre_manque.close()
-            if a_completer["champ"] is not None:
-                a_completer["champ"].run_method("focus")
-
-        with ui.dialog() as fenetre_manque, ui.card().classes("carte-manque items-center text-center gap-3"):
-            ui.icon("edit_note", size="40px").classes("text-[color:#A8823B]")
-            texte_manque = ui.label("").classes("text-base")
-            ui.button("Compléter", on_click=completer).props("unelevated no-caps color=primary").classes("w-full")
+        signaler_manque = theme.fenetre_a_completer()
 
         async def verifier() -> None:
             manque = [(nom, champ) for nom, champ, valeur in obligatoires if not valeur()]
             if manque:
                 for _nom, champ in manque:
-                    champ.props('error error-message="À compléter" no-error-icon')
+                    theme.signaler_champ(champ)
                 noms = [nom for nom, _champ in manque]
                 liste = noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
-                texte_manque.set_text(f"Il manque encore {liste} pour vérifier ton projet.")
-                a_completer["champ"] = manque[0][1]
-                fenetre_manque.open()
+                signaler_manque(f"Il manque encore {liste} pour vérifier ton projet.", manque[0][1])
                 return
             await on_verifier(
                 {

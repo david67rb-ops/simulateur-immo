@@ -570,7 +570,7 @@ def index_page() -> None:
             page_accueil.classes(add="anim-retour", remove="masque")
             ui.run_javascript("window.scrollTo({top: 0, behavior: 'instant'})")
 
-        # Liens de l'accueil (menu, « Obtenir mon dossier ») : simple HTML qui
+        # Liens de l'accueil (menu, « Renseigne ton projet et obtiens ton dossier ») : simple HTML qui
         # appelle emitEvent('ouvrir_simulateur') dans le navigateur.
         ui.on("ouvrir_simulateur", lambda _e: ouvrir_simulateur())
 
@@ -596,8 +596,10 @@ def index_page() -> None:
             # (sinon le bouton touche la signature).
             with ui.column().classes("w-full items-center gap-1 pt-9 sm:pt-0"):
                 # Logo puis le nom et la signature, centrés l'un sur l'autre
-                # (bloc validé sur la planche des logos, piste B3).
-                with ui.row().classes("items-center justify-center gap-3 no-wrap"):
+                # (bloc validé sur la planche des logos, piste B3). Sur
+                # téléphone, le logo passe au-dessus du nom : tout le bloc
+                # reste sur l'axe de la page, comme la phrase en dessous.
+                with ui.element("div").classes("flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-3"):
                     ui.html(theme.LOGO_SVG.replace('width="38" height="38"', 'width="46" height="46"')).classes("shrink-0")
                     with ui.column().classes("items-center gap-1"):
                         ui.html('Cred<span class="text-[color:var(--c-laiton)]">aura</span>').classes(
@@ -811,6 +813,9 @@ def _build_investor_view():
 
                     btn_market = ui.button("Analyser le marché").props("unelevated").classes("mt-3")
                     market_status = ui.label("").classes(theme.HINT_CLASSES)
+                    # Même fenêtre « il manque… » que le formulaire de l'accueil.
+                    theme.effacer_signalement_a_la_saisie(ms_adresse)
+                    signaler_manque = theme.fenetre_a_completer()
                     progres_marche = Progression()
 
                     market_results = ui.column().classes("w-full gap-2 mt-2")
@@ -2184,6 +2189,11 @@ def _build_investor_view():
     async def on_analyser_marche() -> None:
         """Étude de marché, avec barre de chargement (DVF : jusqu'à 30 s au
         premier appel pour un département)."""
+        if not (market_state.get("adresse") or "").strip():
+            market_status.set_text("")
+            theme.signaler_champ(ms_adresse)
+            signaler_manque("Il manque encore l'adresse du bien pour analyser le marché.", ms_adresse)
+            return
         progres_marche.demarrer()
         btn_market.disable()
         try:

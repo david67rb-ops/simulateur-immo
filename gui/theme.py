@@ -127,6 +127,9 @@ def apply_theme() -> None:
           .frise-trait-fait { background: var(--c-ok); }
           .frise-libelle { font-size: 12px; color: #6b7280; white-space: nowrap; }
           .frise-courant .frise-libelle { color: var(--c-marque-texte); font-weight: 600; }
+          /* Fenêtre « il manque… » (accueil et simulateur), dans la charte. */
+          .carte-manque { max-width: 320px; padding: 24px 22px !important; border-radius: 18px !important; border-top: 5px solid #A8823B; color: #13243F; }
+          .body--dark .carte-manque { color: #E6ECF3; }
           .etape-compteur { font-size: 12px; text-transform: uppercase; letter-spacing: 0.06em; color: var(--c-laiton); font-weight: 600; white-space: nowrap; }
           .etape-titre { font-family: 'Sora', 'Public Sans', sans-serif; font-size: 1.15rem; font-weight: 600; }
           .nav-etapes { position: sticky; bottom: 0; z-index: 30; padding: 10px 0; background: var(--c-fond); }
@@ -239,6 +242,40 @@ def aide(texte: str) -> None:
     ).on("click.stop", lambda: None):
         with ui.menu().props("max-width=300px anchor='bottom middle' self='top middle'"):
             ui.label(texte).classes("aide-bulle text-sm")
+
+
+def fenetre_a_completer():
+    """Petite fenêtre « il manque… » au centre de l'écran (accueil et
+    simulateur). Renvoie la fonction qui l'ouvre avec le texte voulu ;
+    « Compléter » la referme et place le curseur dans le champ à remplir."""
+    cible = {"champ": None}
+
+    def completer() -> None:
+        fenetre.close()
+        if cible["champ"] is not None:
+            cible["champ"].run_method("focus")
+
+    with ui.dialog() as fenetre, ui.card().classes("carte-manque items-center text-center gap-3"):
+        ui.icon("edit_note", size="40px").classes("text-[color:#A8823B]")
+        texte = ui.label("").classes("text-base")
+        ui.button("Compléter", on_click=completer).props("unelevated no-caps color=primary").classes("w-full")
+
+    def signaler(message: str, champ: ui.element | None = None) -> None:
+        texte.set_text(message)
+        cible["champ"] = champ
+        fenetre.open()
+
+    return signaler
+
+
+def signaler_champ(champ: ui.element) -> None:
+    """Bordure rouge et « À compléter » sous le champ ; le champ redevient
+    normal dès qu'on le remplit (voir effacer_signalement_a_la_saisie)."""
+    champ.props('error error-message="À compléter" no-error-icon')
+
+
+def effacer_signalement_a_la_saisie(champ: ui.element) -> None:
+    champ.on("update:model-value", lambda _e: champ.props(remove="error error-message no-error-icon"))
 
 
 def stat_card(label: str, initial: str = "–", aide_texte: str | None = None, grand: bool = False) -> ui.label:
