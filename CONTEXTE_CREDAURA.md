@@ -17,7 +17,7 @@
 - Simulateur en 6 étapes : Marché, Financement, Revenus et fiscalité, Résultats, Endettement, Dossier. Les saisies et estimations de l'étape Marché passent au financement en cliquant « Suivant » (plus de bouton « Utiliser ces valeurs ») ; prix et loyer saisis conservés.
 - Étude de marché automatique : géocodage, ventes comparables DVF, loyer de marché, cartes.
 - Verdict en 3 niveaux (solide / à renforcer / à revoir), prix d'achat maximum, scénarios de stress.
-- Dossier Word (≈ 14 pages) : formules Complet, Banque, Personnel ; exemple fictif téléchargeable. Pages, graphiques et cartes sur le même fond bleuté #F5F7FA (fond pleine page posé dans les en-têtes, conservé à l'impression et en PDF ; couleur de page Word en plus pour l'écran).
+- Dossier Word (≈ 14 pages) : formules Complet, Banque, Personnel ; exemple fictif téléchargeable. Pages, graphiques et cartes sur le même fond bleuté #F5F7FA (fond pleine page posé dans les en-têtes, conservé à l'impression et en PDF ; couleur de page Word en plus pour l'écran). Les pages miniatures de l'accueil et l'aperçu du site reprennent ce fond.
 - Enregistrer / rouvrir son projet (fichier signé `.credaura`, stocké chez l'utilisateur).
 - Pages légales, contact (par messagerie), formulaire d'avis des testeurs (par messagerie), mesure d'audience sans cookie.
 

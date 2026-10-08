@@ -198,6 +198,10 @@ L'export Word (`python-docx`) reprend l'ensemble du projet (bien, financement,
 rentabilité, profil emprunteur et taux d'endettement) dans un document
 présentable à une banque. Estimation pédagogique, pas un dossier de crédit
 formel.
+Les pages, les graphiques et les cartes partagent le même fond bleuté
+(#F5F7FA, `dossier_export.FOND_PAGE_HEX` et `charts_export.FOND`, à changer
+ensemble) : posé derrière le texte depuis les en-têtes, il reste à
+l'impression et dans l'export PDF.
 
 ## Frais de notaire automatiques
 

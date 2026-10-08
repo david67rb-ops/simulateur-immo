@@ -184,7 +184,7 @@ def _critere(couleur: str, nom: str, texte: str) -> str:
 
 def _page_dossier(contenu: str) -> str:
     return (
-        '<div style="flex:1 1 0;aspect-ratio:3/4;background:#FFFFFF;border-radius:6px;padding:10px;box-sizing:border-box;'
+        '<div style="flex:1 1 0;aspect-ratio:3/4;background:#F5F7FA;border-radius:6px;padding:10px;box-sizing:border-box;'
         f'display:flex;flex-direction:column;gap:6px;filter:blur(1.5px)">{contenu}</div>'
     )
 
