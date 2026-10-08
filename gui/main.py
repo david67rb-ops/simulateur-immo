@@ -795,7 +795,8 @@ def _build_investor_view():
                             ui.input("Adresse du bien", placeholder="12 rue de la République, 69002 Lyon")
                             .bind_value(market_state, "adresse")
                             .props("outlined dense")
-                            .classes("w-full")
+                            # Toute la largeur : c'est le champ principal de l'étape.
+                            .classes("w-full sm:col-span-2 lg:col-span-3")
                         )
                         ms_type = (
                             ui.select(TYPE_BIEN_OPTIONS, label="Type de bien", value=market_state["type_bien"])
@@ -1214,7 +1215,7 @@ def _build_investor_view():
                             refs["field_regime_location"] = field_regime_location
                             refs["field_tmi"] = liste(
                                 TMI_OPTIONS,
-                                "Tranche marginale d'imposition (TMI)",
+                                "Tranche d'imposition (TMI)",
                                 sim_state,
                                 "taux_marginal_imposition",
                                 aide="Taux de la dernière tranche d'impôt de ton foyer : les revenus locatifs "
@@ -1366,77 +1367,84 @@ def _build_investor_view():
 
                     avertissements_box = ui.column().classes("w-full gap-2")
 
-                    ui.label("Où va ton loyer (mois moyen, année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    ui.echart({"series": []}).props('id="loyer-chart"').classes("w-full h-72")
+                    with theme.section_card():
+                        ui.label("Où va ton loyer (mois moyen, année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        ui.echart({"series": []}).props('id="loyer-chart"').classes("w-full h-72")
 
                     bloc_saison = ui.column().classes("w-full gap-2")
                     with bloc_saison:
-                        titre_saison = ui.label("Saisonnalité (année 1)").classes(
-                            theme.SUBSECTION_TITLE_CLASSES
-                        )
-                        with ui.row().classes(theme.GRID_CLASSES):
-                            v_tresorerie_saison = theme.stat_card(
-                                "Trésorerie de sécurité",
-                                aide_texte="Plus forte perte cumulée sur des mois consécutifs (basse saison) : "
-                                "la réserve à prévoir pour ne pas être à découvert, avant impôt.",
+                        with theme.section_card():
+                            titre_saison = ui.label("Saisonnalité (année 1)").classes(
+                                theme.SUBSECTION_TITLE_CLASSES
                             )
-                            v_mois_deficitaires = theme.stat_card("Mois déficitaires")
-                            v_meilleur_pire = theme.stat_card("Meilleur / pire mois")
-                        ui.echart({"series": []}).props('id="saison-chart"').classes("w-full h-80").set_visibility(
-                            offre.DETAIL_DANS_LE_SIMULATEUR
-                        )
-                        detail_saison = ui.label("").classes(theme.HINT_CLASSES)
-                        if not offre.DETAIL_DANS_LE_SIMULATEUR:
-                            ui.label(
-                                "Le détail mois par mois (occupation, recettes, dépenses et cash-flow) figure dans "
-                                "le dossier de financement (étape Dossier)."
-                            ).classes(theme.HINT_CLASSES)
+                            with ui.row().classes(theme.GRID_CLASSES):
+                                v_tresorerie_saison = theme.stat_card(
+                                    "Trésorerie de sécurité",
+                                    aide_texte="Plus forte perte cumulée sur des mois consécutifs (basse saison) : "
+                                    "la réserve à prévoir pour ne pas être à découvert, avant impôt.",
+                                )
+                                v_mois_deficitaires = theme.stat_card("Mois déficitaires")
+                                v_meilleur_pire = theme.stat_card("Meilleur / pire mois")
+                            ui.echart({"series": []}).props('id="saison-chart"').classes("w-full h-80").set_visibility(
+                                offre.DETAIL_DANS_LE_SIMULATEUR
+                            )
+                            detail_saison = ui.label("").classes(theme.HINT_CLASSES)
+                            if not offre.DETAIL_DANS_LE_SIMULATEUR:
+                                ui.label(
+                                    "Le détail mois par mois (occupation, recettes, dépenses et cash-flow) figure dans "
+                                    "le dossier de financement (étape Dossier)."
+                                ).classes(theme.HINT_CLASSES)
 
-                    ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    table_regimes = ui.table(
-                        columns=[
-                            colonne("regime", "Régime", gauche=True),
-                            colonne("revenu", "Revenu imposable"),
-                            colonne("impot", "Impôt total"),
-                            colonne("cashflow", "Cash-flow net mensuel"),
-                            colonne("netnet", "Rendement net-net"),
-                            colonne("tri", "TRI (avec revente)"),
-                        ],
-                        rows=[],
-                        row_key="regime",
-                    ).props("flat bordered").classes("w-full")
+                    with theme.section_card():
+                        ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        table_regimes = ui.table(
+                            columns=[
+                                colonne("regime", "Régime", gauche=True),
+                                colonne("revenu", "Revenu imposable"),
+                                colonne("impot", "Impôt total"),
+                                colonne("cashflow", "Cash-flow net mensuel"),
+                                colonne("netnet", "Rendement net-net"),
+                                colonne("tri", "TRI (avec revente)"),
+                            ],
+                            rows=[],
+                            row_key="regime",
+                        ).props("flat dense wrap-cells").classes("w-full")
 
-                    ui.label("Scénarios de stress (meilleur régime)").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    table_stress = ui.table(
-                        columns=[
-                            colonne("scenario", "Scénario", gauche=True),
-                            colonne("cashflow", "Cash-flow net mensuel (an 1)"),
-                            colonne("tri", "TRI"),
-                            colonne("enrichissement", "Enrichissement net"),
-                        ],
-                        rows=[],
-                        row_key="scenario",
-                    ).props("flat bordered").classes("w-full")
+                    with theme.section_card():
+                        ui.label("Scénarios de stress (meilleur régime)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        table_stress = ui.table(
+                            columns=[
+                                colonne("scenario", "Scénario", gauche=True),
+                                colonne("cashflow", "Cash-flow net mensuel (an 1)"),
+                                colonne("tri", "TRI"),
+                                colonne("enrichissement", "Enrichissement net"),
+                            ],
+                            rows=[],
+                            row_key="scenario",
+                        ).props("flat dense wrap-cells").classes("w-full")
 
-                    ui.label("Évolution du patrimoine").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    ui.echart({"series": []}).props('id="patrimoine-chart"').classes("w-full h-80")
+                    with theme.section_card():
+                        ui.label("Évolution du patrimoine").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        ui.echart({"series": []}).props('id="patrimoine-chart"').classes("w-full h-80")
 
-                    ui.label("Cash-flow cumulé par régime").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    ui.echart({"series": []}).props('id="cashflow-chart"').classes("w-full h-72")
+                    with theme.section_card():
+                        ui.label("Cash-flow cumulé par régime").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        ui.echart({"series": []}).props('id="cashflow-chart"').classes("w-full h-72")
 
-                    ui.label("Revente en fin de détention").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    table_revente = ui.table(
-                        columns=[
-                            colonne("regime", "Régime", gauche=True),
-                            colonne("valeur", "Valeur revente"),
-                            colonne("plusvalue", "Plus-value imposable"),
-                            colonne("impot", "Impôt total"),
-                            colonne("net", "Net vendeur"),
-                            colonne("enrichissement", "Enrichissement net"),
-                        ],
-                        rows=[],
-                        row_key="regime",
-                    ).props("flat bordered").classes("w-full")
+                    with theme.section_card():
+                        ui.label("Revente en fin de détention").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        table_revente = ui.table(
+                            columns=[
+                                colonne("regime", "Régime", gauche=True),
+                                colonne("valeur", "Valeur revente"),
+                                colonne("plusvalue", "Plus-value imposable"),
+                                colonne("impot", "Impôt total"),
+                                colonne("net", "Net vendeur"),
+                                colonne("enrichissement", "Enrichissement net"),
+                            ],
+                            rows=[],
+                            row_key="regime",
+                        ).props("flat dense wrap-cells").classes("w-full")
 
                 results_achat_revente = ui.column().classes("w-full gap-3")
                 results_achat_revente.visible = False
@@ -1466,22 +1474,24 @@ def _build_investor_view():
                             aide_texte="Prix le plus élevé qui respecte ton objectif de marge nette "
                             "(étape Revenus, « évolution des prix et objectifs »). Nécessite un prix de revente visé.",
                         )
-                    table_achat_revente = ui.table(
-                        columns=[colonne("k", "", gauche=True), colonne("v", "")],
-                        rows=[],
-                        row_key="k",
-                    ).props("hide-header flat bordered").classes("w-full")
+                    with theme.section_card():
+                        table_achat_revente = ui.table(
+                            columns=[colonne("k", "", gauche=True), colonne("v", "")],
+                            rows=[],
+                            row_key="k",
+                        ).props("hide-header flat dense").classes("w-full")
 
-                    ui.label("Scénarios de stress").classes(theme.SUBSECTION_TITLE_CLASSES)
-                    table_stress_ar = ui.table(
-                        columns=[
-                            colonne("scenario", "Scénario", gauche=True),
-                            colonne("marge", "Marge nette"),
-                            colonne("rentabilite", "Rentabilité de l'apport"),
-                        ],
-                        rows=[],
-                        row_key="scenario",
-                    ).props("flat bordered").classes("w-full")
+                    with theme.section_card():
+                        ui.label("Scénarios de stress").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        table_stress_ar = ui.table(
+                            columns=[
+                                colonne("scenario", "Scénario", gauche=True),
+                                colonne("marge", "Marge nette"),
+                                colonne("rentabilite", "Rentabilité de l'apport"),
+                            ],
+                            rows=[],
+                            row_key="scenario",
+                        ).props("flat dense wrap-cells").classes("w-full")
 
             # -----------------------------------------------------------------
             # Onglet Taux d'endettement
@@ -1513,8 +1523,8 @@ def _build_investor_view():
                         with ui.row().classes(theme.GRID_CLASSES):
                             v_end_revenus = theme.stat_card("Revenus considérés (dont 70 % des loyers)")
                             v_end_mensualites = theme.stat_card("Mensualités totales")
-                            v_end_taux = theme.stat_card("Taux d'endettement")
-                            v_end_statut = theme.stat_card("Statut")
+                            # Le statut (sous / au-dessus du seuil) s'affiche sous le taux, coloré.
+                            v_end_taux = theme.stat_card("Taux d'endettement", classes="carte-pleine-largeur")
                         # Jauge : le taux du foyer face au seuil de 35 % (échelle de 0 à 50 %).
                         with ui.column().classes("w-full gap-1"):
                             with ui.element("div").classes("jauge w-full"):
@@ -1849,8 +1859,8 @@ def _build_investor_view():
             if rang > 0:
                 precedente = visibles[rang - 1]
                 ui.button(LIBELLES_COURTS[precedente], icon="arrow_back", on_click=lambda: aller_a(precedente)).props(
-                    "flat no-caps"
-                )
+                    f'flat no-caps aria-label="Étape précédente : {LIBELLES_COURTS[precedente]}"'
+                ).classes("bouton-precedent")
             else:
                 ui.element("div")
             if rang < len(visibles) - 1:
@@ -2770,6 +2780,10 @@ def _build_investor_view():
         v_end_revenus.set_text(eur(r.revenus_consideres_mensuels))
         v_end_mensualites.set_text(eur(r.mensualites_totales_mensuelles))
         v_end_taux.set_text(pct(r.taux_endettement, 1))
+        v_end_taux.detail.set_text(
+            f"au-dessus du seuil HCSF de {pct(r.seuil_hcsf, 0)}" if r.depasse_seuil else f"sous le seuil HCSF de {pct(r.seuil_hcsf, 0)}"
+        )
+        v_end_taux.detail.visible = True
         echelle = 0.50
         couleur_jauge = theme.NEGATIVE if r.depasse_seuil else (
             theme.ACCENT if r.taux_endettement > r.seuil_hcsf - 0.05 else theme.POSITIVE
@@ -2777,11 +2791,9 @@ def _build_investor_view():
         jauge_remplissage.style(
             f"width: {min(r.taux_endettement / echelle, 1) * 100:.1f}%; background: {couleur_jauge}"
         )
+        v_end_taux.style(f"color: {couleur_jauge}")  # même couleur que la jauge
         jauge_seuil.style(f"left: {r.seuil_hcsf / echelle * 100:.1f}%")
         jauge_legende.set_text(f"Seuil HCSF : {pct(r.seuil_hcsf, 0)}")
-        v_end_statut.set_text(
-            f"⚠️ Dépasse le seuil HCSF ({pct(r.seuil_hcsf, 0)})" if r.depasse_seuil else f"OK (seuil HCSF {pct(r.seuil_hcsf, 0)})"
-        )
         end_marge_label.set_text(
             "Le taux d'endettement dépasse le seuil de 35 % généralement retenu par les banques."
             if r.depasse_seuil

@@ -97,6 +97,8 @@ def apply_theme() -> None:
              colonne de synthèse de rester fixe (position: sticky). */
           .q-tab-panels, .q-tab-panels .q-panel, .q-panel-parent { overflow: visible !important; }
           .q-tab-panels { background: transparent !important; }
+          /* Les cartes des étapes s'alignent sur la carte « Type de projet » et la barre Suivant. */
+          .q-tab-panel { padding-left: 0; padding-right: 0; }
           /* Texte secondaire en mode sombre (remplace la variante Tailwind dark:, voir basculer_theme). */
           .body--dark .text-gray-500 { color: #9ca3af !important; }
           .q-tabs--dense .q-tab { padding: 0 10px; }
@@ -134,6 +136,13 @@ def apply_theme() -> None:
           .etape-titre { font-family: 'Sora', 'Public Sans', sans-serif; font-size: 1.15rem; font-weight: 600; }
           .nav-etapes { position: sticky; bottom: 0; z-index: 30; padding: 10px 0; background: var(--c-fond); }
           @media (max-width: 1023px) { .nav-etapes { bottom: 52px; } }
+          /* Barre Précédent / Suivant toujours sur une ligne ; sur téléphone, « Précédent »
+             se réduit à sa flèche pour laisser la place au bouton Suivant. */
+          .nav-etapes .q-btn__content { flex-wrap: nowrap; white-space: nowrap; }
+          @media (max-width: 639px) {
+            .nav-etapes .bouton-precedent .q-btn__content > span.block { display: none; }
+            .nav-etapes .bouton-precedent { min-width: 44px; }
+          }
           @media (max-width: 639px) { .frise-libelle { display: none; } }
           /* Onglets : passent à la ligne quand la place manque (fenêtre étroite, app Mac) au lieu
              d'une barre qui défile et cache des onglets. */
@@ -148,6 +157,7 @@ def apply_theme() -> None:
             .grid:has(> .stat-card) { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
             .grid:has(> .stat-card .text-3xl) { grid-template-columns: minmax(0, 1fr); }
             .stat-card { padding: 10px 12px; }
+            .stat-card.carte-pleine-largeur { grid-column: 1 / -1; }
             /* Intitulés sur deux lignes au plus : les chiffres d'une même ligne restent alignés. */
             .stat-card:not(:has(.text-3xl)) .entete-stat { min-height: 2.5em; }
             .stat-card .valeur.text-xl { font-size: 1.1rem; line-height: 1.45rem; }
@@ -176,7 +186,7 @@ def apply_theme() -> None:
           .lien-exemple { color: var(--c-marque-texte); text-decoration: none; }
           .lien-exemple:hover { text-decoration: underline; }
           .pastille-critere { display: inline-block; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; }
-          .pastille-legende { display: inline-block; width: 14px; height: 14px; border-radius: 4px; vertical-align: -2px; margin-right: 5px; }
+          .pastille-legende { display: inline-block; width: 28px; height: 16px; border-radius: 5px; vertical-align: -3px; margin-right: 8px; flex-shrink: 0; }
           /* Jauge (taux d'endettement face au seuil). */
           .jauge { position: relative; height: 12px; border-radius: 6px; background: var(--c-filet); overflow: visible; }
           .jauge-remplissage { height: 100%; border-radius: 6px; transition: width 0.4s ease; }
@@ -278,10 +288,12 @@ def effacer_signalement_a_la_saisie(champ: ui.element) -> None:
     champ.on("update:model-value", lambda _e: champ.props(remove="error error-message no-error-icon"))
 
 
-def stat_card(label: str, initial: str = "–", aide_texte: str | None = None, grand: bool = False) -> ui.label:
+def stat_card(
+    label: str, initial: str = "–", aide_texte: str | None = None, grand: bool = False, classes: str = ""
+) -> ui.label:
     """Petite carte 'métrique' (fond teinté, valeur en gros). Renvoie le label
     de valeur pour pouvoir le mettre à jour ensuite (`.set_text(...)`)."""
-    with ui.column().classes("stat-card gap-0"):
+    with ui.column().classes(f"stat-card gap-0 {classes}".strip()):
         # Intitulé à gauche, ⓘ calé en haut à droite : les cartes d'une même
         # ligne gardent leurs chiffres alignés, même si un intitulé passe sur
         # deux lignes.

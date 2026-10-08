@@ -56,15 +56,28 @@ CSS = """
 .nav-mobile .menu-deroulant a.menu-simulateur + a { border-top: 0; }
 @keyframes croix-apparait { from { opacity: 0; transform: rotate(-90deg); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .nav-mobile .menu-deroulant, .nav-mobile .menu-deroulant a { transition: none; } .nav-mobile .ic-fermer { animation: none !important; } }
-.boutons-dossier a { text-align: center; }
-@media (max-width: 760px) { .boutons-dossier a { flex: 1 1 100%; } }
+/* Boutons du dossier : l'un sous l'autre, pleine largeur et texte centré, sur ordinateur comme sur téléphone. */
+.boutons-dossier { display: flex; flex-direction: column; gap: 12px; }
+.boutons-dossier a { display: block; text-align: center; box-sizing: border-box; width: 100%; }
 @media (max-width: 760px) { .nav-liens { display: none !important; } .nav-mobile { display: block; } }
 .carte-verif { background: #FFFFFF; color: #13243F; }
 .body--dark .carte-verif { background: #151C27; color: #E6ECF3; }
 .body--dark .carte-verif .gris { color: #AEB9C7; }
 .body--dark .carte-verif a { color: #9DBBE2; }
 .faq details { border-bottom: 1px solid #DCE3EC; padding: 18px 0; }
-.faq summary { font-weight: 600; font-size: 17px; cursor: pointer; }
+/* Question : chevron doré à droite (au lieu du triangle du navigateur), qui pivote à l'ouverture. */
+.faq summary { font-weight: 600; font-size: 17px; cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: ""; width: 9px; height: 9px; border-right: 2px solid #A8823B; border-bottom: 2px solid #A8823B; transform: translateY(-3px) rotate(45deg); transition: transform 0.2s ease; flex-shrink: 0; margin-right: 6px; }
+.faq details[open] summary::after { transform: translateY(2px) rotate(-135deg); }
+.faq summary:hover { color: #1B3358; }
+/* Chiffres de l'exemple, sous le verdict ; le contenu de la carte est centré en hauteur (elle a la hauteur de la carte du dossier). */
+.chiffres-exemple { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding-top: 6px; }
+.chiffres-exemple .chiffre { background: #F5F7FA; border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.chiffres-exemple .valeur { margin-top: auto; } /* valeurs alignées en bas, même si un intitulé passe sur deux lignes */
+@media (max-width: 480px) { .chiffres-exemple { gap: 8px; } .chiffres-exemple .chiffre { padding: 10px; } }
+.chiffres-exemple .libelle { font-size: 12px; font-weight: 600; color: #4A5563; }
+.chiffres-exemple .valeur { font-family: Sora, sans-serif; font-weight: 700; font-size: clamp(15px, 1.6vw, 20px); color: #1B3358; white-space: nowrap; }
 .faq details p { margin-top: 10px; color: #4A5563; }
 """
 
@@ -182,6 +195,10 @@ def _critere(couleur: str, nom: str, texte: str) -> str:
     )
 
 
+def _chiffre(libelle: str, valeur: str) -> str:
+    return f'<div class="chiffre"><span class="libelle">{libelle}</span><span class="valeur">{valeur}</span></div>'
+
+
 def _page_dossier(contenu: str) -> str:
     return (
         '<div style="flex:1 1 0;aspect-ratio:3/4;background:#F5F7FA;border-radius:6px;padding:10px;box-sizing:border-box;'
@@ -199,7 +216,7 @@ RESULTAT = f"""
     <h2 class="titre-section">Un verdict clair tout de suite, puis le dossier pour la banque</h2>
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:24px">
-    <div style="flex:1 1 420px;min-width:0;background:#FFFFFF;border:1px solid #DCE3EC;border-radius:20px;padding:clamp(20px,2.6vw,32px);box-sizing:border-box;display:flex;flex-direction:column;gap:18px">
+    <div style="flex:1 1 420px;min-width:0;background:#FFFFFF;border:1px solid #DCE3EC;border-radius:20px;padding:clamp(20px,2.6vw,32px);box-sizing:border-box;display:flex;flex-direction:column;justify-content:center;gap:18px">
       <span class="gris" style="font-size:13px;font-weight:600">GRATUIT · EXEMPLE : T3 DE 65 m² À SAINT-ÉTIENNE</span>
       <div style="display:flex;align-items:center;gap:12px">
         <span style="width:44px;height:44px;border-radius:50%;background:#E3F1EA;display:flex;align-items:center;justify-content:center;flex-shrink:0"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#2D6A4F" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span>
@@ -210,6 +227,11 @@ RESULTAT = f"""
         {_critere("#2D6A4F", "Rentabilité", "cash-flow positif, +46 € par mois après crédit, charges et impôts")}
         {_critere("#8A94A0", "Financement", "ajoute tes revenus pour connaître ton taux d'endettement")}
       </ul>
+      <div class="chiffres-exemple">
+        {_chiffre("Prix d'achat", "76 000 €")}
+        {_chiffre("Loyer / mois", "710 €")}
+        {_chiffre("Rendement brut", "8,1 %")}
+      </div>
     </div>
     <div id="dossier" style="flex:1 1 420px;min-width:0;background:{ENCRE};color:#FFFFFF;border-radius:20px;padding:clamp(20px,2.6vw,32px);box-sizing:border-box;display:flex;flex-direction:column;gap:18px">
       <span style="font-size:13px;font-weight:600;letter-spacing:0.08em;color:{LAITON_CLAIR}">LE DOSSIER DE FINANCEMENT</span>
@@ -219,13 +241,13 @@ RESULTAT = f"""
         {_page_dossier(_TITRE + '<div style="display:flex;gap:4px;align-items:flex-end;height:40%"><div style="flex:1;height:40%;background:#A8823B"></div><div style="flex:1;height:70%;background:#A8823B"></div><div style="flex:1;height:55%;background:#A8823B"></div><div style="flex:1;height:90%;background:#A8823B"></div></div>' + _LIGNE + _LIGNE)}
         {_page_dossier(_TITRE + _LIGNE + _LIGNE + _LIGNE + '<div style="height:30%;background:#E3F1EA;border-radius:3px"></div>')}
       </div>
-      <ul style="margin:0;padding:0 0 0 18px;display:flex;flex-direction:column;gap:6px;font-size:15px;color:#D9E1EC">
-        <li>Étude de marché du quartier, avec la carte et les ventes comparables</li>
-        <li>Plan de financement, recettes et charges, cash-flow mois par mois</li>
-        <li>Profil de l'emprunteur et taux d'endettement</li>
-        <li>La liste des pièces à fournir à la banque</li>
+      <ul style="margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:8px;font-size:15px;color:#D9E1EC">
+        <li style="display:flex;gap:10px;align-items:flex-start">{COCHE}<span>Étude de marché du quartier, avec la carte et les ventes comparables</span></li>
+        <li style="display:flex;gap:10px;align-items:flex-start">{COCHE}<span>Plan de financement, recettes et charges, cash-flow mois par mois</span></li>
+        <li style="display:flex;gap:10px;align-items:flex-start">{COCHE}<span>Profil de l'emprunteur et taux d'endettement</span></li>
+        <li style="display:flex;gap:10px;align-items:flex-start">{COCHE}<span>La liste des pièces à fournir à la banque</span></li>
       </ul>
-      <div class="boutons-dossier" style="display:flex;flex-wrap:wrap;gap:12px;align-items:center">
+      <div class="boutons-dossier">
         <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:10px;line-height:1.3;text-wrap:balance">Renseigne ton projet et obtiens ton dossier<span style="display:block;font-size:12.5px;font-weight:500;opacity:0.9">offert pendant la bêta</span></a>
         <a href="/exemple-dossier" target="_blank" rel="noopener" style="color:{LAITON_CLAIR};font-weight:600;text-decoration:none;padding:12px 16px;border-radius:10px;border:1.5px solid rgba(233,216,176,0.55)">Voir un exemple de dossier complet</a>
       </div>

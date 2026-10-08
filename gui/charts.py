@@ -122,17 +122,11 @@ def repartition_loyer_option(resultat: dict) -> dict:
         "grid": {"left": 10, "right": 10, "top": 30, "bottom": 10, "containLabel": True},
         "xAxis": {
             "type": "category",
-            "data": categories,
+            # Un mot par ligne (« Économie / d'impôt ») : les libellés ne se
+            # chevauchent plus, même sur un écran de téléphone.
+            "data": [c.replace(" ", "\n") for c in categories],
             "axisLine": {"onZero": False},
-            # Libellés sur deux lignes au besoin : lisibles sur un écran de téléphone.
-            "axisLabel": {
-                "interval": 0,
-                "fontSize": 11,
-                "width": 62,
-                "overflow": "break",
-                "lineHeight": 13,
-                **_AXES_TEXTE,
-            },
+            "axisLabel": {"interval": 0, "fontSize": 10, "lineHeight": 12, **_AXES_TEXTE},
         },
         "yAxis": axe_y,
         "series": [
