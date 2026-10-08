@@ -376,9 +376,7 @@ def _pied() -> str:
 </footer>"""
 
 
-def construire_accueil(
-    on_verifier: Callable[[dict], Awaitable[None]], on_simulateur: Callable[[], None]
-) -> ui.element:
+def construire_accueil(on_verifier: Callable[[dict], Awaitable[None]]) -> ui.element:
     """Construit la page d'accueil et renvoie son conteneur (masqué une fois
     le simulateur ouvert)."""
     racine = ui.element("div").classes("accueil")
@@ -394,7 +392,7 @@ def construire_accueil(
             ):
                 with ui.element("div").style("display:flex;flex-wrap:wrap;gap:40px 56px;align-items:center"):
                     ui.html(ACCROCHE).style("flex:1 1 440px;min-width:0")
-                    _formulaire(on_verifier, on_simulateur)
+                    _formulaire(on_verifier)
         ui.html(RESULTAT).classes("w-full")
         ui.html(COMMENT).classes("w-full")
         ui.html(TARIFS).classes("w-full")
@@ -403,7 +401,7 @@ def construire_accueil(
     return racine
 
 
-def _formulaire(on_verifier: Callable[[dict], Awaitable[None]], on_simulateur: Callable[[], None]) -> None:
+def _formulaire(on_verifier: Callable[[dict], Awaitable[None]]) -> None:
     with ui.element("div").props('id="verifier"').classes("carte-verif").style(
         "flex:1 1 360px;min-width:0;max-width:480px;border-radius:20px;padding:clamp(20px,2.6vw,32px);"
         "box-sizing:border-box;display:flex;flex-direction:column;gap:14px;box-shadow:0 24px 60px rgba(8,20,40,0.35)"
@@ -459,8 +457,3 @@ def _formulaire(on_verifier: Callable[[dict], Awaitable[None]], on_simulateur: C
             "unelevated no-caps size=lg color=accent text-color=white"
         ).classes("w-full font-bold")
         ui.label("Aucun compte, aucune adresse e-mail, rien n'est conservé.").classes("gris text-xs text-center w-full")
-        with ui.row().classes("w-full justify-center gap-x-4 gap-y-1 text-sm"):
-            ui.html('<a href="/exemple-dossier" target="_blank" rel="noopener" style="font-weight:600">Voir un exemple de dossier</a>')
-            ui.button("Ouvrir le simulateur complet", on_click=on_simulateur).props("flat dense no-caps").classes(
-                "text-sm -my-1"
-            )

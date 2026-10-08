@@ -12,7 +12,7 @@
 ## 2. État actuel
 
 **Terminé (en ligne sur credaura.fr, et en application Mac)**
-- Page d'accueil (bêta gratuite) : formulaire rapide (adresse, type, surface, prix, loyer facultatif) qui ouvre le simulateur prérempli ; un champ obligatoire manquant ouvre une fenêtre « Il manque encore… » (la même dans le simulateur quand on analyse le marché sans adresse) ; bouton du dossier « Renseigne ton projet et obtiens ton dossier » (offert pendant la bêta) ; FAQ ; tarifs annoncés « à l'ouverture » (19,90 € / 34,90 € les deux / 44,90 € les trois).
+- Page d'accueil (bêta gratuite) : formulaire rapide (adresse, type, surface, prix, loyer facultatif) qui ouvre le simulateur prérempli (sans lien « exemple » ni « simulateur complet » sous le bouton depuis le 8 octobre : on y accède par le menu et la carte du dossier) ; un champ obligatoire manquant ouvre une fenêtre « Il manque encore… » (la même dans le simulateur quand on analyse le marché sans adresse) ; bouton du dossier « Renseigne ton projet et obtiens ton dossier » (offert pendant la bêta) ; FAQ ; tarifs annoncés « à l'ouverture » (19,90 € / 34,90 € les deux / 44,90 € les trois).
 - Bandeau du menu fixé en haut de l'écran, sur l'accueil et sur les pages Contact et légales (avec un bouton « ← Accueil ») ; credaura.fr/simulateur ouvre directement le simulateur.
 - Simulateur en 6 étapes : Marché, Financement, Revenus et fiscalité, Résultats, Endettement, Dossier. Les saisies et estimations de l'étape Marché passent au financement en cliquant « Suivant » (plus de bouton « Utiliser ces valeurs ») ; prix et loyer saisis conservés.
 - Étude de marché automatique : géocodage, ventes comparables DVF, loyer de marché, cartes.

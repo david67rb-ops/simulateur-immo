@@ -589,7 +589,7 @@ def _page_principale(simulateur_ouvert: bool) -> None:
             ouvrir_simulateur()
             await demarrer_depuis_accueil(**valeurs)
 
-        page_accueil = accueil.construire_accueil(verifier, ouvrir_simulateur)
+        page_accueil = accueil.construire_accueil(verifier)
         if simulateur_ouvert:
             page_accueil.classes(add="masque")
 
