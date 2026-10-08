@@ -201,9 +201,12 @@ formel.
 ## Frais de notaire automatiques
 
 Barème réglementé des émoluments (arrêté 2020) + droits de mutation
-(5,80665 % en ancien, 0,715 % en neuf/VEFA car le prix supporte déjà la TVA)
-+ contribution de sécurité immobilière + débours forfaitaires. Estimation
-nationale standard (ne tient pas compte des rares départements à taux réduit).
+(6,3185 % en ancien, taux départemental de 5 % appliqué presque partout
+depuis le 1er avril 2025 ; 0,715 % en neuf/VEFA car le prix supporte déjà la
+TVA) + contribution de sécurité immobilière + débours forfaitaires.
+Estimation nationale standard (ne tient pas compte des rares départements
+restés à 4,50 % ni de l'exonération des primo-accédants en résidence
+principale).
 
 ## Extraction depuis un lien d'annonce
 

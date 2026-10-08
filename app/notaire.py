@@ -2,9 +2,12 @@
 
 Barème réglementé des émoluments (arrêté du 28/02/2020, tranches HT),
 + droits de mutation à titre onéreux (DMTO), + contribution de sécurité
-immobilière (CSI), + débours forfaitaires. Estimation standard, les
-départements ayant conservé le taux réduit de DMTO (Indre, Mayotte...)
-ne sont pas pris en compte (hypothèse simplificatrice).
+immobilière (CSI), + débours forfaitaires. Estimation standard au taux
+départemental de 5 % (relevé de 4,50 % à 5 % par la quasi-totalité des
+départements depuis le 1er avril 2025, jusqu'au 31 mars 2028, loi de
+finances 2025) : les rares départements restés à 4,50 % ou moins et
+l'exonération des primo-accédants (résidence principale seulement) ne sont
+pas pris en compte, ce qui reste prudent.
 """
 from __future__ import annotations
 
@@ -13,7 +16,9 @@ CSI_TAUX = 0.001
 CSI_MINIMUM = 15.0
 DEBOURS_FORFAIT = 900.0
 
-DMTO_ANCIEN = 0.0580665
+# Part départementale 5 % + frais d'assiette 2,37 % de cette part + taxe
+# communale 1,20 % = 6,3185 % (5,80665 % avant le 1er avril 2025).
+DMTO_ANCIEN = 0.05 * 1.0237 + 0.012
 DMTO_NEUF = 0.00715  # taxe de publicité foncière réduite (le prix supporte déjà la TVA)
 
 BAREME_EMOLUMENTS = [

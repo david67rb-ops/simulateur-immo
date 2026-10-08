@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 8 octobre 2026 (bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 8 octobre 2026 (droits de mutation passés à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -45,10 +45,10 @@
 
 **Frais de notaire** (`notaire.py`)
 - Émoluments au barème de 2020 (3,870 % / 1,596 % / 1,064 % / 0,799 % par tranches de 6 500 / 17 000 / 60 000 €), TVA 20 %.
-- Plus droits de mutation : 5,80665 % dans l'ancien, 0,715 % dans le neuf.
+- Plus droits de mutation : 6,3185 % dans l'ancien (taux départemental de 5 %, voté par presque tous les départements du 1er avril 2025 au 31 mars 2028 ; 5,80665 % avant), 0,715 % dans le neuf.
 - Plus contribution de sécurité immobilière : 0,1 %, minimum 15 €.
 - Plus 900 € de débours.
-- Pas de taux départementaux réduits.
+- Pas de taux départementaux réduits (départements restés à 4,50 %, Indre) ni d'exonération primo-accédant : estimation un peu prudente.
 
 **Revenus et charges** (`simulation.py`, `saisonnalite.py`)
 - Longue durée : loyer annuel = loyer mensuel × 12 × (1 − vacance). Défauts : loyer 750 €, vacance 5 %.
