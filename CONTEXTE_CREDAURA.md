@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 7 octobre 2026 (déficit foncier et travaux en location nue corrigés ; retouches iPhone de l'accueil et du simulateur), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 8 octobre 2026 (bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -13,7 +13,8 @@
 
 **Terminé (en ligne sur credaura.fr, et en application Mac)**
 - Page d'accueil (bêta gratuite) : formulaire rapide (adresse, type, surface, prix, loyer facultatif) qui ouvre le simulateur prérempli ; un champ obligatoire manquant ouvre une fenêtre « Il manque encore… » (la même dans le simulateur quand on analyse le marché sans adresse) ; bouton du dossier « Renseigne ton projet et obtiens ton dossier » (offert pendant la bêta) ; FAQ ; tarifs annoncés « à l'ouverture » (19,90 € / 34,90 € les deux / 44,90 € les trois).
-- Simulateur en 6 étapes : Marché, Financement, Revenus et fiscalité, Résultats, Endettement, Dossier.
+- Bandeau du menu fixé en haut de l'écran, sur l'accueil et sur les pages Contact et légales (avec un bouton « ← Accueil ») ; credaura.fr/simulateur ouvre directement le simulateur.
+- Simulateur en 6 étapes : Marché, Financement, Revenus et fiscalité, Résultats, Endettement, Dossier. Les saisies et estimations de l'étape Marché passent au financement en cliquant « Suivant » (plus de bouton « Utiliser ces valeurs ») ; prix et loyer saisis conservés.
 - Étude de marché automatique : géocodage, ventes comparables DVF, loyer de marché, cartes.
 - Verdict en 3 niveaux (solide / à renforcer / à revoir), prix d'achat maximum, scénarios de stress.
 - Dossier Word (≈ 14 pages) : formules Complet, Banque, Personnel ; exemple fictif téléchargeable.

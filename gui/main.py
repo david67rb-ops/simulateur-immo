@@ -523,6 +523,17 @@ def message_erreur(exc: Exception) -> str:
 
 @ui.page("/")
 def index_page() -> None:
+    _page_principale(simulateur_ouvert=False)
+
+
+@ui.page("/simulateur")
+def page_simulateur() -> None:
+    """Le simulateur directement (liens « Ouvrir le simulateur » des autres
+    pages du site) ; « Accueil » y ramène à l'accueil sans recharger."""
+    _page_principale(simulateur_ouvert=True)
+
+
+def _page_principale(simulateur_ouvert: bool) -> None:
     theme.apply_theme()
     apercus_dossier.installer()
     statistiques.installer()
@@ -579,8 +590,12 @@ def index_page() -> None:
             await demarrer_depuis_accueil(**valeurs)
 
         page_accueil = accueil.construire_accueil(verifier, ouvrir_simulateur)
+        if simulateur_ouvert:
+            page_accueil.classes(add="masque")
 
-    simulateur = ui.column().classes("w-full max-w-6xl mx-auto gap-5 p-4" + (" masque" if sur_le_site else ""))
+    simulateur = ui.column().classes(
+        "w-full max-w-6xl mx-auto gap-5 p-4" + (" masque" if sur_le_site and not simulateur_ouvert else "")
+    )
     with simulateur:
         with ui.element("div").classes("w-full relative mb-2"):
             # Bouton du thème dans le coin, hors du flux : le titre reste centré
@@ -860,7 +875,6 @@ def _build_investor_view():
 
                         market_note = ui.label("").classes(theme.HINT_CLASSES)
                         carte_rentabilite = CarteRentabilite()
-                        btn_use_market = ui.button("Utiliser ces valeurs dans l'onglet Financement →").props("outline")
 
             # -----------------------------------------------------------------
             # Onglet Financement (le bien + emprunt + spécifique achat-revente)
@@ -1842,7 +1856,17 @@ def _build_investor_view():
                     'unelevated no-caps icon-right="arrow_forward"'
                 )
 
+    etape_affichee = {"tab": tab_marche}
+
     def sur_changement_etape(_e=None) -> None:
+        # Les saisies de l'étape Marché suivent toujours : plus besoin d'un
+        # bouton « Utiliser ces valeurs », « Suivant » suffit.
+        nouvelle = etape_courante()
+        if etape_affichee["tab"] is tab_marche and nouvelle is not tab_marche:
+            reprendre_saisies_marche()
+        elif nouvelle is tab_marche and etape_affichee["tab"] is not tab_marche:
+            afficher_saisies_dans_marche()
+        etape_affichee["tab"] = nouvelle
         if etape_courante() is tab_resultats:
             etapes_faites.add(tab_resultats)
         dessiner_etapes()
@@ -2312,13 +2336,19 @@ def _build_investor_view():
 
     btn_airbnb.on_click(on_ouvrir_airbnb)
 
-    def on_use_market() -> None:
-        result = ctx.get("last_market_result")
-        if not result:
-            return
+    def reprendre_saisies_marche() -> None:
+        """En quittant l'étape Marché (Suivant ou frise) : le type de bien,
+        la surface et « bien neuf » passent au financement ; les estimations
+        d'une nouvelle analyse aussi, une seule fois par analyse (une valeur
+        modifiée ensuite au financement n'est plus écrasée)."""
         sim_state["type_bien"] = market_state["type_bien"]
-        sim_state["surface_m2"] = market_state["surface_m2"]
+        if market_state.get("surface_m2"):
+            sim_state["surface_m2"] = market_state["surface_m2"]
         sim_state["bien_neuf"] = bool(market_state.get("bien_neuf"))
+        result = ctx.get("last_market_result")
+        if not result or ctx.get("marche_repris") is result:
+            return
+        ctx["marche_repris"] = result
         # Le prix et le loyer saisis par le client sont conservés : seules les
         # valeurs encore « par défaut » prennent celles du marché.
         if result.get("prix_marche_estime") and not ctx["prix_renseigne"]:
@@ -2337,13 +2367,17 @@ def _build_investor_view():
             field_loyer.set_value(sim_state["loyer_mensuel_hors_charges"])
         conserves = [nom for nom, cle in (("ton prix", "prix_renseigne"), ("ton loyer", "loyer_renseigne")) if ctx[cle]]
         ui.notify(
-            "Valeurs du marché appliquées"
+            "Valeurs du marché reprises"
             + (f" ({' et '.join(conserves)} conservé{'s' if len(conserves) > 1 else ''})." if conserves else "."),
             type="positive",
         )
-        tab_panels.set_value(tab_financement)
 
-    btn_use_market.on_click(on_use_market)
+    def afficher_saisies_dans_marche() -> None:
+        """En revenant à l'étape Marché : elle montre le type et la surface
+        du financement (modifiés entre-temps peut-être)."""
+        market_state["type_bien"] = sim_state["type_bien"]
+        market_state["surface_m2"] = sim_state["surface_m2"]
+        market_state["bien_neuf"] = bool(sim_state.get("bien_neuf"))
 
     # =====================================================================
     # Logique : simulateur (recalcul automatique, onglet Résultats)

@@ -26,6 +26,13 @@ CSS = """
 .accueil .surtitre { font-size: 13px; font-weight: 600; letter-spacing: 0.14em; color: #86662A; }
 .accueil .titre-section { font-family: Sora, sans-serif; font-weight: 600; font-size: clamp(26px, 3vw, 36px); line-height: 1.2; }
 .accueil .gris { color: #4A5563; }
+/* Bandeau du menu fixé en haut de l'écran (accueil et autres pages du site). */
+.barre-menu { position: sticky; top: 0; z-index: 40; background: #1B3358; color: #FFFFFF; font-family: 'Public Sans', sans-serif; font-size: 16px; line-height: 1.5; transition: box-shadow 0.2s ease; }
+.barre-menu.defile { box-shadow: 0 6px 24px rgba(8, 20, 40, 0.28); }
+.barre-menu .bloc-barre { max-width: 1200px; margin: 0 auto; box-sizing: border-box; padding: 14px clamp(16px, 4vw, 48px); }
+.barre-menu .nav-liens a:not([style*="background"]):hover { color: #E9D8B0 !important; }
+/* Les rubriques visées par le menu ne passent pas sous le bandeau. */
+.accueil [id] { scroll-margin-top: 84px; }
 .nav-mobile { display: none; position: relative; }
 .nav-mobile .bouton-menu { width: 44px; height: 44px; padding: 0; border-radius: 10px; border: 1.5px solid rgba(233, 216, 176, 0.5); background: transparent; display: flex; align-items: center; justify-content: center; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 0.2s; }
 .nav-mobile .bouton-menu:focus { outline: none; }
@@ -76,7 +83,7 @@ RESEAUX = (
     ("https://www.facebook.com/profile.php?id=61595308522377", "Facebook"),
     ("https://www.youtube.com/@credaura.fr1", "YouTube"),
 )
-# Ouvre le simulateur complet (événement traité par le serveur, voir index_page).
+# Ouvre le simulateur complet (événement traité par le serveur, voir _page_principale).
 OUVRIR_SIMULATEUR = "this.closest('.nav-mobile')?.classList.remove('ouvert'); emitEvent('ouvrir_simulateur'); return false;"
 CHEVRON = (
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A8823B" stroke-width="2.2" '
@@ -91,21 +98,30 @@ LIENS_MENU = (
 )
 
 
-def _entete() -> str:
-    liens = "".join(f'<a href="{h}" style="color:#FFFFFF;text-decoration:none">{t}</a>' for h, t in LIENS_MENU)
+def _entete(sur_accueil: bool) -> str:
+    """Bandeau du menu. Sur les autres pages du site (contact, pages
+    légales), les liens ramènent à l'accueil ou au simulateur, et
+    « Accueil » est le premier lien."""
+    prefixe = "" if sur_accueil else "/"
+    if sur_accueil:
+        simulateur = f'href="#simulateur" onclick="{OUVRIR_SIMULATEUR}"'
+    else:
+        simulateur = 'href="/simulateur"'
+    rubriques = (() if sur_accueil else (("/", "Accueil"),)) + tuple((prefixe + h, t) for h, t in LIENS_MENU)
+    liens = "".join(f'<a href="{h}" style="color:#FFFFFF;text-decoration:none">{t}</a>' for h, t in rubriques)
     # Le menu se referme quand on choisit une rubrique.
     # Le simulateur d'abord : c'est l'action principale.
     liens_menu = (
-        f'<a href="#simulateur" class="menu-simulateur" onclick="{OUVRIR_SIMULATEUR}"><span>Ouvrir le simulateur</span>'
+        f'<a {simulateur} class="menu-simulateur"><span>Ouvrir le simulateur</span>'
         + CHEVRON.replace("#A8823B", "#FFFFFF")
         + "</a>"
     )
     liens_menu += "".join(
         f'<a href="{h}" onclick="this.closest(\'.nav-mobile\').classList.remove(\'ouvert\')"><span>{t}</span>{CHEVRON}</a>'
-        for h, t in LIENS_MENU
+        for h, t in rubriques
     )
     return f"""
-<header style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 32px">
+<header class="bloc-barre" style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px 32px">
   <a href="/" style="display:flex;align-items:center;gap:12px;text-decoration:none;color:#FFFFFF">{LOGO}
     <span style="display:flex;flex-direction:column;gap:3px">
       <span style="font-family:Sora,sans-serif;font-weight:700;font-size:22px;line-height:1">Cred<span style="color:{LAITON_CLAIR}">aura</span></span>
@@ -113,7 +129,7 @@ def _entete() -> str:
     </span>
   </a>
   <nav class="nav-liens" aria-label="Navigation principale" style="display:flex;flex-wrap:wrap;align-items:center;gap:8px 24px;font-size:15px">
-    <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="color:{ENCRE};background:{LAITON_CLAIR};text-decoration:none;font-weight:600;padding:10px 16px;border-radius:10px">Ouvrir le simulateur</a>
+    <a {simulateur} style="color:{ENCRE};background:{LAITON_CLAIR};text-decoration:none;font-weight:600;padding:10px 16px;border-radius:10px">Ouvrir le simulateur</a>
     {liens}
   </nav>
   <div class="nav-mobile">
@@ -124,6 +140,25 @@ def _entete() -> str:
     <div class="menu-deroulant">{liens_menu}</div>
   </div>
 </header>"""
+
+
+def barre_menu(sur_accueil: bool) -> ui.element:
+    """Bandeau du menu, fixé en haut de l'écran : les rubriques restent à
+    portée de main jusqu'en bas de la page. Une ombre apparaît dès qu'on
+    fait défiler la page."""
+    ui.add_css(CSS)
+    # Menu du téléphone : se referme aussi quand on touche ailleurs sur la page.
+    ui.add_body_html(
+        "<script>"
+        "window.basculerMenu = b => { const n = b.closest('.nav-mobile'); const o = n.classList.toggle('ouvert');"
+        " b.setAttribute('aria-expanded', o); };"
+        "document.addEventListener('click', e => document.querySelectorAll('.nav-mobile.ouvert').forEach(n => {"
+        " if (!n.contains(e.target)) { n.classList.remove('ouvert'); n.querySelector('.bouton-menu').setAttribute('aria-expanded', false); } }));"
+        "window.addEventListener('scroll', () => document.querySelectorAll('.barre-menu').forEach("
+        "b => b.classList.toggle('defile', window.scrollY > 4)), {passive: true});"
+        "</script>"
+    )
+    return ui.html(_entete(sur_accueil)).classes("barre-menu w-full")
 
 
 ACCROCHE = f"""
@@ -346,27 +381,17 @@ def construire_accueil(
 ) -> ui.element:
     """Construit la page d'accueil et renvoie son conteneur (masqué une fois
     le simulateur ouvert)."""
-    ui.add_css(CSS)
-    # Menu du téléphone : se referme aussi quand on touche ailleurs sur la page.
-    ui.add_body_html(
-        "<script>"
-        "window.basculerMenu = b => { const n = b.closest('.nav-mobile'); const o = n.classList.toggle('ouvert');"
-        " b.setAttribute('aria-expanded', o); };"
-        "document.addEventListener('click', e => document.querySelectorAll('.nav-mobile.ouvert').forEach(n => {"
-        " if (!n.contains(e.target)) { n.classList.remove('ouvert'); n.querySelector('.bouton-menu').setAttribute('aria-expanded', false); } }));"
-        "</script>"
-    )
     racine = ui.element("div").classes("accueil")
     with racine:
         ui.html(
             f'<div style="background:{LAITON_CLAIR};color:{ENCRE};text-align:center;font-size:14px;font-weight:600;padding:9px 16px">'
             "Bêta gratuite : pendant le lancement, le dossier de financement est offert.</div>"
         ).classes("w-full")
+        barre_menu(sur_accueil=True)
         with ui.element("div").style(f"background:{BLEU};color:#FFFFFF").classes("w-full"):
             with ui.element("div").classes("bloc").style(
-                "padding-top:20px;padding-bottom:clamp(40px,7vw,88px);display:flex;flex-direction:column;gap:clamp(28px,5vw,64px)"
+                "padding-top:clamp(20px,4vw,48px);padding-bottom:clamp(40px,7vw,88px);display:flex;flex-direction:column;gap:clamp(28px,5vw,64px)"
             ):
-                ui.html(_entete()).classes("w-full")
                 with ui.element("div").style("display:flex;flex-wrap:wrap;gap:40px 56px;align-items:center"):
                     ui.html(ACCROCHE).style("flex:1 1 440px;min-width:0")
                     _formulaire(on_verifier, on_simulateur)

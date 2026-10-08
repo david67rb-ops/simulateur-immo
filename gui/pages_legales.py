@@ -11,6 +11,7 @@ from nicegui import app, ui
 from app.chapitres_dossier import MENTION_LEGALE
 
 from . import statistiques, theme
+from .accueil import barre_menu
 
 # --- Éditeur (adresse vide = éditeur non professionnel, avant l'immatriculation)
 EDITEUR_NOM = "David Lehmann"
@@ -49,21 +50,28 @@ def liens_legaux(nouvel_onglet: bool = False) -> None:
 
 
 def _gabarit(titre: str, date: bool = True):
-    """En-tête commun (logo qui ramène au simulateur) et colonne de lecture."""
+    """Bandeau du menu de l'accueil (fixé en haut, avec « Accueil ») et
+    colonne de lecture."""
     theme.apply_theme()
     statistiques.installer()
     ui.dark_mode(value=None)
     ui.add_css(
+        ".nicegui-content { padding: 0 !important; gap: 0 !important; }"
         ".texte-legal h2 { font-family: Sora, sans-serif; font-size: 1.15rem; font-weight: 600; line-height: 1.3; margin: 1.6em 0 0.4em; }"
         ".texte-legal p, .texte-legal li { line-height: 1.6; }"
         ".texte-legal ul { list-style: disc; padding-left: 1.3em; margin: 0.4em 0; }"
         ".texte-legal a { color: var(--c-marque-texte); }"
     )
-    colonne = ui.column().classes("w-full max-w-3xl mx-auto gap-2 p-4 pb-10")
+    barre_menu(sur_accueil=False)
+    colonne = ui.column().classes("w-full max-w-3xl mx-auto gap-2 p-4 pt-8 pb-10")
     with colonne:
-        with ui.element("a").props('href="/"').classes("flex items-center gap-3 no-underline text-inherit mb-4"):
-            ui.html(theme.LOGO_SVG)
-            ui.html('Cred<span class="text-[color:var(--c-laiton)]">aura</span>').classes("text-xl font-bold")
+        # Même bouton que dans le simulateur, visible aussi sur téléphone
+        # (où « Accueil » est rangé dans le menu).
+        with ui.element("a").props('href="/"').classes(
+            "flex items-center gap-1 no-underline text-[color:var(--c-marque-texte)] font-semibold text-sm -ml-1 mb-1"
+        ):
+            ui.icon("arrow_back", size="20px")
+            ui.label("Accueil")
         ui.label(titre).classes("text-3xl font-bold titre-sora")
         if date:
             ui.label(f"Dernière mise à jour : {MISE_A_JOUR}").classes(theme.HINT_CLASSES)
