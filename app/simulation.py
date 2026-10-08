@@ -458,6 +458,9 @@ def _simuler_location(inp: SimulationInput) -> dict:
         "mensualite_annee1_hors_assurance": loan_schedule[0].mensualite_hors_assurance / 12
         if loan_schedule
         else 0.0,
+        # Assurance emprunteur (sur le capital initial, constante) : la règle
+        # des 35 % du HCSF compte la mensualité assurance comprise.
+        "assurance_emprunteur_mensuelle": loan_schedule[0].assurance_annuelle / 12 if loan_schedule else 0.0,
         "differe_actif": differe_actif,
         "rendement_brut": rendement_brut,
         "rendement_net_charges": rendement_net_charges,

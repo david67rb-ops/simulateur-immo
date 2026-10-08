@@ -251,7 +251,7 @@ COMMENT = f"""
       <h2 class="titre-section">De l'annonce au rendez-vous bancaire, en trois étapes</h2>
     </div>
     <div style="display:flex;flex-wrap:wrap;gap:20px">
-      {_etape("1", "Tu entres l'adresse et le prix", "Surface, prix affiché, et ton loyer si tu le connais. Pas de compte, pas d'e-mail.")}
+      {_etape("1", "Tu entres l'adresse et le prix", "Surface, prix affiché et ton loyer si tu le connais. Pas de compte, pas d'e-mail.")}
       {_etape("2", "Je vérifie le projet", "Prix comparé aux ventes réelles autour du bien, loyer du marché, rentabilité et cash-flow : tu sais tout de suite si ça tient.")}
       {_etape("3", "Tu repars avec ton dossier", "Tu complètes ton financement et ton profil, puis tu télécharges le dossier à remettre à ta banque.")}
     </div>

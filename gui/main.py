@@ -336,7 +336,7 @@ class BlocPrixVentes:
         self.renvoi_dossier.visible = bool(ventes) and not offre.DETAIL_DANS_LE_SIMULATEUR
         self.renvoi_dossier.set_text(
             "La liste détaillée des ventes comparables (adresse, date, prix, distance) figure dans le dossier de "
-            "financement (onglet Dossier)."
+            "financement (étape Dossier)."
         )
         self.expansion.text = (
             f"Voir les {n} ventes comparables" if n <= len(ventes) else f"Voir les {len(ventes)} ventes les plus récentes"
@@ -460,7 +460,7 @@ LIBELLES_CHAMPS = {
     "frais_gestion_pct_loyers": "Frais de gestion (% des loyers)",
     "vacance_locative_pct": "Vacance locative (%)",
     "entretien_annuel": "Entretien annuel (€)",
-    "frais_comptable_annuel": "Frais comptable/an (€)",
+    "frais_comptable_annuel": "Frais de comptabilité/an (€)",
     "cfe_annuelle": "CFE/an (€)",
     "gli_pct_loyers": "Assurance loyers impayés (% des loyers)",
     "taux_frais_garantie": "Frais de garantie (% du prêt)",
@@ -634,7 +634,7 @@ def _page_principale(simulateur_ouvert: bool) -> None:
         ui.label(
             "Sources marché : API Adresse (BAN), DVF géolocalisé (data.gouv.fr), Carte des loyers DHUP/ANIL. "
             "Fiscalité : barème IR 2026 sur revenus 2025, IS 2026, réforme LMNP (loi de finances 2025, art. 84). "
-            "Voir le README pour les hypothèses détaillées."
+            "Les hypothèses de calcul sont rappelées à la fin du dossier (Mentions et méthodologie)."
         ).classes(theme.HINT_CLASSES + " text-center mt-2")
         ui.label(MENTION_LEGALE).classes(theme.HINT_CLASSES + " text-center")
         pages_legales.liens_legaux(nouvel_onglet=True)
@@ -744,7 +744,7 @@ def _build_investor_view():
                     '<span class="pastille-legende" '
                     'style="background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)"></span>'
                 )
-                ui.label("Calculé automatiquement (modifiable)")
+                ui.label("Champ sur fond bleu : calculé automatiquement, tu peux le modifier")
 
         # -- Étapes du parcours : les onglets Quasar pilotent les panneaux mais
         # restent masqués ; la frise d'étapes et la barre Précédent / Suivant
@@ -917,7 +917,7 @@ def _build_investor_view():
                             "montant_mobilier",
                             suffixe="€",
                             min=0,
-                            aide="Meubles et équipements d'une location meublée, amortis sur la durée indiquée en Fiscalité.",
+                            aide="Meubles et équipements d'une location meublée, amortis sur la durée indiquée à l'étape Revenus (amortissements).",
                         )
                         refs["field_taxe_fonciere"] = champ(
                             "Taxe foncière", sim_state, "taxe_fonciere_annuelle", suffixe="€/an", min=0
@@ -1154,7 +1154,7 @@ def _build_investor_view():
                                                 )
                     refs["fieldset_lcd"] = fieldset_lcd
 
-                    with plus_d_options("Plus d'options : gestion, entretien, comptable, CFE, loyers impayés"):
+                    with plus_d_options("Plus d'options : gestion, entretien, comptabilité, CFE, loyers impayés"):
                         with ui.row().classes(theme.GRID_CLASSES + " pt-2"):
                             refs["field_frais_gestion"] = champ(
                                 "Frais de gestion",
@@ -1170,7 +1170,7 @@ def _build_investor_view():
                                 aide="Budget annuel de petites réparations.",
                             )
                             refs["field_frais_comptable"] = champ(
-                                "Frais comptable",
+                                "Frais de comptabilité",
                                 sim_state,
                                 "frais_comptable_annuel",
                                 suffixe="€/an",
@@ -1360,7 +1360,7 @@ def _build_investor_view():
                         v_prix_max = theme.stat_card(
                             "Prix d'achat maximum",
                             aide_texte="Prix le plus élevé qui respecte ton objectif de cash-flow "
-                            "(Fiscalité > Plus d'options). Utile pour négocier.",
+                            "(étape Revenus, « évolution des prix et objectifs »). Utile pour négocier.",
                         )
                     detail_location = ui.label("").classes(theme.HINT_CLASSES)
 
@@ -1389,7 +1389,7 @@ def _build_investor_view():
                         if not offre.DETAIL_DANS_LE_SIMULATEUR:
                             ui.label(
                                 "Le détail mois par mois (occupation, recettes, dépenses et cash-flow) figure dans "
-                                "le dossier de financement (onglet Dossier)."
+                                "le dossier de financement (étape Dossier)."
                             ).classes(theme.HINT_CLASSES)
 
                     ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
@@ -1398,7 +1398,7 @@ def _build_investor_view():
                             colonne("regime", "Régime", gauche=True),
                             colonne("revenu", "Revenu imposable"),
                             colonne("impot", "Impôt total"),
-                            colonne("cashflow", "Cash-flow mensuel net"),
+                            colonne("cashflow", "Cash-flow net mensuel"),
                             colonne("netnet", "Rendement net-net"),
                             colonne("tri", "TRI (avec revente)"),
                         ],
@@ -1410,7 +1410,7 @@ def _build_investor_view():
                     table_stress = ui.table(
                         columns=[
                             colonne("scenario", "Scénario", gauche=True),
-                            colonne("cashflow", "Cash-flow mensuel net (an 1)"),
+                            colonne("cashflow", "Cash-flow net mensuel (an 1)"),
                             colonne("tri", "TRI"),
                             colonne("enrichissement", "Enrichissement net"),
                         ],
@@ -1464,7 +1464,7 @@ def _build_investor_view():
                         v_ar_prix_max = theme.stat_card(
                             "Prix d'achat maximum",
                             aide_texte="Prix le plus élevé qui respecte ton objectif de marge nette "
-                            "(Fiscalité > Plus d'options). Nécessite un prix de revente visé.",
+                            "(étape Revenus, « évolution des prix et objectifs »). Nécessite un prix de revente visé.",
                         )
                     table_achat_revente = ui.table(
                         columns=[colonne("k", "", gauche=True), colonne("v", "")],
@@ -1489,7 +1489,7 @@ def _build_investor_view():
             with ui.tab_panel(tab_endettement) as panneau_endettement:
                 with theme.section_card():
                     ui.label(
-                        "Calcule le taux d'endettement du foyer à partir de la simulation (onglets précédents), "
+                        "Calcule le taux d'endettement du foyer à partir de la simulation (étapes précédentes), "
                         "indépendamment du calcul de rentabilité."
                     ).classes(theme.HINT_CLASSES + " mb-2")
 
@@ -1584,14 +1584,17 @@ def _build_investor_view():
                             btn_code = ui.button("Ouvrir le dossier").props("unelevated no-caps")
                         code_status = ui.label("").classes("text-sm")
 
-                    with ui.row().classes(theme.GRID_CLASSES):
+                    # Deux colonnes seulement : les intitulés, longs, restent lisibles en entier.
+                    with ui.element("div").classes("w-full grid grid-cols-1 md:grid-cols-2 gap-3"):
                         refs["field_nom_emprunteur"] = ui.input(
                             "Nom de l'emprunteur (optionnel)", value=dossier_meta_state["nom_emprunteur"]
                         ).bind_value(dossier_meta_state, "nom_emprunteur").props("outlined dense").classes("w-full")
                         ui.input(
-                            "Adresse du bien (optionnel, sinon reprise de l'analyse de marché)",
+                            "Adresse du bien (optionnel)",
                             value=dossier_meta_state["adresse_bien"],
-                        ).bind_value(dossier_meta_state, "adresse_bien").props("outlined dense").classes("w-full")
+                        ).bind_value(dossier_meta_state, "adresse_bien").props(
+                            'outlined dense hint="Sinon, le dossier reprend celle de l\'étape Marché."'
+                        ).classes("w-full")
 
                     theme.subsection_title("Photos du bien")
                     ui.label(
@@ -1612,10 +1615,10 @@ def _build_investor_view():
                     rangee_photos = ui.row().classes("gap-2 flex-wrap")
                     photos_status = ui.label("").classes(theme.HINT_CLASSES)
 
-                    theme.subsection_title("Contenu du rapport")
+                    theme.subsection_title("Contenu du dossier")
                     ui.label(
                         "La page de garde, la synthèse, les points d'attention et les mentions sont toujours inclus. "
-                        "Chaque chapitre tient sur une page. L'étude de marché reprend l'analyse de l'onglet Marché "
+                        "Chaque chapitre tient sur une page. L'étude de marché reprend l'analyse de l'étape Marché "
                         "(lancée automatiquement si l'adresse est renseignée)."
                     ).classes(theme.HINT_CLASSES)
                     with ui.row().classes("items-center gap-2 mt-1"):
@@ -1949,9 +1952,9 @@ def _build_investor_view():
         mediane = ((ctx.get("marche_dossier") or {}).get("comparables") or {}).get("prix_m2_moyen")
         surface = sim_state.get("surface_m2")
         if not mediane:
-            return None, "Lancez l'étude de marché pour le comparer au quartier"
+            return None, "Lance l'étude de marché pour le comparer au quartier"
         if not ctx["prix_renseigne"] or not surface:
-            return None, "Saisissez le prix d'achat pour le comparer au quartier"
+            return None, "Saisis le prix d'achat pour le comparer au quartier"
         return sim_state["prix_achat"] / surface / mediane - 1, ""
 
     def calculer_verdict(inp, resultat: dict) -> dict:
@@ -1962,7 +1965,10 @@ def _build_investor_view():
                 mensualite = resultat["achat_revente"]["frais_portage_interets"] / inp.duree_portage_mois
                 loyers = 0.0
             else:
-                mensualite = resultat.get("mensualite_credit_hors_assurance", 0.0)
+                # Taux d'endettement HCSF : mensualité assurance comprise.
+                mensualite = resultat.get("mensualite_credit_hors_assurance", 0.0) + resultat.get(
+                    "assurance_emprunteur_mensuelle", 0.0
+                )
                 loyers = resultat["annees"][0]["loyers_bruts"] / 12
             profil = build_profil_input(profil_state)
             endettement = endet_mod.calculer_taux_endettement(
@@ -2229,7 +2235,7 @@ def _build_investor_view():
     async def _analyser_marche() -> None:
         adresse = (market_state.get("adresse") or "").strip()
         if not adresse:
-            market_status.set_text("Merci de saisir une adresse.")
+            market_status.set_text("Indique l'adresse du bien.")
             return
         market_status.set_text("Analyse en cours…")
         market_results.visible = False
@@ -2654,7 +2660,7 @@ def _build_investor_view():
         if e.value == saisonnalite.REGION:
             if not appliquer_saisonnalite_region():
                 ui.notify(
-                    "Analyse d'abord l'adresse du bien dans l'onglet Marché pour connaître sa région.",
+                    "Analyse d'abord l'adresse du bien à l'étape Marché pour connaître sa région.",
                     type="warning",
                 )
                 select_saisonnalite.set_value("uniforme")
@@ -2736,7 +2742,10 @@ def _build_investor_view():
             mensualite_projet = ar.frais_portage_interets / inp.duree_portage_mois
             loyers_mensuels = 0.0
         else:
-            mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0)
+            # Taux d'endettement HCSF : mensualité assurance comprise.
+            mensualite_projet = resultat.get("mensualite_credit_hors_assurance", 0.0) + resultat.get(
+                "assurance_emprunteur_mensuelle", 0.0
+            )
             loyers_mensuels = resultat["annees"][0].loyers_bruts / 12
         profil = build_profil_input(profil_state)
         r = endet_mod.calculer_taux_endettement(

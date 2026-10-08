@@ -24,7 +24,7 @@ HEBERGEUR = (
     "Render Services, Inc., 525 Brannan Street, Suite 300, San Francisco, CA 94107, "
     "États-Unis · +1 415 319 8186 · [render.com](https://render.com)"
 )
-MISE_A_JOUR = "5 octobre 2026"
+MISE_A_JOUR = "8 octobre 2026"
 
 A_COMPLETER = '<span style="background:#fde68a;color:#7c2d12;padding:0 4px;border-radius:4px">à compléter</span>'
 
@@ -137,7 +137,7 @@ générez vous appartiennent : vous pouvez les utiliser et les transmettre libre
 - Base Adresse Nationale, demandes de valeurs foncières (DVF, DGFiP), carte des loyers (DHUP / ANIL) et
   découpage administratif (geo.api.gouv.fr) : données publiques réutilisées sous Licence Ouverte Etalab 2.0.
 - Fréquentation touristique : Eurostat.
-- Fonds de carte : © les contributeurs d'[OpenStreetMap](https://www.openstreetmap.org/copyright) (licence ODbL).
+- Fonds de carte du site : © les contributeurs d'[OpenStreetMap](https://www.openstreetmap.org/copyright) (licence ODbL) ; cartes du dossier : Plan IGN (Géoplateforme), Licence Ouverte Etalab 2.0.
 - Polices Sora et Public Sans : SIL Open Font License.
 
 ## Données personnelles
@@ -197,6 +197,8 @@ répondre aux messages reçus.
   de la page. Rechargez la page et tout repart de zéro.
 - Le dossier Word est fabriqué à la demande et téléchargé sur votre appareil. Pour l'aperçu, il est gardé
   en mémoire le temps de l'afficher, à une adresse à usage unique.
+- « Enregistrer mon projet » crée un fichier sur votre appareil, et nulle part ailleurs : le site n'en garde
+  aucune copie. Vous le rouvrez quand vous le souhaitez pour reprendre votre projet.
 - Les journaux techniques de l'hébergeur sont conservés pour une durée limitée, selon sa propre politique.
   Ils ne contiennent pas les informations que vous saisissez.
 - Les messages reçus par e-mail sont conservés le temps de traiter votre demande ; vous pouvez demander

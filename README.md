@@ -188,7 +188,8 @@ Section indépendante du simulateur de rentabilité : à partir des revenus du
 foyer, des autres revenus et des mensualités de crédits déjà en cours,
 calcule le taux d'endettement en reprenant la pratique bancaire française
 standard — les loyers prévisionnels du projet ne sont retenus qu'à hauteur de
-**70 %** (pondération de prudence), et le seuil de référence est celui du
+**70 %** (pondération de prudence), la mensualité du projet est comptée
+assurance emprunteur comprise, et le seuil de référence est celui du
 HCSF (**35 %**). Le « reste à vivre », autre critère bancaire courant, n'est
 pas calculé (dépend du nombre de personnes au foyer et de barèmes internes
 propres à chaque banque) — limite documentée, à approfondir si besoin.

@@ -185,7 +185,7 @@ def apply_theme() -> None:
           @keyframes maj-flash { 0% { background: color-mix(in srgb, var(--c-laiton) 35%, transparent); } 100% { background: transparent; } }
           .maj-flash { animation: maj-flash 1.2s ease-out; border-radius: 6px; }
           /* Import des photos du dossier : pas de liste de fichiers, les miniatures suffisent. */
-          .uploader-photos .q-uploader__list, .uploader-projet .q-uploader__list, .uploader-projet .q-uploader__subtitle { display: none; }
+          .uploader-photos .q-uploader__list, .uploader-photos .q-uploader__subtitle, .uploader-projet .q-uploader__list, .uploader-projet .q-uploader__subtitle { display: none; }
           /* iPhone : un champ en dessous de 16 px fait zoomer la page à la saisie, et la page reste
              ensuite décalée. */
           @media (max-width: 760px) { .q-field__native, .q-field__input, .q-select__dropdown-icon + input { font-size: 16px !important; } }
@@ -318,7 +318,7 @@ ICONES_RUBRIQUES = {
     "Location courte durée": "luggage",
     "Régime locatif & fiscalité": "receipt_long",
     "Photos du bien": "photo_camera",
-    "Contenu du rapport": "checklist",
+    "Contenu du dossier": "checklist",
     "Aperçu du dossier": "visibility",
 }
 

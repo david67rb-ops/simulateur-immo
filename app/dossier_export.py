@@ -706,7 +706,9 @@ def _mensualite_et_loyers(inp, resultat: dict, is_achat_revente: bool) -> tuple[
     if is_achat_revente:
         ar = resultat["achat_revente"]
         return ar["frais_portage_interets"] / inp.duree_portage_mois, 0.0
-    return resultat.get("mensualite_credit_hors_assurance", 0.0), resultat["annees"][0]["loyers_bruts"] / 12
+    # Taux d'endettement HCSF : mensualité assurance comprise.
+    mensualite = resultat.get("mensualite_credit_hors_assurance", 0.0) + resultat.get("assurance_emprunteur_mensuelle", 0.0)
+    return mensualite, resultat["annees"][0]["loyers_bruts"] / 12
 
 
 def _frais_bancaires(resultat: dict, is_achat_revente: bool) -> float:
@@ -1629,7 +1631,7 @@ def _section_charges(doc, inp, annee1, is_meublee, is_lcd):
         lignes.append(("Frais de ménage annuels", _eur(inp.frais_menage_annuel)))
     if is_meublee:
         charges_items.append(("Comptable", inp.frais_comptable_annuel))
-        lignes.append(("Frais comptable annuel", _eur(inp.frais_comptable_annuel)))
+        lignes.append(("Frais de comptabilité annuels", _eur(inp.frais_comptable_annuel)))
         if inp.cfe_annuelle > 0:
             lignes.append(("CFE (due à partir de la 2e année)", _eur(inp.cfe_annuelle)))
     lignes.append(("Total des charges hors crédit (année 1)", _eur(annee1["charges_hors_credit"]), "total"))
@@ -1666,7 +1668,7 @@ def _section_loyer_mensuel(doc, resultat):
             ("Effort d'épargne / mois", _eur(effort) if effort > 0 else "Aucun", effort <= 0),
         ],
     )
-    lignes = [(libelle, ("+" if round(v) >= 0 else "") + _eur(v)) for libelle, v in etapes]
+    lignes = [(libelle, ("+" if round(v) > 0 else "") + _eur(v)) for libelle, v in etapes]
     lignes.append(("Cash-flow net mensuel", _eur(cashflow), "total"))
     _ajouter_table_et_graphique(doc, lignes, _image_cascade_loyer(resultat), hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM)
     _ajouter_note(
@@ -1843,7 +1845,7 @@ def _section_endettement(doc, inp, payload, resultat, is_achat_revente):
         ],
     )
     lignes = [
-        ("Mensualité du projet retenue (hors assurance)", _eur(mensualite_projet)),
+        ("Mensualité du projet retenue (assurance comprise)", _eur(mensualite_projet)),
         ("Recettes locatives prévisionnelles retenues à 70 %", _eur(loyers_mensuels * endet_mod.PONDERATION_LOYERS)),
         ("Revenus considérés par la banque", _eur(r.revenus_consideres_mensuels)),
         ("Mensualités totales (crédits existants + projet)", _eur(r.mensualites_totales_mensuelles)),
@@ -1877,7 +1879,7 @@ def _section_avertissements(doc, avertissements):
 def _section_mentions(doc):
     doc.add_paragraph(
         "Ce document est une estimation générée automatiquement à partir des hypothèses saisies par "
-        "l'utilisateur (prix, loyers ou tarifs de location, charges, taux, durée...)."
+        "l'utilisateur (prix, loyers ou tarifs de location, charges, taux, durée…)."
     )
     doc.add_paragraph(MENTION_LEGALE)
     doc.add_paragraph(

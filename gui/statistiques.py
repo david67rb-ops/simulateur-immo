@@ -7,6 +7,7 @@ Rien dans l'application de bureau, ni tant que le code du compte
 GoatCounter n'est pas renseigné (le site fonctionne alors sans mesure)."""
 from __future__ import annotations
 
+import json
 import os
 
 from nicegui import app, ui
@@ -29,6 +30,7 @@ def installer() -> None:
 
 def evenement(nom: str, titre: str) -> None:
     if actif():
-        ui.run_javascript(
-            f"window.goatcounter && window.goatcounter.count({{path: '{nom}', title: '{titre}', event: true}})"
-        )
+        # json.dumps : un titre avec une apostrophe (« d'un projet ») ne casse
+        # plus le script, l'événement est bien compté.
+        donnees = json.dumps({"path": nom, "title": titre, "event": True}, ensure_ascii=False)
+        ui.run_javascript(f"window.goatcounter && window.goatcounter.count({donnees})")

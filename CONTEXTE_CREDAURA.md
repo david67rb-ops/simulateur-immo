@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 8 octobre 2026 (droits de mutation passés à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 8 octobre 2026 (test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -90,7 +90,7 @@
 - Particulier : régime des plus-values, frais financiers non déductibles. Marchand de biens ou SCI à l'IS : IS sur la marge.
 
 **Endettement** (`endettement.py`)
-- Taux = (crédits en cours + mensualité du projet) ÷ (revenus + autres revenus + 70 % des loyers du projet).
+- Taux = (crédits en cours + mensualité du projet, assurance emprunteur comprise) ÷ (revenus + autres revenus + 70 % des loyers du projet).
 - Seuil HCSF : 35 %. On utilise la mensualité après différé, par prudence.
 
 **Verdict** (`analyse.py`) : le pire des 3 critères donne le niveau global.
@@ -138,6 +138,9 @@
 
 - **Corrigé le 7 octobre 2026 (`fiscalite.foncier_reel`)** : le déficit foncier imputait mal la part du déficit sur le revenu global. Les intérêts s'imputent désormais d'abord sur les loyers, comme le prévoit la règle.
 - **Corrigé le 7 octobre 2026 (`simulation.py`)** : en location nue au réel, les travaux sont désormais déduits des loyers l'année 1 et retirés du prix d'acquisition de la plus-value. Hypothèse : pas de travaux de construction ou d'agrandissement (non déductibles, non distingués dans le formulaire).
+- **Corrigé le 8 octobre 2026 (`statistiques.py`)** : l'événement GoatCounter « Vérification d'un projet » cassait le script (apostrophe) et n'était jamais compté ; les données de l'événement sont désormais encodées en JSON.
+- **Corrigé le 8 octobre 2026** : le taux d'endettement (site, verdict et dossier) compte désormais la mensualité assurance emprunteur comprise, comme la règle HCSF des 35 %.
+- **Relevé le 8 octobre 2026, laissé tel quel (choix de David)** : la plus-value de revente des particuliers n'applique pas le forfait de 15 % pour travaux après 5 ans de détention, ce qui surestime l'impôt de revente (sens prudent).
 - **Impôt calculé au taux marginal** (TMI), pas au barème du foyer. La fonction `impot_bareme` existe mais n'est pas utilisée.
 - **README en partie dépassé** [à confirmer] :
   - il dit les charges constantes, or le code les indexe de 2 %/an ;

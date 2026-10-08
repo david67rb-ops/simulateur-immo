@@ -162,7 +162,7 @@ def verdict_global(
     resultat: dict,
     ecart_marche: float | None = None,
     endettement=None,
-    raison_prix: str = "Lancez l'étude de marché pour le comparer au quartier",
+    raison_prix: str = "Lance l'étude de marché pour le comparer au quartier",
 ) -> dict:
     """Verdict en trois niveaux (solide, à renforcer, à revoir) sur les trois
     questions du banquier : la rentabilité, le prix face au marché, le
