@@ -50,7 +50,7 @@ def emplacement_photo() -> bytes:
     from PIL import Image, ImageDraw, ImageFont
 
     largeur, hauteur = 1200, 900
-    image = Image.new("RGB", (largeur, hauteur), "#EEF2F7")
+    image = Image.new("RGB", (largeur, hauteur), "#E6ECF3")
     dessin = ImageDraw.Draw(image)
     # Cadre pointillé
     pas, trait, marge = 28, 16, 30

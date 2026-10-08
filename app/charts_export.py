@@ -41,6 +41,7 @@ PALETTE_CHARGES = [
 for _police in (Path(__file__).parent / "fonts").glob("*.ttf"):
     font_manager.fontManager.addfont(str(_police))
 TITRE = "Sora"
+FOND = "#F5F7FA"  # même couleur que les pages du dossier (dossier_export.FOND_PAGE_HEX)
 
 plt.rcParams.update(
     {
@@ -48,8 +49,10 @@ plt.rcParams.update(
         "font.size": 10.5,
         "axes.edgecolor": "#CCCCCC",
         "axes.linewidth": 0.8,
-        "figure.facecolor": "white",
-        "axes.facecolor": "white",
+        # Fond bleuté des pages du dossier : les graphiques s'y fondent.
+        "figure.facecolor": FOND,
+        "axes.facecolor": FOND,
+        "savefig.facecolor": FOND,
     }
 )
 
@@ -283,7 +286,7 @@ def chart_patrimoine(lignes: list[dict]) -> bytes:
     ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.16), ncol=3)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", color="#EEEEEE", linewidth=0.8)
+    ax.grid(axis="y", color="#DDE3EA", linewidth=0.8)
     return _fig_to_png(fig)
 
 
@@ -307,7 +310,7 @@ def chart_saisonnalite(lignes: list[dict]) -> bytes:
     ax.legend(frameon=False, fontsize=9, loc="upper center", bbox_to_anchor=(0.5, -0.2), ncol=3)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.grid(axis="y", color="#EEEEEE", linewidth=0.8)
+    ax.grid(axis="y", color="#DDE3EA", linewidth=0.8)
     return _fig_to_png(fig)
 
 

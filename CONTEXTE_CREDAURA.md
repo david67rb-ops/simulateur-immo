@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 8 octobre 2026 (test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 8 octobre 2026 (fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -17,7 +17,7 @@
 - Simulateur en 6 étapes : Marché, Financement, Revenus et fiscalité, Résultats, Endettement, Dossier. Les saisies et estimations de l'étape Marché passent au financement en cliquant « Suivant » (plus de bouton « Utiliser ces valeurs ») ; prix et loyer saisis conservés.
 - Étude de marché automatique : géocodage, ventes comparables DVF, loyer de marché, cartes.
 - Verdict en 3 niveaux (solide / à renforcer / à revoir), prix d'achat maximum, scénarios de stress.
-- Dossier Word (≈ 14 pages) : formules Complet, Banque, Personnel ; exemple fictif téléchargeable.
+- Dossier Word (≈ 14 pages) : formules Complet, Banque, Personnel ; exemple fictif téléchargeable. Pages, graphiques et cartes sur le même fond bleuté #F5F7FA (fond pleine page posé dans les en-têtes, conservé à l'impression et en PDF ; couleur de page Word en plus pour l'écran).
 - Enregistrer / rouvrir son projet (fichier signé `.credaura`, stocké chez l'utilisateur).
 - Pages légales, contact (par messagerie), formulaire d'avis des testeurs (par messagerie), mesure d'audience sans cookie.
 

@@ -66,7 +66,7 @@ window.afficherApercuDossier = async function (url, id, pagesLisibles) {
 </script>
 <style>
   .apercu-dossier { background: var(--c-fond); border-radius: 12px; padding: 12px; overflow: hidden; }
-  .apercu-dossier section.docx { margin: 0 auto 14px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.18); }
+  .apercu-dossier section.docx { margin: 0 auto 14px; box-shadow: 0 1px 8px rgba(15, 23, 42, 0.18); background: #F5F7FA; color: #1F2833; }
   .apercu-dossier section.docx:last-child { margin-bottom: 0; }
   .apercu-dossier .page-floutee { filter: blur(7px); pointer-events: none; user-select: none; }
 </style>

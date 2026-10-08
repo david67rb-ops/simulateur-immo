@@ -34,7 +34,9 @@ PRIMARY_COLOR = RGBColor(0x1B, 0x33, 0x58)  # bleu notaire
 GRIS_COLOR = RGBColor(0x96, 0x9E, 0xA8)
 GRIS_LIBELLE = RGBColor(0x5B, 0x66, 0x72)
 TEXTE_FONCE = RGBColor(0x1F, 0x28, 0x33)
-ZEBRA_HEX = "F4F6FA"
+# Fond des pages, le même que celui des graphiques et des cartes (charts_export.FOND).
+FOND_PAGE_HEX = "F5F7FA"
+ZEBRA_HEX = "ECF0F5"
 BORDURE_HEX = "E1E6EC"
 BLANC = RGBColor(0xFF, 0xFF, 0xFF)
 ROUGE = RGBColor(0xB2, 0x3A, 0x32)
@@ -45,13 +47,13 @@ MARQUE_HEX = "1B3358"
 LAITON_HEX = "A8823B"
 VERT_HEX = "2D6A4F"
 ROUGE_HEX = "B23A32"
-FOND_TUILE_HEX = "EEF2F7"
+FOND_TUILE_HEX = "E6ECF3"
 # (couleur du filet et du titre, fond) selon le niveau du verdict
 COULEURS_VERDICT = {
     "vert": ("2D6A4F", "E9F2ED"),
     "orange": ("B7791F", "FBF3E6"),
     "rouge": ("B23A32", "F8E9E7"),
-    "neutre": ("1B3358", "EEF2F7"),
+    "neutre": ("1B3358", "E6ECF3"),
 }
 # Icône de chaque chapitre (Material Icons, comme les rubriques du simulateur).
 ICONES_CHAPITRES = {
@@ -307,7 +309,7 @@ def _tuiles(container, tuiles: list[tuple[str, str, bool | None]], largeur_cm: f
         cell.vertical_alignment = WD_ALIGN_VERTICAL.CENTER
         _set_cell_background(cell, FOND_TUILE_HEX)
         accent = ROUGE_HEX if favorable is False else (VERT_HEX if favorable else MARQUE_HEX)
-        _bordures_cellule(cell, left=(accent, 24), right=("FFFFFF", 48) if i < len(tuiles) - 1 else None)
+        _bordures_cellule(cell, left=(accent, 24), right=(FOND_PAGE_HEX, 48) if i < len(tuiles) - 1 else None)
         _cell_marges(cell, haut=110, bas=130, gauche=200, droite=120)
         _texte(cell.paragraphs[0], libelle.upper(), 7.5, GRIS_LIBELLE, gras=True)
         couleur = VERT if favorable else (ROUGE if favorable is False else PRIMARY_COLOR)
@@ -587,8 +589,72 @@ def _mettre_en_page(section, centrer: bool = False) -> None:
     _alignement_vertical(section, "center" if centrer else "top")
 
 
+def _image_fond_de_page() -> bytes:
+    from PIL import Image
+
+    image = Image.new("RGB", (16, 16), "#" + FOND_PAGE_HEX)
+    tampon = io.BytesIO()
+    image.save(tampon, format="PNG")
+    return tampon.getvalue()
+
+
+def _fond_de_page(entete) -> None:
+    """Fond bleuté pleine page, posé derrière le texte depuis l'en-tête : il
+    se répète sur chaque page et, contrairement à la couleur de page de Word,
+    il reste à l'impression et dans l'export PDF."""
+    run = entete.paragraphs[0].add_run()
+    run.add_picture(io.BytesIO(_image_fond_de_page()), width=Cm(LARGEUR_PAGE_CM), height=Cm(HAUTEUR_PAGE_CM))
+    dessin = run._r.find(qn("w:drawing"))
+    inline = dessin.find(qn("wp:inline"))
+    ancre = OxmlElement("wp:anchor")
+    for attribut, valeur in (
+        ("distT", "0"), ("distB", "0"), ("distL", "0"), ("distR", "0"), ("simplePos", "0"),
+        ("relativeHeight", "0"), ("behindDoc", "1"), ("locked", "1"), ("layoutInCell", "1"), ("allowOverlap", "1"),
+    ):
+        ancre.set(attribut, valeur)
+    position_simple = OxmlElement("wp:simplePos")
+    position_simple.set("x", "0")
+    position_simple.set("y", "0")
+    ancre.append(position_simple)
+    for axe in ("positionH", "positionV"):
+        position = OxmlElement(f"wp:{axe}")
+        position.set("relativeFrom", "page")
+        decalage = OxmlElement("wp:posOffset")
+        decalage.text = "0"
+        position.append(decalage)
+        ancre.append(position)
+    ancre.append(inline.find(qn("wp:extent")))
+    marges = OxmlElement("wp:effectExtent")
+    for cote in ("l", "t", "r", "b"):
+        marges.set(cote, "0")
+    ancre.append(marges)
+    ancre.append(OxmlElement("wp:wrapNone"))
+    for enfant in ("wp:docPr", "wp:cNvGraphicFramePr", "a:graphic"):
+        element = inline.find(qn(enfant))
+        if element is not None:
+            ancre.append(element)
+    dessin.remove(inline)
+    dessin.append(ancre)
+
+
 def _configurer_page(doc: Document) -> None:
     _mettre_en_page(doc.sections[0], centrer=True)
+    # Couleur de page légèrement bleutée, celle des graphiques : plus de
+    # cadre blanc autour des images (à l'écran ; le fond posé dans les
+    # en-têtes, voir _fond_de_page, la garde à l'impression et en PDF).
+    fond = OxmlElement("w:background")
+    fond.set(qn("w:color"), FOND_PAGE_HEX)
+    doc.element.insert(0, fond)
+    # Ordre imposé par le schéma de Word : après view, zoom et les réglages
+    # qui les suivent, sinon Word peut juger le fichier abîmé.
+    reglages = doc.settings.element
+    precedents = ("writeProtection", "view", "zoom", "removePersonalInformation", "removeDateAndTime",
+                  "doNotDisplayPageBoundaries")
+    position = 0
+    for i, enfant in enumerate(reglages):
+        if enfant.tag in {qn(f"w:{nom}") for nom in precedents}:
+            position = i + 1
+    reglages.insert(position, OxmlElement("w:displayBackgroundShape"))
 
 
 def _lien_interne(paragraphe, signet: str) -> None:
@@ -682,12 +748,14 @@ def _configurer_entete_pied(doc: Document, libelle_projet: str) -> None:
     mention à gauche, pagination à droite. Absents de la couverture."""
     section = doc.sections[0]
     section.different_first_page_header_footer = True
+    _fond_de_page(section.first_page_header)
 
     header_p = section.header.paragraphs[0]
     _taquet_a_droite(header_p)
     _texte(header_p, "CREDAURA  ·  DOSSIER DE FINANCEMENT IMMOBILIER", 8, PRIMARY_COLOR, gras=True)
     _texte(header_p, "\t" + libelle_projet, 8, GRIS_COLOR)
     _add_bottom_border(header_p, color=LAITON_HEX, size=6)
+    _fond_de_page(section.header)
 
     footer_p = section.footer.paragraphs[0]
     _taquet_a_droite(footer_p)
