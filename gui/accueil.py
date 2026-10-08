@@ -382,6 +382,7 @@ def _pied() -> str:
     liens = (
         ("/contact", "Nous contacter"),
         ("/mentions-legales", "Mentions légales"),
+        ("/cgu", "Conditions d'utilisation"),
         ("/confidentialite", "Confidentialité"),
         *RESEAUX,
     )

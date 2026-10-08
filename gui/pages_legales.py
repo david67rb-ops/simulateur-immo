@@ -1,5 +1,6 @@
-"""Pages légales du site : mentions légales (LCEN, art. 6) et politique de
-confidentialité (RGPD, art. 13), avec les liens de pied de page.
+"""Pages légales du site : mentions légales (LCEN, art. 6), conditions
+générales d'utilisation et politique de confidentialité (RGPD, art. 13),
+avec les liens de pied de page.
 
 Les informations sur l'éditeur sont regroupées ci-dessous : à mettre à jour
 à l'immatriculation (statut, SIRET) et à chaque changement d'adresse.
@@ -44,6 +45,7 @@ def liens_legaux(nouvel_onglet: bool = False) -> None:
         for adresse, texte in (
             ("/contact", "Nous contacter"),
             ("/mentions-legales", "Mentions légales"),
+            ("/cgu", "Conditions d'utilisation"),
             ("/confidentialite", "Confidentialité"),
         ):
             ui.html(f'<a href="{adresse}"{cible} class="lien-exemple">{texte}</a>')
@@ -125,6 +127,7 @@ Directeur de la publication : {EDITEUR_NOM}.
 Les résultats sont des estimations calculées à partir des informations que vous saisissez et de données
 publiques qui peuvent comporter des erreurs ou des retards. Ils ne garantissent ni la rentabilité d'un
 projet, ni l'accord d'une banque : vérifiez-les et, au besoin, faites-vous accompagner par un professionnel.
+Les règles d'utilisation du site figurent dans les [conditions générales d'utilisation](/cgu).
 
 ## Propriété intellectuelle
 
@@ -144,6 +147,139 @@ générez vous appartiennent : vous pouvez les utiliser et les transmettre libre
 
 Credaura ne demande ni compte ni adresse e-mail et ne conserve aucune information saisie.
 Le détail figure dans la [politique de confidentialité](/confidentialite).
+"""
+        ).classes("texte-legal w-full")
+    _pied(colonne)
+
+
+@ui.page("/cgu", title="Conditions d'utilisation · Credaura")
+def page_cgu() -> None:
+    colonne = _gabarit("Conditions générales d'utilisation")
+    with colonne:
+        ui.markdown(
+            f"""
+**En bref :** Credaura est un outil de calcul, gratuit pendant la bêta et sans compte. Ses résultats sont
+des estimations, pas un conseil : vous restez seul juge de votre projet, et la banque reste seule
+décisionnaire de votre prêt.
+
+## 1. Objet
+
+Les présentes conditions générales d'utilisation (CGU) encadrent l'utilisation du site credaura.fr et de
+ses services, édités par {EDITEUR_NOM} (voir les [mentions légales](/mentions-legales)). Utiliser le site
+vaut acceptation de ces conditions ; si vous ne les acceptez pas, n'utilisez pas le site.
+
+## 2. Le service
+
+Credaura permet de :
+
+- simuler la rentabilité d'un investissement immobilier (location longue durée, location courte durée,
+  achat-revente) : coût du projet, financement, cash-flow, fiscalité et taux d'endettement ;
+- réaliser une étude de marché du quartier à partir de données publiques (ventes réelles, loyers de
+  référence, fréquentation touristique) ;
+- générer un dossier de financement au format Word, à présenter à une banque ;
+- enregistrer son projet dans un fichier gardé sur son appareil, pour le reprendre plus tard.
+
+Pendant la bêta, le service est entièrement gratuit, et ses fonctions peuvent évoluer, être modifiées ou
+retirées. À l'ouverture de la vente, le dossier de financement deviendra payant : son achat sera régi par
+des conditions générales de vente, présentées avant tout paiement. Les présentes conditions continueront
+de s'appliquer à l'utilisation du site.
+
+## 3. Accès au site
+
+Le site est accessible gratuitement, sans compte, à toute personne disposant d'un accès à internet ; les
+frais de connexion restent à votre charge. L'éditeur s'efforce de le maintenir accessible, sans pouvoir
+le garantir : il peut être interrompu pour une maintenance, une mise à jour, une panne de l'hébergeur ou
+l'indisponibilité d'une source de données publiques. Une interruption ne donne droit à aucune indemnité.
+
+Comme rien n'est conservé sur le serveur, une simulation en cours peut être perdue lors d'une interruption
+ou d'un rechargement de la page : utilisez « Enregistrer mon projet » pour la garder.
+
+## 4. Nature des résultats
+
+{MENTION_LEGALE}
+
+Les résultats sont des estimations :
+
+- ils reposent sur les informations que vous saisissez, dont vous êtes seul responsable de l'exactitude ;
+- ils utilisent des données publiques (ventes DVF, loyers de référence, barèmes fiscaux) qui peuvent
+  comporter des erreurs, des lacunes ou des retards ;
+- ils appliquent des règles et des hypothèses simplifiées (fiscalité, frais de notaire, assurance,
+  évolution des loyers et des prix), rappelées à la fin du dossier, qui ne reflètent pas forcément votre
+  situation personnelle ni les critères de votre banque ;
+- l'étude de marché, le verdict et les indicateurs ne sont ni une expertise ni une estimation immobilière,
+  ni une recommandation d'acheter ou de vendre.
+
+Avant toute décision (offre d'achat, demande de prêt, choix d'un régime fiscal), vérifiez les résultats
+et, au besoin, faites-vous accompagner par un professionnel : notaire, expert-comptable, conseiller en
+gestion de patrimoine ou courtier.
+
+## 5. Vos engagements
+
+En utilisant le site, vous vous engagez à :
+
+- l'utiliser pour un usage personnel et conforme à la loi ;
+- ne saisir les informations d'une autre personne (un co-emprunteur, par exemple) qu'avec son accord ;
+- n'ajouter au dossier que des photos dont vous détenez les droits, sans contenu illicite ;
+- ne pas perturber le fonctionnement du site, ne pas tenter d'en contourner les protections, et ne pas
+  l'interroger de façon automatisée ou massive (robots, aspiration de données) ;
+- ne pas remettre un dossier que vous savez inexact ou modifié de façon trompeuse : le dossier engage la
+  personne qui le présente à sa banque.
+
+L'éditeur peut restreindre l'accès au site en cas d'utilisation contraire à ces règles.
+
+## 6. Responsabilité
+
+L'éditeur met en œuvre des moyens raisonnables pour fournir des calculs justes et un site fiable : il est
+tenu d'une obligation de moyens, et non de résultat. Il ne peut être tenu responsable :
+
+- des décisions prises sur la base des résultats, notamment d'un achat, de l'accord ou du refus d'un prêt,
+  ou d'une rentabilité inférieure aux prévisions ;
+- des conséquences d'informations inexactes ou incomplètes saisies par l'utilisateur ;
+- des erreurs ou retards des données publiques et des services extérieurs utilisés par le site ;
+- d'une interruption du site ou de la perte d'une simulation non enregistrée ;
+- de l'usage fait du dossier une fois téléchargé.
+
+Ces limites s'appliquent dans la mesure permise par la loi. Elles n'écartent pas la responsabilité de
+l'éditeur en cas de faute lourde ou intentionnelle, et ne retirent rien aux droits que le Code de la
+consommation reconnaît aux consommateurs.
+
+## 7. Propriété intellectuelle
+
+Le nom Credaura, le logo, les textes, la mise en page, la structure du dossier et le code du site
+appartiennent à l'éditeur. Vous pouvez les consulter et les utiliser pour votre usage personnel ; toute
+reproduction ou réutilisation, totale ou partielle, sans autorisation écrite est interdite. Les données
+publiques utilisées et leurs licences sont citées dans les [mentions légales](/mentions-legales).
+
+Les dossiers que vous générez vous appartiennent : vous pouvez les utiliser, les modifier et les
+transmettre librement, notamment à votre banque. Les photos que vous ajoutez restent les vôtres : le site
+les traite seulement (recadrage) pour les insérer dans votre dossier, et n'en garde aucune copie.
+
+## 8. Fichier projet
+
+« Enregistrer mon projet » crée un fichier sur votre appareil. Le site n'en garde aucune copie : sa
+conservation est de votre ressort. Le fichier est protégé contre les modifications : modifié en dehors du
+site, il ne peut plus être rouvert.
+
+## 9. Données personnelles
+
+Le traitement de vos informations est décrit dans la [politique de confidentialité](/confidentialite).
+En résumé : ni compte, ni adresse e-mail, et rien de ce que vous saisissez n'est conservé après votre visite.
+
+## 10. Liens vers d'autres sites
+
+Le site propose des liens vers des sites extérieurs (recherches de prix, annonces, réseaux sociaux).
+L'éditeur n'en contrôle pas le contenu et n'en est pas responsable.
+
+## 11. Modification des conditions
+
+L'éditeur peut modifier ces conditions, notamment à l'ouverture de la vente. La version applicable est
+celle en ligne au moment où vous utilisez le site ; la date de dernière mise à jour figure en haut de la page.
+
+## 12. Droit applicable et litiges
+
+Ces conditions sont soumises au droit français. En cas de difficulté, écrivez d'abord à {_contact()} :
+nous chercherons ensemble une solution amiable. À défaut, le litige sera porté devant le tribunal
+compétent ; si vous êtes consommateur, vous pouvez saisir celui de votre domicile.
 """
         ).classes("texte-legal w-full")
     _pied(colonne)
