@@ -59,14 +59,19 @@ def page_contact() -> None:
         ui.label("Chaque sujet ouvre ta messagerie, avec l'objet déjà rempli.").classes(theme.HINT_CLASSES)
 
         ui.label("Ou écris directement").classes(theme.SUBSECTION_TITLE_CLASSES + " mt-4")
+        # L'adresse n'est pas affichée : un bouton ouvre la messagerie, et
+        # « Copier l'adresse » sert quand aucune messagerie n'est configurée
+        # (fréquent sur PC, où le lien mailto n'ouvre alors rien).
         with ui.row().classes("items-center gap-3 flex-wrap"):
-            ui.html(f'<a href="mailto:{CONTACT_EMAIL}" class="lien-exemple text-lg font-semibold">{CONTACT_EMAIL}</a>')
+            ui.button("Envoie-nous un mail", icon="mail").props(
+                f'unelevated no-caps href="mailto:{CONTACT_EMAIL}"'
+            ).classes("px-4")
 
             def copier() -> None:
                 ui.clipboard.write(CONTACT_EMAIL)
-                ui.notify("Adresse copiée", type="positive")
+                ui.notify("Adresse e-mail copiée", type="positive")
 
-            ui.button("Copier", icon="content_copy", on_click=copier).props("flat dense no-caps")
+            ui.button("Copier l'adresse", icon="content_copy", on_click=copier).props("flat no-caps")
 
         with ui.element("div").classes("w-full rounded-xl p-4 mt-4").style(
             "background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)"

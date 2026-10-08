@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 8 octobre 2026 (passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 8 octobre 2026 (page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -19,7 +19,7 @@
 - Verdict en 3 niveaux (solide / à renforcer / à revoir), prix d'achat maximum, scénarios de stress.
 - Dossier Word (≈ 14 pages) : formules Complet, Banque, Personnel ; exemple fictif téléchargeable. Pages, graphiques et cartes sur le même fond bleuté #F5F7FA (fond pleine page posé dans les en-têtes, conservé à l'impression et en PDF ; couleur de page Word en plus pour l'écran). Les pages miniatures de l'accueil et l'aperçu du site reprennent ce fond.
 - Enregistrer / rouvrir son projet (fichier signé `.credaura`, stocké chez l'utilisateur).
-- Pages légales, contact (par messagerie), formulaire d'avis des testeurs (par messagerie), mesure d'audience sans cookie.
+- Pages légales, contact (par messagerie : un bouton par sujet, puis « Envoie-nous un mail » et « Copier l'adresse », sans afficher l'adresse), formulaire d'avis des testeurs (par messagerie), mesure d'audience sans cookie.
 
 **Prêt mais éteint pendant la bêta**
 - Mode payant : aperçu partiel du dossier (contenu non envoyé par le serveur), codes de dossiers (lots, 12 mois), page d'administration des codes. Interrupteur `IMMO_MODE_PAYANT`.
