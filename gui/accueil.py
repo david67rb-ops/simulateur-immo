@@ -459,6 +459,7 @@ def _formulaire(on_verifier: Callable[[dict], Awaitable[None]]) -> None:
         )
         for _nom, champ, _valeur in obligatoires:
             theme.effacer_signalement_a_la_saisie(champ)
+        theme.effacer_signalement_a_la_saisie(loyer)
 
         # Message « il manque… » : une petite fenêtre au centre de l'écran.
         signaler_manque = theme.fenetre_a_completer()
@@ -471,6 +472,20 @@ def _formulaire(on_verifier: Callable[[dict], Awaitable[None]]) -> None:
                 noms = [nom for nom, _champ in manque]
                 liste = noms[0] if len(noms) == 1 else ", ".join(noms[:-1]) + " et " + noms[-1]
                 signaler_manque(f"Il manque encore {liste} pour vérifier ton projet.", manque[0][1])
+                return
+            # Garde-fou : une saisie doublée (« 140 000 140 000 », « 3838 »)
+            # donnait un verdict absurde sans aucun message.
+            surface_m2, prix_eur, loyer_eur = float(surface.value), prix.lire(prix.value), loyer.lire(loyer.value)
+            incoherence = None
+            if not 5 <= surface_m2 <= 2000:
+                incoherence = ("La surface semble incorrecte. Vérifie-la (en m²).", surface)
+            elif not 100 <= prix_eur / surface_m2 <= 50_000:
+                incoherence = ("Le prix ne correspond pas à la surface (prix au m² hors norme). Vérifie les deux champs.", prix)
+            elif loyer_eur and not prix_eur / 1000 <= loyer_eur <= prix_eur / 20:
+                incoherence = ("Le loyer semble incorrect par rapport au prix. Vérifie-le (loyer mensuel).", loyer)
+            if incoherence:
+                theme.signaler_champ(incoherence[1])
+                signaler_manque(*incoherence)
                 return
             await on_verifier(
                 {
