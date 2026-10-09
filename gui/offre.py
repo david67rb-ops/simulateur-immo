@@ -5,7 +5,9 @@ Mode payant ÉTEINT pendant la bêta gratuite (tout est offert). Il s'allume
 sur le serveur avec la variable d'environnement IMMO_MODE_PAYANT=1, le jour
 de l'ouverture de la vente. Il faut alors aussi, sur Render : le disque
 persistant et IMMO_DONNEES_DIR (codes de dossiers), IMMO_SIGNATURE_SECRET
-(fichiers projet) et IMMO_ADMIN_MDP (page de création des codes)."""
+(fichiers projet) et IMMO_ADMIN_MDP (page de création des codes), plus le
+paiement Stripe : IMMO_STRIPE_CLE_SECRETE, IMMO_STRIPE_SECRET_WEBHOOK et
+IMMO_URL_SITE (détail dans app/paiement.py)."""
 from __future__ import annotations
 
 import os

@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 8 octobre 2026 (conditions générales d'utilisation sur /cgu ; page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 9 octobre 2026 (paiement Stripe branché, éteint tant que le mode payant et la clé Stripe ne sont pas définis ; textes de l'accueil et confidentialité qui suivent le mode payant ; visite gardée 10 minutes sur téléphone), précédemment le 8 octobre (conditions générales d'utilisation sur /cgu ; page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -23,14 +23,17 @@
 
 **Prêt mais éteint pendant la bêta**
 - Mode payant : aperçu partiel du dossier (contenu non envoyé par le serveur), codes de dossiers (lots, 12 mois), page d'administration des codes. Interrupteur `IMMO_MODE_PAYANT`.
+- Paiement Stripe Checkout (9 octobre 2026, `app/paiement.py`, `gui/paiement_pages.py`) : dans l'étape Dossier, case de renonciation au droit de rétractation puis 3 boutons (1, 2 ou 3 dossiers) qui ouvrent la page de paiement Stripe dans un nouvel onglet. Après le paiement, /paiement/merci affiche le code, et l'onglet du simulateur, qui interroge le serveur toutes les 4 secondes, ouvre le dossier tout seul. Le webhook /stripe/webhook (signé) crée le code même si l'acheteur ferme l'onglet. Un seul code par paiement, noté aussi dans les métadonnées du paiement chez Stripe. Une session Stripe expire au bout de 31 minutes et se réutilise pour le même onglet et le même lot ; au plus 20 départs vers le paiement par connexion et par 10 minutes ; Stripe interrogé au plus toutes les 15 secondes par session pendant l'attente ; le numéro de session est retiré de l'adresse envoyée à GoatCounter. Testé de bout en bout avec un faux serveur Stripe (avec et sans webhook), pas encore avec un vrai compte Stripe. Actif seulement si `IMMO_MODE_PAYANT=1` et `IMMO_STRIPE_CLE_SECRETE` sont définis.
+- Pages / et /simulateur : la visite reste active 10 minutes sans réponse du navigateur (au lieu de 3 secondes), pour qu'un téléphone qui passe dans un autre onglet ou une autre application ne perde pas la simulation.
+- Textes qui suivent le mode payant : bandeau « bêta », bouton du dossier, titre des tarifs et FAQ de l'accueil ; paragraphes Stripe de la politique de confidentialité.
 
-**Prévu** : paiement Stripe (non commencé dans le code), voir §8.
+**Prévu** : compte Stripe et essai en mode test sur le site, puis passage en réel, voir §8.
 
 ## 3. Stack et architecture (pour non-développeur)
 
 - **100 % Python**. L'interface (NiceGUI) est séparée de la logique métier (`app/`) : on pourrait changer d'interface sans toucher aux calculs.
 - **Deux usages** : site web hébergé (Render) et application Mac autonome, avec le même code.
-- **Pas de base de données utilisateur** : le projet vit dans la mémoire du serveur le temps de la visite. Seule exception : la base des codes de dossiers, sans donnée personnelle, utilisée uniquement en mode payant.
+- **Pas de base de données utilisateur** : le projet vit dans la mémoire du serveur le temps de la visite. Seule exception : la base des codes de dossiers (SQLite sur le disque Render), sans donnée personnelle, utilisée uniquement en mode payant. Pour un achat, elle garde l'identifiant de la session Stripe, le lot et le code ; l'e-mail et la carte restent chez Stripe.
 - **Données de marché publiques** : DVF (ventes, État), carte des loyers (ministère / ANIL), Base Adresse Nationale, Eurostat (saisonnalité). Certaines sont préparées à l'avance dans `app/data/` (à régénérer en avril et en octobre).
 - **Fichiers clés** : calculs `app/simulation.py`, `finance.py`, `fiscalite.py`, `notaire.py`, `endettement.py`, `analyse.py`, `saisonnalite.py` ; marché `app/market_data.py` ; dossier `app/dossier_export.py` ; interface `gui/main.py`, `gui/accueil.py`.
 
@@ -129,6 +132,7 @@
 - **Bêta gratuite**, avec tarifs annoncés et mode payant prêt mais éteint : valider l'intérêt avant d'encaisser [à confirmer : motivation détaillée hors dépôt].
 - **Dossier, formules Banque et Complet** : « Les 3 repères du projet », des faits sans jugement, pour ne jamais écrire « Projet à revoir » devant un banquier. La formule Personnel affiche le verdict du site.
 - **Aperçu payant tronqué côté serveur**, parce que le flou seul se contourne.
+- **Paiement Stripe Checkout dans un nouvel onglet** (9 octobre 2026) : la page de paiement est celle de Stripe (pas de carte sur le site), et le simulateur reste ouvert dans son onglet, puisque son contenu n'est conservé nulle part. Carte seulement (Apple Pay et Google Pay inclus) pour livrer le code tout de suite. Appels à l'API Stripe avec httpx, sans la bibliothèque Stripe. La renonciation au droit de rétractation (contenu numérique fourni immédiatement) est une case cochée sur le site, notée dans les métadonnées de la session.
 - **Mention IOBSP partout, aucun lien vers une banque ou un courtier**, pour rester un outil et non un intermédiaire.
 - **Le prix et le loyer saisis ne sont jamais remplacés** par les valeurs de marché.
 - **Mesure d'audience sans cookie (GoatCounter)**, donc sans bandeau de consentement.
@@ -155,11 +159,12 @@
   - loyers peu fiables dans les communes avec peu d'annonces ;
   - aucune donnée ouverte sur les prix en courte durée ;
   - les grands portails d'annonces bloquent l'import par lien.
-- **Avant le mode payant** : définir une vraie clé de signature des fichiers projet (sinon c'est la clé de développement), ajouter le disque Render, la page d'administration protégée et Stripe.
+- **Avant le mode payant** : définir une vraie clé de signature des fichiers projet (sinon c'est la clé de développement), ajouter le disque Render et le mot de passe de la page d'administration, puis les variables Stripe (`IMMO_STRIPE_CLE_SECRETE`, `IMMO_STRIPE_SECRET_WEBHOOK`, `IMMO_URL_SITE`) et le webhook dans le tableau de bord Stripe (événements `checkout.session.completed` et `checkout.session.async_payment_succeeded`, adresse https://credaura.fr/stripe/webhook). Activer les reçus par e-mail dans Stripe.
+- **Paiement, limites** : dans le navigateur intégré d'Instagram ou de TikTok, le nouvel onglet peut remplacer le simulateur ; le code reste affiché sur la page de remerciement, à entrer après avoir refait ou rouvert le projet. Un acheteur qui ferme tout avant la page de remerciement retrouve son code par le support (métadonnées du paiement chez Stripe). Pas de CGV ni de case CGV tant que `IMMO_STRIPE_CGV` n'est pas à 1 ; pas de facture Stripe tant que `IMMO_STRIPE_FACTURES` n'est pas à 1. L'application Mac n'a pas de boutons d'achat (codes locaux).
 
 ## 8. Roadmap (dans le dépôt : `gui/offre.py`, README, commits)
 
-- **Ouverture de la vente** : allumer le mode payant, brancher Stripe (chaque paiement crée un code), retirer le bandeau bêta, mettre à jour tarifs, FAQ et confidentialité. Obligations légales avant le premier paiement : mentions légales complètes (statut, SIRET, adresse, téléphone, mention TVA), conditions générales de vente (prix TTC, renonciation au droit de rétractation cochée avant la livraison du dossier, garantie de conformité des contenus numériques), adhésion à un médiateur de la consommation, prix affichés TTC ; relecture par un juriste conseillée. Dépôt de la marque à l'INPI recommandé.
+- **Ouverture de la vente** : déclarer la micro-entreprise, créer le compte Stripe, essayer le parcours en mode test sur le site, puis passer en clés réelles et allumer le mode payant (le paiement, le bandeau, les tarifs, la FAQ et la confidentialité suivent l'interrupteur). Obligations légales avant le premier paiement : mentions légales complètes (statut, SIRET, adresse, téléphone, mention TVA), conditions générales de vente (prix TTC, renonciation au droit de rétractation cochée avant la livraison du dossier, garantie de conformité des contenus numériques), adhésion à un médiateur de la consommation, prix affichés TTC ; relecture par un juriste conseillée. Dépôt de la marque à l'INPI recommandé.
 - **Hors dépôt** [à confirmer, source : plan de commercialisation] :
   - témoignages vérifiés sur l'accueil ;
   - pages villes et articles pour Google ;
@@ -182,4 +187,5 @@
 - **Formules du dossier** : Complet, Banque (sans patrimoine), Personnel (sans profil, sans endettement, sans pièces).
 - **Fichier projet `.credaura`** : sauvegarde signée du projet, chez l'utilisateur. En mode payant, elle garde le dossier ouvert 30 jours pour le même bien.
 - **Code de dossier** : CRED-XXXX-XXXX, un lot de 1 à 3 dossiers valable 12 mois.
-- **Mode payant** : interrupteur `IMMO_MODE_PAYANT`, éteint pendant la bêta.
+- **Mode payant** : interrupteur `IMMO_MODE_PAYANT`, éteint pendant la bêta. Les boutons d'achat demandent en plus la clé Stripe.
+- **Session de paiement** : page de paiement Stripe créée pour un lot (identifiant `cs_…`), reliée à l'onglet du simulateur par un identifiant d'achat aléatoire.

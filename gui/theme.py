@@ -185,6 +185,12 @@ def apply_theme() -> None:
           /* Lien vers l'exemple de dossier (en-tête, étape Dossier). */
           .lien-exemple { color: var(--c-marque-texte); text-decoration: none; }
           .lien-exemple:hover { text-decoration: underline; }
+          /* Boutons d'achat d'un lot (étape Dossier, mode payant) : de vrais liens. */
+          .bouton-achat { display: inline-flex; align-items: center; gap: 4px; padding: 9px 16px; border-radius: 10px;
+                          background: var(--c-laiton); color: #fff !important; text-decoration: none; font-size: 0.95rem;
+                          cursor: pointer; transition: opacity 0.15s; }
+          .bouton-achat:hover { opacity: 0.9; }
+          .bouton-achat-off { opacity: 0.45; cursor: not-allowed; }
           .pastille-critere { display: inline-block; flex-shrink: 0; width: 10px; height: 10px; border-radius: 50%; margin-top: 3px; }
           .pastille-legende { display: inline-block; width: 28px; height: 16px; border-radius: 5px; vertical-align: -3px; margin-right: 8px; flex-shrink: 0; }
           /* Jauge (taux d'endettement face au seuil). */

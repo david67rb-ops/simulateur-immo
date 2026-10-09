@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from nicegui import app, ui
 
+from app import paiement
 from app.chapitres_dossier import MENTION_LEGALE
 
-from . import statistiques, theme
+from . import offre, statistiques, theme
 from .accueil import barre_menu
 
 # --- Éditeur (adresse vide = éditeur non professionnel, avant l'immatriculation)
@@ -25,7 +26,7 @@ HEBERGEUR = (
     "Render Services, Inc., 525 Brannan Street, Suite 300, San Francisco, CA 94107, "
     "États-Unis · +1 415 319 8186 · [render.com](https://render.com)"
 )
-MISE_A_JOUR = "8 octobre 2026"
+MISE_A_JOUR = "9 octobre 2026"
 
 A_COMPLETER = '<span style="background:#fde68a;color:#7c2d12;padding:0 4px;border-radius:4px">à compléter</span>'
 
@@ -300,10 +301,40 @@ def page_confidentialite() -> None:
     else:
         en_bref = "Aucune mesure d'audience, aucune publicité, aucun cookie tiers."
         prestataire = ""
+    # Paragraphes sur le paiement, seulement quand la vente est ouverte.
+    vente = offre.MODE_PAYANT and paiement.actif()
+    if vente:
+        sans_email = (
+            "Credaura ne vous demande ni compte ni adresse e-mail (si vous achetez un dossier, c'est Stripe, le "
+            "prestataire de paiement, qui vous demande la vôtre pour le reçu), et ne conserve aucune des informations"
+        )
+        info_paiement = (
+            "- **Votre paiement, si vous achetez un dossier** : il se fait sur la page sécurisée de Stripe, qui "
+            "recueille votre adresse e-mail et les données de votre carte. Credaura ne les voit pas : il reçoit "
+            "seulement la confirmation du paiement, le lot acheté et la référence du paiement, auxquels il associe "
+            "votre code de dossier.\n"
+        )
+        base_paiement = (
+            " ; l'exécution de la vente (article 6.1.b) et les obligations comptables (article 6.1.c) pour le "
+            "paiement"
+        )
+        duree_paiement = (
+            "- Le code de dossier et la référence du paiement sont conservés le temps d'utiliser le code (12 mois) "
+            "et de tenir la comptabilité. Stripe conserve les données du paiement selon ses propres obligations.\n"
+        )
+        prestataire_paiement = (
+            "- **Stripe** (paiement, Irlande et États-Unis, adhérent au Data Privacy Framework) : traite le paiement "
+            "et vous envoie le reçu, selon sa propre [politique de confidentialité](https://stripe.com/fr/privacy).\n"
+        )
+        modifications = "Cette politique sera mise à jour si le service évolue."
+    else:
+        sans_email = "Credaura ne vous demande ni compte ni adresse e-mail, et ne conserve aucune des informations"
+        info_paiement = base_paiement = duree_paiement = prestataire_paiement = ""
+        modifications = "Cette politique sera mise à jour si le service évolue, en particulier à l'ouverture du paiement en ligne."
     with colonne:
         ui.markdown(
             f"""
-**En bref :** Credaura ne vous demande ni compte ni adresse e-mail, et ne conserve aucune des informations
+**En bref :** {sans_email}
 que vous saisissez. Elles servent au calcul et à votre dossier, puis disparaissent quand vous quittez la page.
 {en_bref}
 
@@ -321,10 +352,10 @@ que vous saisissez. Elles servent au calcul et à votre dossier, puis disparaiss
   enregistrées par l'hébergeur pour faire fonctionner et sécuriser le site.
 - **Vos messages, si vous écrivez** (page [Nous contacter](/contact)) : votre adresse e-mail et le contenu
   du message, pour vous répondre.
-
+{info_paiement}
 Base légale : la fourniture du service que vous demandez (article 6.1.b du RGPD) pour votre projet et
 votre situation ; l'intérêt légitime à assurer la sécurité du site (article 6.1.f) pour les données techniques et à
-répondre aux messages reçus.
+répondre aux messages reçus{base_paiement}.
 
 ## Combien de temps
 
@@ -339,7 +370,7 @@ répondre aux messages reçus.
   Ils ne contiennent pas les informations que vous saisissez.
 - Les messages reçus par e-mail sont conservés le temps de traiter votre demande ; vous pouvez demander
   leur suppression à tout moment.
-
+{duree_paiement}
 ## Qui y a accès
 
 Personne d'autre que vous : vos informations ne sont ni vendues, ni louées, ni partagées. Le site fait
@@ -355,7 +386,7 @@ appel à des prestataires techniques, chacun pour une seule raison :
   affichent l'aperçu du dossier, ce qui lui transmet votre adresse IP.
 - **Google** (messagerie Gmail, États-Unis, adhérent au Data Privacy Framework) : reçoit les messages
   que vous envoyez à l'adresse de contact.
-{prestataire}
+{prestataire}{prestataire_paiement}
 Les liens vers des sites extérieurs (recherches de prix, annonces) ne transmettent rien tant que vous
 ne cliquez pas dessus.
 
@@ -381,7 +412,7 @@ aléatoire, valable une seule fois.
 
 ## Modifications
 
-Cette politique sera mise à jour si le service évolue, en particulier à l'ouverture du paiement en ligne.
+{modifications}
 La date de dernière mise à jour figure en haut de la page.
 """
         ).classes("texte-legal w-full")

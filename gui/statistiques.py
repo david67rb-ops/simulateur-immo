@@ -23,7 +23,11 @@ def actif() -> bool:
 def installer() -> None:
     """À appeler au début de chaque page du site."""
     if actif():
+        # Le numéro de session de paiement (page de remerciement) suffit à
+        # afficher un code de dossier : il ne part pas dans les statistiques.
         ui.add_head_html(
+            "<script>window.goatcounter = {path: function (p) { return p.replace(/([?&])session_id=[^&#]*&?/, '$1')"
+            ".replace(/[?&]$/, ''); }};</script>"
             f'<script data-goatcounter="https://{CODE}.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>'
         )
 

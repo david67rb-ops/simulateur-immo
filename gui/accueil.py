@@ -3,9 +3,10 @@ le formulaire « Vérifie ton projet », le verdict et le dossier, comment ça
 marche, les tarifs et la FAQ. Le formulaire ouvre le simulateur complet déjà
 rempli, sur la même page.
 
-Bêta gratuite : tant que le paiement n'existe pas, le dossier est offert et
-les tarifs sont annoncés « à l'ouverture ». Pas de témoignages tant qu'on n'a
-pas de vrais avis de testeurs (à afficher marqués « avis vérifié »).
+La vérification est gratuite. Le dossier est offert tant que le mode payant
+est éteint (IMMO_MODE_PAYANT, voir offre.py) ; une fois allumé, les textes
+annoncent les tarifs et le bandeau « bêta » disparaît. Pas de témoignages tant
+qu'on n'a pas de vrais avis de testeurs (à afficher marqués « avis vérifié »).
 """
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from typing import Awaitable, Callable
 
 from nicegui import ui
 
-from . import theme
+from . import offre, theme
 
 
 BLEU, ENCRE, LAITON, LAITON_CLAIR, LAITON_FONCE = "#1B3358", "#13243F", "#A8823B", "#E9D8B0", "#86662A"
@@ -248,7 +249,7 @@ RESULTAT = f"""
         <li style="display:flex;gap:10px;align-items:flex-start">{COCHE}<span>La liste des pièces à fournir à la banque</span></li>
       </ul>
       <div class="boutons-dossier">
-        <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:10px;line-height:1.3;text-wrap:balance">Renseigne ton projet et obtiens ton dossier<span style="display:block;font-size:12.5px;font-weight:500;opacity:0.9">offert pendant la bêta</span></a>
+        <a href="#simulateur" onclick="{OUVRIR_SIMULATEUR}" style="background:{LAITON};color:#FFFFFF;text-decoration:none;font-weight:700;padding:11px 18px;border-radius:10px;line-height:1.3;text-wrap:balance">Renseigne ton projet et obtiens ton dossier<span style="display:block;font-size:12.5px;font-weight:500;opacity:0.9">{"à partir de 19,90 €, sans abonnement" if offre.MODE_PAYANT else "offert pendant la bêta"}</span></a>
         <a href="/exemple-dossier" target="_blank" rel="noopener" style="color:{LAITON_CLAIR};font-weight:600;text-decoration:none;padding:12px 16px;border-radius:10px;border:1.5px solid rgba(233,216,176,0.55)">Voir un exemple de dossier complet</a>
       </div>
     </div>
@@ -303,8 +304,8 @@ TARIFS = f"""
 <section id="tarifs" class="bloc" style="padding-top:clamp(48px,7vw,88px);padding-bottom:clamp(48px,7vw,88px);display:flex;flex-direction:column;gap:32px">
   <div style="display:flex;flex-direction:column;gap:8px">
     <span class="surtitre">TARIFS</span>
-    <h2 class="titre-section">La vérification est gratuite. Pendant la bêta, le dossier aussi.</h2>
-    <p class="gris">Tarifs à l'ouverture de la vente :</p>
+    <h2 class="titre-section">{"La vérification est gratuite. Le dossier pour la banque : 19,90 €." if offre.MODE_PAYANT else "La vérification est gratuite. Pendant la bêta, le dossier aussi."}</h2>
+    <p class="gris">{"Pas d'abonnement, rien à résilier : tu paies une fois, par dossier." if offre.MODE_PAYANT else "Tarifs à l'ouverture de la vente :"}</p>
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:16px">
     {_tarif("1 dossier", "19,90 €", "Pour un projet précis")}
@@ -323,7 +324,11 @@ QUESTIONS = (
     (
         "C'est vraiment gratuit ?",
         "Oui, la vérification l'est : le verdict, ton prix comparé au quartier, la rentabilité et le cash-flow. "
-        "Le dossier complet pour la banque sera payant à l'ouverture de la vente, à partir de 19,90 € ; pendant la bêta, il est offert.",
+        + (
+            "Le dossier complet pour la banque est payant : 19,90 €, 34,90 € les deux, 44,90 € les trois, sans abonnement."
+            if offre.MODE_PAYANT
+            else "Le dossier complet pour la banque sera payant à l'ouverture de la vente, à partir de 19,90 € ; pendant la bêta, il est offert."
+        ),
     ),
     (
         "Credaura est-il un courtier ?",
@@ -404,10 +409,11 @@ def construire_accueil(on_verifier: Callable[[dict], Awaitable[None]]) -> ui.ele
     le simulateur ouvert)."""
     racine = ui.element("div").classes("accueil")
     with racine:
-        ui.html(
-            f'<div style="background:{LAITON_CLAIR};color:{ENCRE};text-align:center;font-size:14px;font-weight:600;padding:9px 16px">'
-            "Bêta gratuite : pendant le lancement, le dossier de financement est offert.</div>"
-        ).classes("w-full")
+        if not offre.MODE_PAYANT:
+            ui.html(
+                f'<div style="background:{LAITON_CLAIR};color:{ENCRE};text-align:center;font-size:14px;font-weight:600;padding:9px 16px">'
+                "Bêta gratuite : pendant le lancement, le dossier de financement est offert.</div>"
+            ).classes("w-full")
         barre_menu(sur_accueil=True)
         with ui.element("div").style(f"background:{BLEU};color:#FFFFFF").classes("w-full"):
             with ui.element("div").classes("bloc").style(

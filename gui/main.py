@@ -14,6 +14,7 @@ import argparse
 import json
 import logging
 import os
+import time
 import webbrowser
 from datetime import date
 from pathlib import Path
@@ -31,6 +32,7 @@ from app import (
     listing_parser,
     market_data,
     notaire,
+    paiement,
     photos_dossier,
     projet_signe,
     saisonnalite,
@@ -46,7 +48,7 @@ from app.chapitres_dossier import (
 )
 from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
-from . import accueil, apercus_dossier, avis, offre, pages_legales, theme
+from . import accueil, apercus_dossier, avis, offre, pages_legales, paiement_pages, theme
 from . import page_contact  # noqa: F401  (enregistre la page /contact)
 from . import page_admin  # noqa: F401  (enregistre la page /admin/codes)
 from . import statistiques
@@ -521,12 +523,19 @@ def message_erreur(exc: Exception) -> str:
     return f"Erreur : {exc}"
 
 
-@ui.page("/")
+# Sur téléphone, un onglet passé en arrière-plan (paiement dans un autre
+# onglet, détour par une autre application) cesse de répondre au serveur :
+# la page attend 10 minutes avant de considérer la visite terminée, au lieu de
+# 3 secondes par défaut, pour ne pas perdre la simulation en cours.
+DELAI_RECONNEXION_S = 600.0
+
+
+@ui.page("/", reconnect_timeout=DELAI_RECONNEXION_S)
 def index_page() -> None:
     _page_principale(simulateur_ouvert=False)
 
 
-@ui.page("/simulateur")
+@ui.page("/simulateur", reconnect_timeout=DELAI_RECONNEXION_S)
 def page_simulateur() -> None:
     """Le simulateur directement (liens « Ouvrir le simulateur » des autres
     pages du site) ; « Accueil » y ramène à l'accueil sans recharger."""
@@ -1585,6 +1594,50 @@ def _build_investor_view():
                             "un dossier est décompté pour ce bien, que tu peux ensuite modifier et retélécharger "
                             "pendant 30 jours."
                         ).classes("text-sm")
+                        # Achat par Stripe (site seulement) : de vrais liens vers un
+                        # nouvel onglet, actifs une fois la case cochée.
+                        achat = {"id": paiement.nouvel_achat_id(), "depuis": None}
+                        liens_achat: list[tuple[int, ui.element]] = []
+                        achat_status = None
+                        if not app.native.main_window and paiement_pages.paiement_ouvert():
+                            ui.label("Pas encore de code ? Choisis ton lot :").classes("text-sm font-semibold mt-1")
+                            case_renonciation = ui.checkbox(
+                                "Je demande l'accès immédiat à mon dossier et je renonce à mon droit de "
+                                "rétractation, qui ne s'applique plus une fois le dossier fourni."
+                            ).props("dense").classes("text-sm")
+                            with ui.row().classes("gap-2 flex-wrap"):
+                                for lot in paiement.LOTS:
+                                    with ui.element("a").classes("bouton-achat bouton-achat-off") as lien:
+                                        ui.html(
+                                            f"<strong>{paiement.libelle_lot(lot).replace(' de financement', '')}</strong>"
+                                            f" · {paiement.prix_lot(lot)}"
+                                        )
+                                    liens_achat.append((lot, lien))
+                            ui.label(
+                                "Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay) dans un nouvel onglet. "
+                                "Ton code s'affiche après le paiement et ton dossier s'ouvre ici tout seul."
+                            ).classes(theme.HINT_CLASSES)
+                            achat_status = ui.label("").classes("text-sm")
+                            ui.label("Tu as déjà un code ?").classes("text-sm font-semibold mt-1")
+
+                            def maj_liens_achat() -> None:
+                                for lot_lien, element in liens_achat:
+                                    if case_renonciation.value:
+                                        element.props(
+                                            f'href="{paiement_pages.lien_commande(lot_lien, achat["id"])}" '
+                                            'target="_blank" rel="noopener"'
+                                        )
+                                        element.classes(remove="bouton-achat-off")
+                                    else:
+                                        element.props(remove="href target rel")
+                                        element.classes(add="bouton-achat-off")
+
+                            case_renonciation.on_value_change(lambda _e: (maj_liens_achat(), sur_case_cochee()))
+                        else:
+                            case_renonciation = None
+
+                            def maj_liens_achat() -> None:
+                                pass
                         with ui.row().classes("items-center gap-2 w-full"):
                             champ_code = (
                                 ui.input("Code de dossier", placeholder="CRED-XXXX-XXXX")
@@ -3005,6 +3058,55 @@ def _build_investor_view():
             await on_generer_apercu()
 
     btn_code.on_click(on_utiliser_code)
+
+    # Achat par Stripe : l'onglet du simulateur guette le paiement fait dans
+    # l'autre onglet, puis ouvre le dossier avec le code acheté. Il guette dès
+    # que la case est cochée (un appui long ou « ouvrir dans un nouvel onglet »
+    # n'envoie pas de clic) ; Stripe n'est interrogé qu'une fois un paiement lancé.
+    async def guetter_paiement() -> None:
+        if not achat["depuis"]:
+            minuteur_achat.deactivate()
+            return
+        if time.monotonic() - achat["depuis"] > 1800:
+            achat["depuis"] = None
+            minuteur_achat.deactivate()
+            return
+        codes_payes = await paiement.verifier_achat(achat["id"])
+        if not codes_payes:
+            return
+        # Un nouvel identifiant pour un éventuel second achat dans cet onglet.
+        achat["id"] = paiement.nouvel_achat_id()
+        achat["depuis"] = None
+        minuteur_achat.deactivate()
+        maj_liens_achat()
+        code_achete = codes_payes[-1]
+        champ_code.set_value(code_achete)
+        if achat_status is not None:
+            achat_status.set_text(
+                f"Paiement reçu, merci ! Ton code : {', '.join(codes_payes)}. Note-le, il sert 12 mois."
+            )
+        await on_utiliser_code()
+
+    minuteur_achat = ui.timer(4.0, guetter_paiement, active=False)
+
+    def guetter() -> None:
+        achat["depuis"] = time.monotonic()
+        minuteur_achat.activate()
+
+    def sur_case_cochee() -> None:
+        if case_renonciation is not None and case_renonciation.value:
+            guetter()
+
+    def sur_clic_achat() -> None:
+        if case_renonciation is not None and not case_renonciation.value:
+            ui.notify("Coche d'abord la case d'accès immédiat au dossier.", type="warning")
+            return
+        guetter()
+        if achat_status is not None:
+            achat_status.set_text("Paiement en cours dans le nouvel onglet… Ton dossier s'ouvrira ici tout seul.")
+
+    for _lot, lien_achat in liens_achat:
+        lien_achat.on("click", lambda _e: sur_clic_achat())
 
     # =====================================================================
     # Fichier projet signé : enregistrer et rouvrir son projet
