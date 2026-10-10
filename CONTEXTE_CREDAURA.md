@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 9 octobre 2026 (paiement Stripe branché, éteint tant que le mode payant et la clé Stripe ne sont pas définis ; textes de l'accueil et confidentialité qui suivent le mode payant ; visite gardée 10 minutes sur téléphone), précédemment le 8 octobre (conditions générales d'utilisation sur /cgu ; page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 10 octobre 2026 (indicateurs mensuels en année courante : cash-flow, effort d'épargne et net-net après un différé et hors déductions ponctuelles de l'année 1 ; meilleur régime choisi sur l'enrichissement de toute la durée ; « Montant à financer » à côté du crédit ; exemple de dossier à +23 €/mois), précédemment le 9 octobre (paiement Stripe branché, éteint tant que le mode payant et la clé Stripe ne sont pas définis ; textes de l'accueil et confidentialité qui suivent le mode payant ; visite gardée 10 minutes sur téléphone), précédemment le 8 octobre (conditions générales d'utilisation sur /cgu ; page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -65,7 +65,7 @@
 **Fiscalité** (`fiscalite.py`, `simulation.py`)
 - Impôt sur le revenu = revenu imposable × TMI saisie (30 % par défaut), et non le barème complet du foyer.
 - Prélèvements sociaux : 17,2 % en location nue, 18,6 % en meublé.
-- Les régimes sont calculés côte à côte ; le « meilleur régime » est celui qui donne le meilleur cash-flow en année 1, parmi les régimes éligibles.
+- Les régimes sont calculés côte à côte ; le « meilleur régime » est celui qui donne le meilleur enrichissement net sur toute la durée (revente comprise), parmi les régimes éligibles. Avant le 10 octobre 2026, il était choisi sur l'année 1 : la déduction des travaux au réel y faisait choisir le réel et monter le cash-flow quand on ajoutait des travaux.
   - **Micro-foncier** : abattement 30 %, plafond 15 000 €.
   - **Foncier réel** : charges, intérêts et travaux (l'année 1) déduits. Les intérêts s'imputent d'abord sur les loyers ; le déficit dû aux autres charges est imputable sur le revenu global jusqu'à 10 700 €/an, le reste est reporté.
   - **Micro-BIC** : abattement 50 %, plafond 77 700 € (meublé, tourisme classé) ; 30 % et 15 000 € pour un meublé de tourisme non classé.
@@ -81,8 +81,9 @@
   - surtaxe au-delà de 50 000 € ;
   - en LMNP réel, les amortissements déduits sont réintégrés (loi de finances 2025, art. 84).
 - SCI à l'IS : plus-value sur la valeur nette comptable, sans abattement, puis flat tax de 30 % sur la distribution finale (simplification).
-- Rendement brut = loyer annuel ÷ coût total. Net de charges = (loyer − charges de l'an 1) ÷ coût total. Net-net = même chose, impôt de l'an 1 déduit.
-- Cash-flow mensuel = (loyers − charges − mensualités − impôt) ÷ 12, en année 1, pour le meilleur régime. Effort d'épargne = le cash-flow s'il est négatif.
+- Rendement brut = loyer annuel ÷ coût total. Net de charges = (loyer − charges de l'an 1) ÷ coût total. Net-net = même chose, impôt de l'année de référence déduit.
+- Cash-flow mensuel = (loyers − charges − mensualités − impôt) ÷ 12, pour le meilleur régime, en **année de référence** : la première année pleine après un différé, et au plus tôt l'année 2 (l'année 1 porte des effets ponctuels : déduction des travaux et des frais bancaires au réel, CFE exonérée). Effort d'épargne = le cash-flow s'il est négatif. La cascade « Où va ton loyer » et le comparatif des régimes utilisent la même année.
+- « Montant à financer » affiché à côté du sélecteur de crédit : prix + notaire + travaux (+ mobilier) − apport ; les frais bancaires s'y ajoutent dans le montant emprunté.
 - Enrichissement = −apport + Σ des cash-flows + revente nette (d'impôt et du capital restant dû).
 - TRI calculé sur ces mêmes flux.
 
@@ -150,7 +151,6 @@
   - il dit les charges constantes, or le code les indexe de 2 %/an ;
   - il cite la police « Inter » et des « comptes utilisateurs » en prochaine étape ;
   - il dit que l'avertissement sur la SCI à l'IR en meublé s'affiche, alors que le code ne l'affiche qu'en courte durée.
-- **Meilleur régime choisi sur l'année 1 seulement**, et non sur toute la durée.
 - **Taux réduit d'IS supposé toujours applicable.** La flat tax en SCI à l'IS est une simplification (le compte courant d'associé n'est pas modélisé).
 - **Achat-revente** : intérêts de portage simples, pas d'assurance emprunteur dans le portage.
 - **Reste à vivre non calculé**, alors que c'est un critère bancaire courant.

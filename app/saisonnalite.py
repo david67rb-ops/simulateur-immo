@@ -123,7 +123,8 @@ def analyse_mensuelle(inp: SimulationInput, resultat: dict) -> dict:
     proportionnelles = annee1["loyers_bruts"] * taux_proportionnel
     menage = inp.frais_menage_annuel
     fixes = annee1["charges_hors_credit"] - proportionnelles - menage
-    credit = annee1["mensualite_totale_credit"] / 12
+    # Mensualité de l'année de référence : pas celle, réduite, d'un différé.
+    credit = resultat["annees"][resultat.get("annee_reference", 1) - 1]["mensualite_totale_credit"] / 12
 
     lignes = []
     for m in range(12):

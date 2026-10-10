@@ -150,7 +150,7 @@ class SimulationInput(BaseModel):
     )
 
     # --- Objectifs (calcul du prix d'achat maximum) ---
-    objectif_cashflow_mensuel: float = Field(default=0, description="Location : cash-flow net mensuel visé (année 1)")
+    objectif_cashflow_mensuel: float = Field(default=0, description="Location : cash-flow net mensuel visé (année courante)")
     objectif_marge_nette: float = Field(default=0, description="Achat-revente : marge nette visée")
 
     # --- Spécifique achat-revente ---

@@ -945,9 +945,16 @@ def _build_investor_view():
                     )
 
                     theme.subsection_title("Financement")
-                    avec_credit_switch = ui.switch("Financement par crédit", value=sim_state["avec_credit"]).bind_value(
-                        sim_state, "avec_credit"
-                    )
+                    with ui.row().classes("w-full items-center justify-between gap-x-4 gap-y-1 flex-wrap"):
+                        avec_credit_switch = ui.switch(
+                            "Financement par crédit", value=sim_state["avec_credit"]
+                        ).bind_value(sim_state, "avec_credit")
+                        with ui.row().classes("items-center gap-1 no-wrap") as bloc_montant_a_financer:
+                            montant_a_financer = ui.label("").classes("text-sm font-semibold")
+                            theme.aide(
+                                "Prix d'achat + frais de notaire + travaux (+ mobilier) − apport. Les frais "
+                                "bancaires (garantie, dossier, courtage) s'y ajoutent dans le montant emprunté."
+                            )
                     refs["note_fonds_propres"] = ui.label(
                         "Bien financé intégralement en fonds propres : l'apport couvre la totalité du coût "
                         "de l'opération, sans mensualité ni intérêts d'emprunt."
@@ -1308,7 +1315,7 @@ def _build_investor_view():
                                 suffixe="€/mois",
                                 negatif=True,
                                 aide="Sert à calculer le prix d'achat maximum : le prix le plus élevé qui garde "
-                                "ce cash-flow en année 1.",
+                                "ce cash-flow en année courante.",
                             )
                             refs["field_objectif_marge"] = champ(
                                 "Objectif de marge nette",
@@ -1338,9 +1345,11 @@ def _build_investor_view():
                 with results_location:
                     with ui.row().classes(theme.GRID_CLASSES):
                         v_cashflow = theme.stat_card(
-                            "Cash-flow net mensuel (an 1)",
+                            "Cash-flow net mensuel",
                             grand=True,
-                            aide_texte="Ce qui reste chaque mois après loyers, charges, crédit et impôts.",
+                            aide_texte="Ce qui reste chaque mois après loyers, charges, crédit et impôts, en année "
+                            "courante : après un éventuel différé de crédit, et sans l'économie d'impôt ponctuelle "
+                            "de la première année (travaux, frais bancaires).",
                         )
                         v_effort = theme.stat_card(
                             "Effort d'épargne",
@@ -1377,7 +1386,7 @@ def _build_investor_view():
                     avertissements_box = ui.column().classes("w-full gap-2")
 
                     with theme.section_card():
-                        ui.label("Où va ton loyer (mois moyen, année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        ui.label("Où va ton loyer (mois type)").classes(theme.SUBSECTION_TITLE_CLASSES)
                         ui.echart({"series": []}).props('id="loyer-chart"').classes("w-full h-72")
 
                     bloc_saison = ui.column().classes("w-full gap-2")
@@ -1405,7 +1414,7 @@ def _build_investor_view():
                                 ).classes(theme.HINT_CLASSES)
 
                     with theme.section_card():
-                        ui.label("Comparatif des régimes fiscaux (année 1)").classes(theme.SUBSECTION_TITLE_CLASSES)
+                        ui.label("Comparatif des régimes fiscaux (année courante)").classes(theme.SUBSECTION_TITLE_CLASSES)
                         table_regimes = ui.table(
                             columns=[
                                 colonne("regime", "Régime", gauche=True),
@@ -1424,7 +1433,7 @@ def _build_investor_view():
                         table_stress = ui.table(
                             columns=[
                                 colonne("scenario", "Scénario", gauche=True),
-                                colonne("cashflow", "Cash-flow net mensuel (an 1)"),
+                                colonne("cashflow", "Cash-flow net mensuel"),
                                 colonne("tri", "TRI"),
                                 colonne("enrichissement", "Enrichissement net"),
                             ],
@@ -2059,9 +2068,9 @@ def _build_investor_view():
             regime = resultat["meilleur_regime"]
             effort = resultat["effort_epargne_mensuel"]
             principal = (
-                "Cash-flow net mensuel (an 1)",
-                eur(resultat["cashflow_mensuel_an1"]) + "/mois",
-                resultat["cashflow_mensuel_an1"],
+                "Cash-flow net mensuel",
+                eur(resultat["cashflow_mensuel"]) + "/mois",
+                resultat["cashflow_mensuel"],
             )
             lignes = [
                 ("Effort d'épargne", eur(effort) + "/mois" if effort > 0 else "Aucun"),
@@ -2500,8 +2509,8 @@ def _build_investor_view():
         meilleur = resultat["meilleur_regime"]
         render_verdict(calculer_verdict(inp, resultat))
 
-        v_cashflow.set_text(eur(resultat["cashflow_mensuel_an1"]) + "/mois")
-        theme.colorer(v_cashflow, resultat["cashflow_mensuel_an1"])
+        v_cashflow.set_text(eur(resultat["cashflow_mensuel"]) + "/mois")
+        theme.colorer(v_cashflow, resultat["cashflow_mensuel"])
         effort = resultat["effort_epargne_mensuel"]
         v_effort.set_text(eur(effort) + "/mois" if effort > 0 else "Aucun")
         theme.colorer(v_effort, effort, inverse=True)
@@ -2525,8 +2534,10 @@ def _build_investor_view():
             sinon="Sans objet sans crédit",
         )
         detail_location.set_text(
-            f"Indicateurs calculés pour le régime le plus favorable : {libelle_regime(meilleur)}, "
-            f"enrichissement sur {inp.duree_projection_annees} ans. "
+            f"Indicateurs calculés pour le régime le plus favorable sur la durée : {libelle_regime(meilleur)}, "
+            f"enrichissement sur {inp.duree_projection_annees} ans. Cash-flow, effort d'épargne et rendement "
+            f"net-net de l'année {resultat['annee_reference']}, première année courante (hors différé et hors "
+            "déductions ponctuelles de l'année 1). "
             f"Coût total = prix + notaire + travaux + mobilier + frais bancaires ({eur(resultat['frais_bancaires'])}). "
             "Mensualité hors assurance."
         )
@@ -2539,7 +2550,7 @@ def _build_investor_view():
                     "w-full text-sm rounded-xl p-3 border"
                 ).style(f"background: color-mix(in srgb, {theme.NEGATIVE} 10%, transparent); border-color: {theme.NEGATIVE};")
 
-        annee1 = resultat["annees"][0]
+        annee1 = resultat["annees"][resultat["annee_reference"] - 1]
         regimes = list(annee1["cashflow_apres_impot"].keys())
 
         rows_regimes = []
@@ -2789,8 +2800,15 @@ def _build_investor_view():
                 afficher_resultats()
             return
         maj_syntheses(inp, resultat)
+        maj_montant_a_financer(inp)
         if onglet_actif(tab_resultats):
             afficher_resultats(inp, resultat)
+
+    def maj_montant_a_financer(inp) -> None:
+        mobilier = inp.montant_mobilier if inp.type_projet != schemas.TypeProjet.achat_revente else 0.0
+        besoin = inp.prix_achat + inp.frais_notaire + inp.montant_travaux + mobilier - inp.apport
+        bloc_montant_a_financer.visible = inp.avec_credit
+        montant_a_financer.set_text(f"Montant à financer : {eur(max(besoin, 0.0))}")
 
     ui.timer(0.5, recalculer)
 

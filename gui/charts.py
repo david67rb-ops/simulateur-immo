@@ -63,7 +63,7 @@ def _barre(valeur: float, couleur: str, texte: str, visible: bool, position: str
 
 
 def repartition_loyer_option(resultat: dict) -> dict:
-    """Cascade mensuelle de l'année 1 : du loyer encaissé au cash-flow net, pour
+    """Cascade mensuelle de l'année de référence : du loyer encaissé au cash-flow net, pour
     le régime le plus favorable. Barres flottantes obtenues par empilement
     d'une base invisible ; les étapes qui traversent zéro sont coupées en une
     partie positive et une partie négative pour que l'empilement reste juste."""

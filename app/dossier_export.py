@@ -336,7 +336,7 @@ def _texte_repere_banque(critere: dict, inp, resultat: dict) -> str:
     """Pour la banque, des faits sans jugement : « Effort d'épargne de
     141 €/mois » plutôt que « Effort d'épargne important »."""
     if critere["nom"] == "Rentabilité":
-        cf = resultat["cashflow_mensuel_an1"]
+        cf = resultat["cashflow_mensuel"]
         if cf >= 0:
             return f"cash-flow net de +{_eur(cf)} par mois après crédit, charges et impôts"
         return f"effort d'épargne de {_eur(-cf)} par mois après crédit, charges et impôts"
@@ -816,7 +816,7 @@ def _tuiles_couverture(inp, resultat: dict, is_achat_revente: bool) -> list[tupl
         if inp.type_projet == TypeProjet.location_courte_duree
         else ("Loyer mensuel", _eur(inp.loyer_mensuel_hors_charges))
     )
-    cf = resultat["cashflow_mensuel_an1"]
+    cf = resultat["cashflow_mensuel"]
     return [
         ("Prix d'achat", _eur(inp.prix_achat), None),
         (*revenu, None),
@@ -899,7 +899,7 @@ def _image_cascade_loyer(resultat: dict) -> bytes:
         [(etapes[0][0], etapes[0][1], True)]
         + [(libelle, v, False) for libelle, v in etapes[1:]]
         + [("Cash-flow net", cashflow, True)],
-        titre="Du loyer au cash-flow (mois moyen, année 1)",
+        titre="Du loyer au cash-flow (mois type)",
     )
 
 
@@ -1060,7 +1060,7 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
         blocs = [bloc_bien, bloc_2, bloc_financement, bloc_4]
     else:
         regime = resultat["meilleur_regime"]
-        cf = resultat["cashflow_mensuel_an1"]
+        cf = resultat["cashflow_mensuel"]
         effort = resultat["effort_epargne_mensuel"]
         enrichissement = resultat["enrichissement_par_regime"][regime]
         couverture, _ = _couverture_loyer(resultat)
@@ -1741,7 +1741,8 @@ def _section_loyer_mensuel(doc, resultat):
     _ajouter_table_et_graphique(doc, lignes, _image_cascade_loyer(resultat), hauteur_max_cm=HAUTEUR_BLOC_CM - HAUTEUR_NOTE_CM)
     _ajouter_note(
         doc,
-        f"Moyenne mensuelle de la première année, régime {libelle_regime(resultat['meilleur_regime'])}. "
+        f"Moyenne mensuelle de l'année {resultat.get('annee_reference', 1)}, première année courante (hors différé "
+        f"de crédit et hors déductions ponctuelles de l'année 1), régime {libelle_regime(resultat['meilleur_regime'])}. "
         "Les charges comprennent copropriété, taxe foncière, assurances, entretien et frais de gestion.",
     )
 

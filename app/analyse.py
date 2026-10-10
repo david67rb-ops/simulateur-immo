@@ -24,7 +24,7 @@ def _indicateur_objectif(inp: SimulationInput) -> float:
     r = simuler(inp)
     if inp.type_projet == TypeProjet.achat_revente:
         return r["achat_revente"].marge_nette
-    return r["cashflow_mensuel_an1"]
+    return r["cashflow_mensuel"]
 
 
 def prix_achat_maximum(inp: SimulationInput) -> dict | None:
@@ -102,7 +102,7 @@ def scenarios_stress(inp: SimulationInput) -> list[dict]:
             lignes.append(
                 {
                     "scenario": libelle,
-                    "cashflow_mensuel": r["cashflow_mensuel_an1"],
+                    "cashflow_mensuel": r["cashflow_mensuel"],
                     "tri": r["tri_par_regime"].get(regime),
                     "enrichissement": r["enrichissement_par_regime"][regime],
                 }
@@ -128,7 +128,7 @@ def verdict(inp: SimulationInput, resultat: dict) -> dict:
         )
         return {"niveau": niveau, "titre": titre, "detail": detail}
 
-    cf = resultat["cashflow_mensuel_an1"]
+    cf = resultat["cashflow_mensuel"]
     regime = resultat["meilleur_regime"]
     enrichissement = resultat["enrichissement_par_regime"][regime]
     n = inp.duree_projection_annees
@@ -228,9 +228,10 @@ def _pct(v: float, digits: int = 1) -> str:
 
 
 def etapes_loyer_mensuel(resultat: dict) -> list[tuple[str, float]]:
-    """Du loyer encaissé au cash-flow net, en moyenne mensuelle de l'année 1,
-    pour le régime le plus favorable. `resultat` : sortie de clean_result."""
-    annee1 = resultat["annees"][0]
+    """Du loyer encaissé au cash-flow net, en moyenne mensuelle de l'année de
+    référence (hors différé et hors déductions ponctuelles de l'année 1), pour
+    le régime le plus favorable. `resultat` : sortie de clean_result."""
+    annee1 = resultat["annees"][resultat.get("annee_reference", 1) - 1]
     impots = annee1["fiscal"][resultat["meilleur_regime"]]["total_prelevements"] / 12
     etapes = [("Loyers encaissés", annee1["loyers_bruts"] / 12), ("Charges", -annee1["charges_hors_credit"] / 12)]
     if annee1["mensualite_totale_credit"]:

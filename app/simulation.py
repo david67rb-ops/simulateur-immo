@@ -133,10 +133,21 @@ def financement(inp: SimulationInput, cout_hors_frais_bancaires: float) -> tuple
     return montant_emprunte, frais_fixes + montant_emprunte * inp.taux_frais_garantie
 
 
-def _meilleur_regime(annee1: AnneeResultat) -> str:
-    """Régime au meilleur cash-flow net en année 1, parmi les régimes éligibles."""
+def _meilleur_regime(annee1: AnneeResultat, enrichissement_par_regime: dict[str, float]) -> str:
+    """Régime le plus favorable sur la durée du projet (enrichissement net,
+    revente comprise), parmi les régimes éligibles. Pas sur la seule année 1 :
+    la déduction des travaux au réel y donne une économie d'impôt ponctuelle
+    qui ferait choisir le réel même quand le micro rapporte plus ensuite."""
     eligibles = [r for r, f in annee1.fiscal.items() if getattr(f, "eligible", True)] or list(annee1.fiscal)
-    return max(eligibles, key=lambda r: annee1.cashflow_apres_impot[r])
+    return max(eligibles, key=lambda r: enrichissement_par_regime[r])
+
+
+def annee_de_reference(differe_mois: int, duree_projection: int) -> int:
+    """Année des indicateurs mensuels (cash-flow, effort d'épargne, rendement
+    net-net) : la première année pleine après le différé, et au plus tôt
+    l'année 2, car l'année 1 porte des effets ponctuels (déduction des travaux
+    et des frais bancaires au réel, CFE exonérée)."""
+    return max(1, min(max(2, -(-differe_mois // 12) + 1), duree_projection))
 
 
 def _simuler_location(inp: SimulationInput) -> dict:
@@ -409,19 +420,23 @@ def _simuler_location(inp: SimulationInput) -> dict:
 
     tri_par_regime = {r: irr(cfs) for r, cfs in cashflows_par_regime.items()}
 
+    differe_actif = inp.avec_credit and inp.differe_type != DiffereType.aucun and inp.differe_duree_mois > 0
+    annee_ref = annee_de_reference(inp.differe_duree_mois if differe_actif else 0, n)
+    ref = annees[annee_ref - 1]
+
     loyer_annuel_nominal = loyer_annuel_base if is_lcd else inp.loyer_mensuel_hors_charges * 12
     rendement_brut = loyer_annuel_nominal / cout_total_acquisition
     charges_an1 = annees[0].charges_hors_credit
     rendement_net_charges = (loyer_annuel_nominal - charges_an1) / cout_total_acquisition
     rendement_net_net_par_regime = {
-        r: (loyer_annuel_nominal - charges_an1 - annees[0].fiscal[r].total_prelevements) / cout_total_acquisition
+        r: (loyer_annuel_nominal - charges_an1 - ref.fiscal[r].total_prelevements) / cout_total_acquisition
         for r in regimes_a_calculer
     }
     # Gain net total sur la projection : apport sorti, cash-flows après impôt,
     # puis revente nette d'impôt et de capital restant dû.
     enrichissement_par_regime = {r: sum(cfs) for r, cfs in cashflows_par_regime.items()}
-    meilleur_regime = _meilleur_regime(annees[0])
-    cashflow_mensuel_an1 = annees[0].cashflow_apres_impot[meilleur_regime] / 12
+    meilleur_regime = _meilleur_regime(annees[0], enrichissement_par_regime)
+    cashflow_mensuel = ref.cashflow_apres_impot[meilleur_regime] / 12
 
     avertissements = []
     if is_lcd and inp.structure_juridique == StructureJuridique.sci_ir:
@@ -430,13 +445,15 @@ def _simuler_location(inp: SimulationInput) -> dict:
             "principe requalifiée à l'IS par l'administration fiscale (sauf si les recettes "
             "meublées restent accessoires, < 10 % des recettes totales)."
         )
-    differe_actif = inp.avec_credit and inp.differe_type != DiffereType.aucun and inp.differe_duree_mois > 0
     if differe_actif:
-        libelle = "total (rien n'est payé, intérêts capitalisés)" if inp.differe_type == DiffereType.total else "partiel (intérêts seuls payés)"
+        if inp.differe_type == DiffereType.total:
+            pendant = "rien n'est payé (les intérêts s'ajoutent au capital)"
+        else:
+            interets = f"{loan_schedule[0].mensualite_hors_assurance / 12:,.0f}".replace(",", "\u202f")
+            pendant = f"seuls les intérêts sont payés, soit {interets} €/mois hors assurance"
         avertissements.append(
-            f"Différé de crédit {libelle} pendant {inp.differe_duree_mois} mois : la mensualité "
-            "affiche ci-dessous est celle du régime de croisière (après différé), pas celle de "
-            "la première année."
+            f"Différé de crédit de {inp.differe_duree_mois} mois : pendant le différé, {pendant}. "
+            f"La mensualité et le cash-flow affichés sont ceux qui suivent, à partir de l'année {annee_ref}."
         )
 
     return {
@@ -446,8 +463,9 @@ def _simuler_location(inp: SimulationInput) -> dict:
         "montant_emprunte": montant_emprunte,
         "apport_reel": apport_reel,
         "meilleur_regime": meilleur_regime,
-        "cashflow_mensuel_an1": cashflow_mensuel_an1,
-        "effort_epargne_mensuel": max(-cashflow_mensuel_an1, 0.0),
+        "annee_reference": annee_ref,
+        "cashflow_mensuel": cashflow_mensuel,
+        "effort_epargne_mensuel": max(-cashflow_mensuel, 0.0),
         "rendement_net_net_par_regime": rendement_net_net_par_regime,
         "enrichissement_par_regime": enrichissement_par_regime,
         "mensualite_credit_hors_assurance": (

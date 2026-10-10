@@ -180,7 +180,9 @@ L'assurance emprunteur continue à courir pendant le différé (pratique
 bancaire standard). Le résultat de simulation distingue la mensualité de la
 première année de celle du « régime de croisière » (après différé) — c'est
 cette dernière qui est utilisée pour le calcul du taux d'endettement, par
-prudence.
+prudence. Le cash-flow, l'effort d'épargne et le rendement net-net affichés
+sont ceux de la première année pleine après le différé (et au plus tôt de
+l'année 2, sans les déductions ponctuelles de l'année 1).
 
 ## Dossier de financement (taux d'endettement + export Word)
 
