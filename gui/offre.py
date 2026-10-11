@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import os
 
-MODE_PAYANT = os.environ.get("IMMO_MODE_PAYANT") == "1"
+# Tolérant aux espaces ou retours à la ligne collés dans l'interface de Render.
+MODE_PAYANT = os.environ.get("IMMO_MODE_PAYANT", "").strip().lower() in ("1", "true", "oui", "yes")
 
 # Détail réservé au dossier : liste des ventes comparables (adresse, date,
 # prix, distance) et saisonnalité mois par mois. Le simulateur garde le

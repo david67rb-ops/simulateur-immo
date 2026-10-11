@@ -185,9 +185,9 @@ def parametres_session(lot: int, achat_id: str, base_url: str) -> dict[str, str]
             "tout seul dans l'onglet du simulateur."
         ),
     }
-    if os.environ.get("IMMO_STRIPE_CGV") == "1":
+    if os.environ.get("IMMO_STRIPE_CGV", "").strip() == "1":
         donnees["consent_collection[terms_of_service]"] = "required"
-    if os.environ.get("IMMO_STRIPE_FACTURES") == "1":
+    if os.environ.get("IMMO_STRIPE_FACTURES", "").strip() == "1":
         donnees["invoice_creation[enabled]"] = "true"
         donnees["invoice_creation[invoice_data][footer]"] = "TVA non applicable, art. 293 B du CGI."
     return donnees
