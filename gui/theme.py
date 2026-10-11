@@ -292,11 +292,14 @@ def signaler_champ(champ: ui.element) -> None:
 
 def effacer_signalement_a_la_saisie(champ: ui.element) -> None:
     def effacer(_e=None) -> None:
-        champ.props(remove="error-message no-error-icon")
+        # Seulement si le champ est signalé : renvoyer le champ au navigateur
+        # à chaque frappe écrasait les lettres tapées entre-temps.
+        if not champ._props.get("error"):
+            return
         # La clé « error » reste (à None) : NiceGUI la relit à chaque saisie
         # pour la validation, et la retirer provoquait un KeyError.
         champ._props["error"] = None
-        champ.update()
+        champ.props(remove="error-message no-error-icon")
 
     champ.on("update:model-value", effacer)
 
