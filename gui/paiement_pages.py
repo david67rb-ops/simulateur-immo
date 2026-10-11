@@ -18,6 +18,7 @@ import os
 import time
 from collections import defaultdict, deque
 from datetime import date
+from urllib.parse import urlencode
 
 from fastapi import Request
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -100,6 +101,9 @@ async def commander(request: Request, lot: int = 0, achat: str = "", renonciatio
         url = await paiement.creer_session(lot, achat, adresse_publique(request))
     except paiement.ErreurPaiement as exc:
         log.error("Session de paiement non créée : %s", exc)
+        if paiement.mode_test():
+            # Clés de test seulement : le message de Stripe s'affiche pour le diagnostic.
+            return RedirectResponse(f"/paiement/erreur?{urlencode({'detail': str(exc)[:400]})}", status_code=303)
         return RedirectResponse("/paiement/erreur", status_code=303)
     return RedirectResponse(url, status_code=303)
 
@@ -228,10 +232,12 @@ MOTIFS_ERREUR = {
 
 
 @ui.page("/paiement/erreur", title="Paiement indisponible · Credaura")
-def page_erreur(motif: str = "") -> None:
+def page_erreur(motif: str = "", detail: str = "") -> None:
     colonne = _gabarit("Le paiement n'a pas pu démarrer", date=False)
     with colonne:
         ui.label(
             MOTIFS_ERREUR.get(motif, "Le service de paiement ne répond pas. Aucun montant n'a été débité : réessaie dans quelques minutes.")
         ).classes("text-base mt-2")
+        if detail and paiement.mode_test():
+            ui.label(f"Diagnostic (mode test Stripe) : {detail}").classes("text-sm mt-4 " + theme.HINT_CLASSES)
     _pied(colonne)
