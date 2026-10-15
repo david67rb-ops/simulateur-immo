@@ -2108,11 +2108,19 @@ def _build_investor_view():
                 valeur.set_text(lignes[i][1])
         sy["erreur"].set_text("")
 
+    def surface_comparee() -> float | None:
+        """Surface du prix au m² comparé au marché. Zone sans DVF seulement :
+        à l'étape Marché, celle saisie sur cette étape (elle ne passe au
+        financement qu'en la quittant). Ailleurs, rien ne change."""
+        if ctx["sans_dvf"] and etape_affichee["tab"] is tab_marche:
+            return market_state.get("surface_m2")
+        return sim_state.get("surface_m2")
+
     def ecart_au_marche() -> tuple[float | None, str, str | None]:
         """Écart du prix au m² à la médiane du quartier (ou au repère saisi en
         zone sans DVF), la raison pour laquelle on ne peut pas encore le
         calculer, et le niveau du repère saisi (« adresse », « commune »)."""
-        prix_m2 = analyse.prix_projet_m2(sim_state["prix_achat"], sim_state.get("surface_m2"))
+        prix_m2 = analyse.prix_projet_m2(sim_state["prix_achat"], surface_comparee())
         if ctx["sans_dvf"]:
             repere = analyse.repere_prix(market_state)
             if not repere:
@@ -2336,7 +2344,7 @@ def _build_investor_view():
 
     def comparer_prix_au_marche() -> None:
         prix = sim_state.get("prix_achat") if ctx["prix_renseigne"] else None
-        bloc_prix.comparer(prix, sim_state.get("surface_m2"))
+        bloc_prix.comparer(prix, surface_comparee())
 
     def on_prix_saisi() -> None:
         ctx["prix_renseigne"] = True
@@ -2906,6 +2914,8 @@ def _build_investor_view():
                 mediane,
                 ctx["sans_dvf"],
                 [market_state.get(cle) for cle in analyse.CHAMPS_PRIX_REF],
+                # Zone sans DVF : surface de l'étape Marché tant qu'elle est affichée.
+                [market_state.get("surface_m2"), etape_affichee["tab"] is tab_marche] if ctx["sans_dvf"] else None,
             ],
             sort_keys=True,
             default=str,
