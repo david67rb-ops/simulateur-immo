@@ -160,9 +160,9 @@ def parametres_session(lot: int, achat_id: str, base_url: str) -> dict[str, str]
         "mode": "payment",
         "locale": "fr",
         "submit_type": "pay",
-        # La carte inclut Apple Pay et Google Pay quand l'appareil les propose ;
-        # que des moyens immédiats, pour livrer le code tout de suite.
-        "payment_method_types[0]": "card",
+        # Moyens de paiement réglés dans le tableau de bord Stripe (Stripe
+        # refuse désormais payment_method_types) : garder la carte, Apple Pay
+        # et Google Pay, des moyens immédiats qui livrent le code tout de suite.
         "line_items[0][quantity]": "1",
         "line_items[0][price_data][currency]": "eur",
         "line_items[0][price_data][unit_amount]": str(montant),
