@@ -3,6 +3,8 @@ sont saisis en % comme dans l'UI, convertis en fraction juste avant l'appel
 aux fonctions métier — voir build_simulation_input dans main.py)."""
 from __future__ import annotations
 
+from datetime import date
+
 
 def default_market_state() -> dict:
     return {
@@ -12,6 +14,14 @@ def default_market_state() -> dict:
         "surface_m2": 50.0,
         "rayon_metres": 500,
         "bien_neuf": False,
+        # Repère de prix saisi par l'utilisateur là où les ventes ne sont pas
+        # publiées (Alsace-Moselle, Mayotte) : voir analyse.repere_prix.
+        "prix_ref_m2": None,
+        "prix_ref_bas_m2": None,
+        "prix_ref_haut_m2": None,
+        "prix_ref_niveau": "adresse",
+        "prix_ref_source": "meilleursagents",
+        "prix_ref_date": date.today().isoformat(),
     }
 
 

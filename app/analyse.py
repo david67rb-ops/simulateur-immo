@@ -2,6 +2,8 @@
 maximum, scénarios de stress et verdict synthétique."""
 from __future__ import annotations
 
+from datetime import date
+
 from .notaire import calculer_frais_notaire
 from .saisonnalite import PERSONNALISE
 from .schemas import SimulationInput, TypeProjet
@@ -152,9 +154,154 @@ SEUIL_APPORT_CONFORTABLE = 0.10  # apport / coût total
 MARGE_ENDETTEMENT_CONFORTABLE = 0.03  # points sous le seuil HCSF
 
 
+# Écart du prix au m² du projet à la référence du marché (médiane DVF ou
+# repère saisi à l'adresse) : vert sous SEUIL_PRIX_VERT au-dessus, orange
+# sous SEUIL_PRIX_ORANGE, rouge au-delà.
+SEUIL_PRIX_VERT = 0.03
+SEUIL_PRIX_ORANGE = 0.10
+
+
+def prix_projet_m2(prix_achat: float | None, surface_m2: float | None) -> float | None:
+    """Prix au m² du projet, tel qu'il est comparé au marché (ventes DVF ou
+    repère de prix saisi) : prix d'achat seul, hors frais et travaux."""
+    if not prix_achat or not surface_m2:
+        return None
+    return prix_achat / surface_m2
+
+
 def niveau_ecart_au_marche(ecart: float) -> str:
     """Prix au m² du projet face à la médiane des ventes du quartier."""
-    return "vert" if ecart < 0.03 else ("orange" if ecart < 0.10 else "rouge")
+    return "vert" if ecart < SEUIL_PRIX_VERT else ("orange" if ecart < SEUIL_PRIX_ORANGE else "rouge")
+
+
+# ---------------------------------------------------------------------------
+# Repère de prix saisi par l'utilisateur, là où les ventes ne sont pas
+# publiées (Alsace-Moselle, Mayotte : hors base DVF). Credaura ne va jamais
+# chercher ce chiffre lui-même : l'utilisateur le recopie (MeilleursAgents…).
+# ---------------------------------------------------------------------------
+PRIX_REF_MIN_M2 = 300
+PRIX_REF_MAX_M2 = 20_000
+PRIX_REF_ANCIENNETE_MAX_JOURS = 183  # au-delà de 6 mois : à mettre à jour
+CHAMPS_PRIX_REF = (
+    "prix_ref_m2",
+    "prix_ref_bas_m2",
+    "prix_ref_haut_m2",
+    "prix_ref_niveau",
+    "prix_ref_source",
+    "prix_ref_date",
+)
+NIVEAUX_PRIX_REF = {"adresse": "à l'adresse du bien", "commune": "moyenne de la commune"}
+SOURCES_PRIX_REF = {
+    "meilleursagents": "MeilleursAgents",
+    "seloger": "SeLoger",
+    "agence": "Estimation d'agence",
+    "autre": "Autre",
+}
+# Dans une phrase : « Repère de prix : 2 600 €/m², estimation MeilleursAgents… »
+SOURCES_PRIX_REF_PHRASE = {
+    "meilleursagents": "estimation MeilleursAgents",
+    "seloger": "estimation SeLoger",
+    "agence": "estimation d'agence",
+    "autre": "source indiquée par l'emprunteur",
+}
+MESSAGE_REPERE_COMMUNAL = (
+    "Repère communal : trop large pour conclure à un prix excessif. Vérifie avec une estimation d'agence."
+)
+RAISON_SANS_REPERE = "Saisis un prix de référence pour évaluer ce critère."
+
+
+def _date_releve(valeur) -> date | None:
+    if isinstance(valeur, date):
+        return valeur
+    try:
+        return date.fromisoformat(str(valeur or "")[:10])
+    except ValueError:
+        return None
+
+
+def valider_prix_reference(
+    moyen: float | None,
+    bas: float | None = None,
+    haut: float | None = None,
+    date_releve=None,
+    aujourd_hui: date | None = None,
+) -> tuple[list[str], list[str]]:
+    """(erreurs, avertissements) du repère de prix saisi. Une erreur rend le
+    repère inutilisable (critère Prix non évalué) ; un avertissement non."""
+    aujourd_hui = aujourd_hui or date.today()
+    erreurs: list[str] = []
+    avertissements: list[str] = []
+    for valeur in (moyen, bas, haut):
+        if valeur is None:
+            continue
+        if valeur > PRIX_REF_MAX_M2:
+            erreurs.append("Ce chiffre ressemble à un prix total, pas à un prix au m².")
+            break
+        if valeur < PRIX_REF_MIN_M2:
+            erreurs.append("Ce prix au m² paraît trop bas : vérifie la saisie.")
+            break
+    if moyen is not None and not erreurs:
+        if (bas is not None and bas > moyen) or (haut is not None and haut < moyen) or (
+            bas is not None and haut is not None and bas > haut
+        ):
+            erreurs.append("La fourchette doit encadrer le prix moyen : bas ≤ moyen ≤ haut.")
+    jour = _date_releve(date_releve)
+    if date_releve and jour is None:
+        erreurs.append("Date du relevé invalide.")
+    elif jour is not None:
+        if jour > aujourd_hui:
+            erreurs.append("La date du relevé ne peut pas être dans le futur.")
+        elif (aujourd_hui - jour).days > PRIX_REF_ANCIENNETE_MAX_JOURS:
+            avertissements.append("Relevé de plus de 6 mois : mets-le à jour avant d'envoyer le dossier à la banque.")
+    return erreurs, avertissements
+
+
+def repere_prix(etat: dict, aujourd_hui: date | None = None) -> dict | None:
+    """Le repère saisi (champs prix_ref_* de l'étude de marché), s'il est
+    renseigné et valide ; None sinon."""
+    moyen = etat.get("prix_ref_m2")
+    if not moyen:
+        return None
+    erreurs, _ = valider_prix_reference(
+        moyen, etat.get("prix_ref_bas_m2"), etat.get("prix_ref_haut_m2"), etat.get("prix_ref_date"), aujourd_hui
+    )
+    if erreurs:
+        return None
+    jour = _date_releve(etat.get("prix_ref_date")) or (aujourd_hui or date.today())
+    return {
+        "prix_m2": float(moyen),
+        "bas_m2": float(etat["prix_ref_bas_m2"]) if etat.get("prix_ref_bas_m2") else None,
+        "haut_m2": float(etat["prix_ref_haut_m2"]) if etat.get("prix_ref_haut_m2") else None,
+        "niveau": etat.get("prix_ref_niveau") if etat.get("prix_ref_niveau") in NIVEAUX_PRIX_REF else "adresse",
+        "source": etat.get("prix_ref_source") if etat.get("prix_ref_source") in SOURCES_PRIX_REF else "autre",
+        "date": jour.isoformat(),
+    }
+
+
+def ecart_au_repere(prix_m2_projet: float, prix_ref_m2: float) -> float:
+    """(prix du projet au m² − repère) ÷ repère : 0,05 = 5 % au-dessus."""
+    return (prix_m2_projet - prix_ref_m2) / prix_ref_m2
+
+
+def niveau_ecart_repere(ecart: float, niveau_ref: str) -> str:
+    """À l'adresse : mêmes seuils que les ventes DVF. Repère communal :
+    vert ou orange, jamais rouge (trop large pour conclure)."""
+    if niveau_ref == "commune":
+        return "vert" if ecart < SEUIL_PRIX_VERT else "orange"
+    return niveau_ecart_au_marche(ecart)
+
+
+def libelle_repere(repere: dict) -> str:
+    """« Estimation MeilleursAgents à l'adresse, relevée le 15/10/2026 »."""
+    source = SOURCES_PRIX_REF_PHRASE[repere["source"]]
+    niveau = "à l'adresse" if repere["niveau"] == "adresse" else "moyenne de la commune"
+    jour = date.fromisoformat(repere["date"]).strftime("%d/%m/%Y")
+    return f"{source[0].upper()}{source[1:]}, {niveau}, relevée le {jour}"
+
+
+def pct_une_decimale(v: float) -> str:
+    """5,8 % (une décimale, virgule française, espace insécable)."""
+    return f"{abs(v) * 100:.1f}\u00a0%".replace(".", ",")
 
 
 def verdict_global(
@@ -163,6 +310,7 @@ def verdict_global(
     ecart_marche: float | None = None,
     endettement=None,
     raison_prix: str = "Lance l'étude de marché pour le comparer au quartier",
+    niveau_repere: str | None = None,
 ) -> dict:
     """Verdict en trois niveaux (solide, à renforcer, à revoir) sur les trois
     questions du banquier : la rentabilité, le prix face au marché, le
@@ -171,13 +319,26 @@ def verdict_global(
 
     `ecart_marche` : écart du prix au m² à la médiane du quartier (0,05 = 5 %
     au-dessus). `endettement` : ResultatEndettement si le profil de
-    l'emprunteur est renseigné. `resultat` : sortie de clean_result."""
+    l'emprunteur est renseigné. `resultat` : sortie de clean_result.
+    `niveau_repere` : « adresse » ou « commune » quand l'écart est mesuré à un
+    repère de prix saisi (zone sans DVF) plutôt qu'aux ventes du quartier."""
     is_ar = inp.type_projet == TypeProjet.achat_revente
     rentabilite = verdict(inp, resultat)
     criteres = [{"nom": "Marge" if is_ar else "Rentabilité", "niveau": rentabilite["niveau"], "texte": rentabilite["titre"]}]
 
     if ecart_marche is None:
         criteres.append({"nom": "Prix", "niveau": "neutre", "texte": raison_prix})
+    elif niveau_repere:
+        nom_repere = "repère communal" if niveau_repere == "commune" else "repère de prix"
+        if abs(ecart_marche) < 0.005:
+            texte = f"Au niveau du {nom_repere}"
+        else:
+            sens = "au-dessus du" if ecart_marche > 0 else "sous le"
+            texte = f"{_pct(abs(ecart_marche), 0)} {sens} {nom_repere}"
+        niveau_prix = niveau_ecart_repere(ecart_marche, niveau_repere)
+        if niveau_repere == "commune" and niveau_prix != "vert":
+            texte += ". " + MESSAGE_REPERE_COMMUNAL
+        criteres.append({"nom": "Prix", "niveau": niveau_prix, "texte": texte})
     else:
         if abs(ecart_marche) < 0.005:
             texte = "Dans la médiane du quartier"

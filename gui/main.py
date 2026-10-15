@@ -52,6 +52,7 @@ from . import accueil, apercus_dossier, avis, offre, pages_legales, paiement_pag
 from . import page_contact  # noqa: F401  (enregistre la page /contact)
 from . import page_admin  # noqa: F401  (enregistre la page /admin/codes)
 from . import statistiques
+from .prix_reference import BlocPrixReference
 from .progression import Progression
 from .cartes import CarteRentabilite, CarteVentes
 from .charts import cashflow_chart_option, patrimoine_option, repartition_loyer_option, saisonnalite_option
@@ -205,10 +206,15 @@ def ouvrir_lien_externe(url: str) -> None:
 
 
 def _marche_pour_dossier(geo: dict, comparables: dict, loyer: dict | None, type_bien: str) -> dict | None:
-    """Étude de marché telle qu'elle est reprise dans le dossier Word."""
-    if not comparables.get("prix_m2_moyen"):
+    """Étude de marché telle qu'elle est reprise dans le dossier Word. Sans
+    ventes publiées (Alsace-Moselle, Mayotte), l'étude est gardée quand même :
+    le dossier y ajoute le repère de prix saisi par l'utilisateur."""
+    sans_dvf = geo.get("code_departement") in market_data.DEPARTEMENTS_SANS_DVF
+    if not comparables.get("prix_m2_moyen") and not sans_dvf:
         return None
-    commune = donnees_marche.indicateurs_communes(geo["code_departement"], type_bien).get(geo["code_insee"]) or {}
+    commune = (
+        {} if sans_dvf else donnees_marche.indicateurs_communes(geo["code_departement"], type_bien).get(geo["code_insee"]) or {}
+    )
     rendement = commune.get("rendement_brut")
     return {
         "adresse": geo.get("label"),
@@ -218,6 +224,7 @@ def _marche_pour_dossier(geo: dict, comparables: dict, loyer: dict | None, type_
         "code_departement": geo["code_departement"],
         "type_bien": type_bien,
         "comparables": comparables,
+        "sans_dvf": sans_dvf,
         "loyer": loyer if loyer and not loyer.get("erreur") else None,
         "commune_indicateurs": {
             "prix_m2": float(commune["prix_m2"]),
@@ -264,13 +271,24 @@ class BlocPrixVentes:
         {"name": "distance", "label": "Distance", "field": "distance_txt", "align": "right"},
     ]
 
+    TITRE = "Prix de vente au m² (ventes comparables DVF)"
+    LIBELLES = ("Bas (p10)", "Médiane", "Haut (p90)")
+
     def __init__(self) -> None:
-        ui.label("Prix de vente au m² (ventes comparables DVF)").classes(theme.SUBSECTION_TITLE_CLASSES)
+        self.conteneur = ui.column().classes("w-full gap-2")
+        with self.conteneur:
+            self._construire()
+
+    def _construire(self) -> None:
+        self.titre = ui.label(self.TITRE).classes(theme.SUBSECTION_TITLE_CLASSES)
         with ui.row().classes(theme.GRID_CLASSES):
-            self.bas = theme.stat_card("Bas (p10)")
-            self.moyen = theme.stat_card("Médiane")
-            self.haut = theme.stat_card("Haut (p90)")
+            self.bas = theme.stat_card(self.LIBELLES[0])
+            self.moyen = theme.stat_card(self.LIBELLES[1])
+            self.haut = theme.stat_card(self.LIBELLES[2])
             self.nb = theme.stat_card("Ventes comparables")
+        self.carte_nb = self.nb.parent_slot.parent
+        # Repère de prix saisi (zone sans DVF) : remplace la médiane des ventes.
+        self.repere: dict | None = None
         self.fiabilite = ui.label("").classes("text-sm font-semibold")
         self.detail = ui.label("").classes(theme.HINT_CLASSES)
         self.comparaison = ui.label("").classes("text-sm")
@@ -298,11 +316,15 @@ class BlocPrixVentes:
             ).classes("w-full text-xs")
 
     def comparer(self, prix_achat: float | None, surface: float | None) -> None:
-        """Situe le prix d'achat saisi par rapport à la médiane des ventes."""
-        if not (self.mediane and prix_achat and surface):
+        """Situe le prix d'achat saisi par rapport à la médiane des ventes (ou
+        au repère de prix saisi, en zone sans DVF)."""
+        prix_m2 = analyse.prix_projet_m2(prix_achat, surface)
+        if not (self.mediane and prix_m2):
             self.comparaison.set_text("")
             return
-        prix_m2 = prix_achat / surface
+        if self.repere:
+            self._comparer_au_repere(prix_m2)
+            return
         ecart = prix_m2 / self.mediane - 1
         if abs(ecart) < 0.03:
             position, couleur = "dans la médiane des ventes comparables", theme.PRIMARY
@@ -316,8 +338,51 @@ class BlocPrixVentes:
         )
         self.comparaison.style(f"color: {couleur}")
 
+    def _comparer_au_repere(self, prix_m2: float) -> None:
+        repere = self.repere
+        ecart = analyse.ecart_au_repere(prix_m2, repere["prix_m2"])
+        niveau = analyse.niveau_ecart_repere(ecart, repere["niveau"])
+        nom = "repère communal" if repere["niveau"] == "commune" else "repère de prix"
+        if abs(ecart) < 0.005:
+            position = f"au niveau du {nom}"
+        elif ecart < 0:
+            position = f"{analyse.pct_une_decimale(ecart)} sous le {nom}"
+        else:
+            position = f"{analyse.pct_une_decimale(ecart)} au-dessus du {nom}"
+        couleur = {"vert": theme.POSITIVE if ecart < 0 else theme.PRIMARY, "orange": theme.ACCENT, "rouge": theme.NEGATIVE}[niveau]
+        self.comparaison.set_text(
+            f"Prix d'achat du projet : {eur(prix_m2)}/m², {position} ({eur(repere['prix_m2'])}/m²)."
+        )
+        self.comparaison.style(f"color: {couleur}")
+
+    def afficher_repere(self, repere: dict | None) -> None:
+        """Zone sans DVF : la fourchette affichée est celle du repère saisi
+        (bas, moyen, haut) ; rien tant qu'aucun prix valable n'est saisi."""
+        self.repere = repere
+        self.mediane = repere["prix_m2"] if repere else None
+        self.conteneur.visible = bool(repere)
+        if not repere:
+            return
+        self.titre.set_text("Prix de référence au m² (saisi)")
+        for carte, libelle in zip((self.bas, self.moyen, self.haut), ("Bas de la fourchette", "Prix moyen relevé", "Haut de la fourchette")):
+            carte.libelle.set_text(libelle)
+        self.bas.set_text(f"{eur(repere['bas_m2'])}/m²" if repere["bas_m2"] else "–")
+        self.moyen.set_text(f"{eur(repere['prix_m2'])}/m²")
+        self.haut.set_text(f"{eur(repere['haut_m2'])}/m²" if repere["haut_m2"] else "–")
+        self.carte_nb.visible = False
+        self.liens.visible = False
+        self.expansion.visible = self.renvoi_dossier.visible = False
+        self.fiabilite.set_text("")
+        self.detail.set_text(analyse.libelle_repere(repere) + ".")
+
     def afficher(self, comparables: dict, geo: dict | None = None) -> None:
         self.geo = geo or {}
+        self.repere = None
+        self.conteneur.visible = True
+        self.carte_nb.visible = True
+        self.titre.set_text(self.TITRE)
+        for carte, libelle in zip((self.bas, self.moyen, self.haut), self.LIBELLES):
+            carte.libelle.set_text(libelle)
         self.liens.visible = bool(self.geo.get("commune"))
         self.mediane = comparables.get("prix_m2_moyen")
 
@@ -668,6 +733,10 @@ def _build_investor_view():
         "commune": None,
         "dept": None,
         "marche_dossier": None,
+        # Adresse sans ventes publiées (Alsace-Moselle, Mayotte) : le prix se
+        # compare au repère saisi par l'utilisateur (étape Marché).
+        "sans_dvf": False,
+        "adresse_analysee": None,
         "photos_dossier": [],
         # Le prix d'achat de départ est un exemple : on ne le compare au marché
         # qu'une fois saisi par le client ou repris d'une annonce.
@@ -850,6 +919,19 @@ def _build_investor_view():
                     market_results = ui.column().classes("w-full gap-2 mt-2")
                     market_results.visible = False
                     with market_results:
+                        bloc_reference = BlocPrixReference(
+                            market_state,
+                            lambda: maj_repere(),
+                            [
+                                (
+                                    nom,
+                                    lambda s=site: ouvrir_lien_externe(
+                                        recherche_site(s, bloc_prix.geo.get("commune") or "", bloc_prix.geo.get("code_postal") or "")
+                                    ),
+                                )
+                                for nom, site in (("MeilleursAgents", "meilleursagents.com"), ("SeLoger", "seloger.com"))
+                            ],
+                        )
                         bloc_prix = BlocPrixVentes()
                         carte_ventes = CarteVentes()
 
@@ -2026,19 +2108,27 @@ def _build_investor_view():
                 valeur.set_text(lignes[i][1])
         sy["erreur"].set_text("")
 
-    def ecart_au_marche() -> tuple[float | None, str]:
-        """Écart du prix au m² à la médiane du quartier, ou la raison pour
-        laquelle on ne peut pas encore le calculer."""
+    def ecart_au_marche() -> tuple[float | None, str, str | None]:
+        """Écart du prix au m² à la médiane du quartier (ou au repère saisi en
+        zone sans DVF), la raison pour laquelle on ne peut pas encore le
+        calculer, et le niveau du repère saisi (« adresse », « commune »)."""
+        prix_m2 = analyse.prix_projet_m2(sim_state["prix_achat"], sim_state.get("surface_m2"))
+        if ctx["sans_dvf"]:
+            repere = analyse.repere_prix(market_state)
+            if not repere:
+                return None, analyse.RAISON_SANS_REPERE, None
+            if not ctx["prix_renseigne"] or not prix_m2:
+                return None, "Saisis le prix d'achat pour le comparer au repère", None
+            return analyse.ecart_au_repere(prix_m2, repere["prix_m2"]), "", repere["niveau"]
         mediane = ((ctx.get("marche_dossier") or {}).get("comparables") or {}).get("prix_m2_moyen")
-        surface = sim_state.get("surface_m2")
         if not mediane:
-            return None, "Lance l'étude de marché pour le comparer au quartier"
-        if not ctx["prix_renseigne"] or not surface:
-            return None, "Saisis le prix d'achat pour le comparer au quartier"
-        return sim_state["prix_achat"] / surface / mediane - 1, ""
+            return None, "Lance l'étude de marché pour le comparer au quartier", None
+        if not ctx["prix_renseigne"] or not prix_m2:
+            return None, "Saisis le prix d'achat pour le comparer au quartier", None
+        return prix_m2 / mediane - 1, "", None
 
     def calculer_verdict(inp, resultat: dict) -> dict:
-        ecart, raison = ecart_au_marche()
+        ecart, raison, niveau_repere = ecart_au_marche()
         endettement = None
         if ctx["profil_renseigne"] and inp.avec_credit:
             if inp.type_projet == schemas.TypeProjet.achat_revente:
@@ -2058,7 +2148,7 @@ def _build_investor_view():
                 mensualite,
                 loyers,
             )
-        return analyse.verdict_global(inp, resultat, ecart, endettement, raison or "")
+        return analyse.verdict_global(inp, resultat, ecart, endettement, raison or "", niveau_repere)
 
     def maj_syntheses(inp, resultat: dict) -> None:
         v = calculer_verdict(inp, resultat)
@@ -2238,6 +2328,12 @@ def _build_investor_view():
 
     prix_achat_input.on_value_change(lambda e: recalc_notaire())
 
+    def maj_repere() -> None:
+        """Zone sans DVF : la fourchette et la comparaison suivent le repère
+        saisi (le verdict, lui, suit au prochain recalcul)."""
+        bloc_prix.afficher_repere(analyse.repere_prix(market_state))
+        comparer_prix_au_marche()
+
     def comparer_prix_au_marche() -> None:
         prix = sim_state.get("prix_achat") if ctx["prix_renseigne"] else None
         bloc_prix.comparer(prix, sim_state.get("surface_m2"))
@@ -2380,6 +2476,18 @@ def _build_investor_view():
         statistiques.evenement("verification", "Vérification d'un projet")
 
         bloc_prix.afficher(comparables, geo)
+        sans_dvf = geo["code_departement"] in market_data.DEPARTEMENTS_SANS_DVF
+        ctx["sans_dvf"] = sans_dvf
+        # Le repère saisi vaut pour une adresse : effacé si l'on analyse un
+        # autre bien (pas à la réouverture d'un projet, où il est repris).
+        if ctx["adresse_analysee"] not in (None, geo["label"]):
+            for cle, valeur in default_market_state().items():
+                if cle.startswith("prix_ref_"):
+                    market_state[cle] = valeur
+        ctx["adresse_analysee"] = geo["label"]
+        bloc_reference.afficher(sans_dvf, market_state["type_bien"], introduction_mayotte=geo["code_departement"] == "976")
+        if sans_dvf:
+            maj_repere()
         comparer_prix_au_marche()
 
         loyer = loyer or {}
@@ -2790,7 +2898,15 @@ def _build_investor_view():
         synchroniser_saisonnalite()
         mediane = ((ctx.get("marche_dossier") or {}).get("comparables") or {}).get("prix_m2_moyen")
         signature = json.dumps(
-            [sim_state, profil_state, ctx["prix_renseigne"], ctx["profil_renseigne"], mediane],
+            [
+                sim_state,
+                profil_state,
+                ctx["prix_renseigne"],
+                ctx["profil_renseigne"],
+                mediane,
+                ctx["sans_dvf"],
+                [market_state.get(cle) for cle in analyse.CHAMPS_PRIX_REF],
+            ],
             sort_keys=True,
             default=str,
         )
@@ -2935,6 +3051,8 @@ def _build_investor_view():
                 marche = {**marche, "communes_geojson": geojson}
             except Exception:  # noqa: BLE001 — sans contours, carte des ventes seule
                 pass
+        if marche and marche.get("sans_dvf"):
+            marche = {**marche, "repere_prix": analyse.repere_prix(market_state)}
         nom_emprunteur = dossier_meta_state["nom_emprunteur"].strip() or None
         adresse_bien = dossier_meta_state["adresse_bien"].strip() or market_state.get("adresse", "").strip() or None
         payload = schemas.ExportDossierInput(
@@ -3208,9 +3326,7 @@ def _build_investor_view():
             (dossier_meta_state, "meta"),
             (chapitres_state, "chapitres"),
         ):
-            for k, v in (etat.get(cle) or {}).items():
-                if k in cible:
-                    cible[k] = v
+            projet_signe.reprendre(cible, etat.get(cle))
         for k, ligne in (etat.get("patrimoine") or {}).items():
             if k in patrimoine_state and isinstance(ligne, dict):
                 patrimoine_state[k].update(ligne)

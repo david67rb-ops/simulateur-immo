@@ -344,7 +344,7 @@ def _texte_repere_banque(critere: dict, inp, resultat: dict) -> str:
         ar = resultat["achat_revente"]
         part = ar["marge_nette"] / ar["cout_total_acquisition"] if ar["cout_total_acquisition"] else 0
         return f"marge nette de {_eur(ar['marge_nette'])}, soit {_pct(part)} du coût total de l'opération"
-    texte = critere["texte"].replace(", souvent jugé faible", "")
+    texte = critere["texte"].replace(", souvent jugé faible", "").replace(". " + analyse.MESSAGE_REPERE_COMMUNAL, "")
     return texte[0].lower() + texte[1:]
 
 
@@ -995,9 +995,16 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
     _texte(p_phrase, phrase_projet(payload, inp, resultat, is_achat_revente), 12.5, TEXTE_FONCE)
     p_phrase.paragraph_format.space_after = Pt(10)
     ecart = _ecart_au_marche(inp, payload.marche)
+    ecart_repere = _repere_du_marche(inp, payload.marche)
+    niveau_repere = ecart_repere[1]["niveau"] if ecart_repere else None
+    if ecart_repere:
+        ecart = (ecart_repere[0], ecart_repere[1]["prix_m2"])
     endettement = _taux_endettement(payload, inp, resultat, is_achat_revente) if payload.profil is not None else None
+    raison_prix = (
+        "aucun repère de prix renseigné" if (payload.marche or {}).get("sans_dvf") else "étude de marché non réalisée"
+    )
     v = analyse.verdict_global(
-        inp, resultat, ecart[0] if ecart else None, endettement, raison_prix="étude de marché non réalisée"
+        inp, resultat, ecart[0] if ecart else None, endettement, raison_prix=raison_prix, niveau_repere=niveau_repere
     )
     _bandeau_reperes(doc, v, inp, resultat, _pour_la_banque(payload))
     cout_total, apport, montant_emprunte = _cout_apport_emprunt(resultat, is_achat_revente)
@@ -1005,11 +1012,21 @@ def _section_synthese(doc, payload, inp, resultat, is_achat_revente):
     prix_m2 = f"{_eur(inp.prix_achat / inp.surface_m2)}/m²"
     if ecart:
         signe = "+" if ecart[0] > 0 else "−"
-        prix_m2 += f" ({signe}{_pct(abs(ecart[0]), 0)} vs quartier)" if abs(ecart[0]) >= 0.005 else " (médiane)"
+        reference = "repère" if niveau_repere else "quartier"
+        if abs(ecart[0]) >= 0.005:
+            prix_m2 += f" ({signe}{_pct(abs(ecart[0]), 0)} vs {reference})"
+        else:
+            prix_m2 += " (au niveau du repère)" if niveau_repere else " (médiane)"
+    if not ecart:
+        niveau_bien = "neutre"
+    elif niveau_repere:
+        niveau_bien = analyse.niveau_ecart_repere(ecart[0], niveau_repere)
+    else:
+        niveau_bien = _niveau_ecart(ecart[0])
     bloc_bien = (
         "home",
         "Le bien",
-        _niveau_ecart(ecart[0]) if ecart else "neutre",
+        niveau_bien,
         [("Prix d'achat", _eur(inp.prix_achat)), ("Prix au m²", prix_m2), ("Coût total de l'opération", _eur(cout_total))],
     )
 
@@ -1166,6 +1183,107 @@ def _ecart_marche(prix_m2: float, mediane: float) -> tuple[str, bool | None]:
     if round(ecart * 100) == 0:
         return "0 %", favorable
     return ("+" if ecart > 0 else "") + _pct(ecart, 0), favorable
+
+
+NIVEAUX_CRITERE = {"vert": "favorable", "orange": "à surveiller", "rouge": "défavorable", "neutre": "non évalué"}
+
+
+def _repere_du_marche(inp, marche: dict | None) -> tuple[float, dict] | None:
+    """(écart du prix au m² du projet au repère saisi, repère) en zone sans
+    DVF, si un repère valable a été saisi."""
+    repere = (marche or {}).get("repere_prix")
+    prix_m2 = analyse.prix_projet_m2(inp.prix_achat, inp.surface_m2)
+    if not repere or not prix_m2:
+        return None
+    return analyse.ecart_au_repere(prix_m2, repere["prix_m2"]), repere
+
+
+def texte_repere_prix(inp, marche: dict | None, pour_banque: bool, critere_prix: dict | None = None) -> list[str]:
+    """Paragraphes de l'étude de marché d'une adresse sans ventes publiées.
+    Pour la banque (formules Complet et Banque) : des repères factuels, sans
+    jugement ; formule Personnel : plus le critère Prix tel que sur le site."""
+    if (marche or {}).get("code_departement") == "976":
+        contexte = "À Mayotte, les ventes immobilières ne sont pas publiées dans la base nationale DVF."
+    else:
+        contexte = (
+            "En Alsace-Moselle, les ventes immobilières ne sont pas publiées dans la base nationale DVF "
+            "(régime du Livre foncier)."
+        )
+    ecart_repere = _repere_du_marche(inp, marche)
+    if not ecart_repere:
+        return [f"{contexte} Aucun repère de prix n'a été renseigné."]
+    ecart, repere = ecart_repere
+
+    def nombre(v: float) -> str:
+        return f"{v:,.0f}".replace(",", "\u00a0")
+
+    fourchette = (
+        f" (fourchette de {nombre(repere['bas_m2'])} à {nombre(repere['haut_m2'])}\u00a0€/m²)"
+        if repere["bas_m2"] and repere["haut_m2"]
+        else ""
+    )
+    source = analyse.SOURCES_PRIX_REF_PHRASE[repere["source"]]
+    niveau = analyse.NIVEAUX_PRIX_REF[repere["niveau"]]
+    jour = datetime.fromisoformat(repere["date"]).strftime("%d/%m/%Y")
+    prix_m2 = analyse.prix_projet_m2(inp.prix_achat, inp.surface_m2)
+    if abs(ecart) < 0.0005:
+        position = "soit au niveau de ce repère"
+    else:
+        position = f"soit {analyse.pct_une_decimale(ecart)} {'au-dessus de' if ecart > 0 else 'sous'} ce repère"
+    nature = {
+        "meilleursagents": "une estimation en ligne",
+        "seloger": "une estimation en ligne",
+        "agence": "une estimation d'agence",
+    }.get(repere["source"], "une estimation")
+    paragraphes = [
+        f"Repère de prix : {nombre(repere['prix_m2'])}\u00a0€/m²{fourchette}, {source} {niveau}, relevée par "
+        f"l'emprunteur le {jour}. Prix du projet : {nombre(prix_m2)}\u00a0€/m², {position}.",
+        f"{contexte} Ce repère est {nature}, à rapprocher d'un avis de valeur professionnel.",
+    ]
+    if not pour_banque and critere_prix:
+        paragraphes.append(
+            f"Critère Prix sur Credaura : {NIVEAUX_CRITERE[critere_prix['niveau']]} ({critere_prix['texte']})."
+        )
+    return paragraphes
+
+
+def _section_repere(doc, inp, resultat: dict, marche: dict, pour_banque: bool):
+    """Étude de marché d'une adresse sans ventes publiées (Alsace-Moselle,
+    Mayotte) : le repère de prix saisi par l'emprunteur, sans carte ni
+    liste de ventes."""
+    ecart_repere = _repere_du_marche(inp, marche)
+    critere_prix = None
+    if ecart_repere:
+        ecart, repere = ecart_repere
+        niveau = analyse.niveau_ecart_repere(ecart, repere["niveau"])
+        signe = "+" if ecart > 0 else ("−" if ecart < 0 else "")
+        tuiles = [
+            ("Prix d'achat du projet", f"{_eur(analyse.prix_projet_m2(inp.prix_achat, inp.surface_m2))}/m²", None),
+            ("Repère de prix", f"{_eur(repere['prix_m2'])}/m²", None),
+            ("Écart au repère", f"{signe}{analyse.pct_une_decimale(ecart)}", {"vert": True, "orange": None, "rouge": False}[niveau]),
+        ]
+        loyer = marche.get("loyer") or {}
+        if inp.type_projet == TypeProjet.location_longue_duree and loyer.get("loyer_m2_moyen"):
+            loyer_projet_m2 = inp.loyer_mensuel_hors_charges / inp.surface_m2
+            tuiles.append(
+                (
+                    "Loyer projet / marché",
+                    f"{loyer_projet_m2:.1f} / {loyer['loyer_m2_moyen']:.1f} €/m²".replace(".", ","),
+                    loyer_projet_m2 <= loyer["loyer_m2_moyen"] * 1.05,
+                )
+            )
+        _tuiles(doc, tuiles)
+        v = analyse.verdict_global(inp, resultat, ecart, None, "", repere["niveau"])
+        critere_prix = next(c for c in v["criteres"] if c["nom"] == "Prix")
+    for texte in texte_repere_prix(inp, marche, pour_banque, critere_prix):
+        p = doc.add_paragraph()
+        _texte(p, texte, 10.5, TEXTE_FONCE)
+        p.paragraph_format.space_before = Pt(8)
+    _ajouter_note(
+        doc,
+        "Sources : repère de prix saisi par l'emprunteur (Credaura ne le récupère pas lui-même)"
+        + (" ; loyers : carte des loyers (ANIL)." if (marche.get("loyer") or {}).get("loyer_m2_moyen") else "."),
+    )
 
 
 def _section_marche(doc, inp, marche: dict, is_achat_revente: bool):
@@ -2021,6 +2139,19 @@ def phrases_a_retenir(payload, inp, resultat: dict, is_achat_revente: bool) -> d
                 "à justifier (travaux, prestations) ou à négocier."
             )
         phrases["marche"] = (_niveau_ecart(e), texte)
+    ecart_repere = _repere_du_marche(inp, marche)
+    if ecart_repere:
+        # Des faits, sans jugement : le repère est une estimation, pas une vente.
+        e, repere = ecart_repere
+        if abs(e) < 0.0005:
+            position = "au niveau du repère de prix"
+        else:
+            position = f"{analyse.pct_une_decimale(e)} {'au-dessus du' if e > 0 else 'sous le'} repère de prix"
+        phrases["marche"] = (
+            analyse.niveau_ecart_repere(e, repere["niveau"]),
+            f"Prix d'achat {position} ({_eur(repere['prix_m2'])}/m², "
+            f"{analyse.SOURCES_PRIX_REF_PHRASE[repere['source']]} {analyse.NIVEAUX_PRIX_REF[repere['niveau']]}).",
+        )
 
     frais = cout_total - inp.prix_achat
     phrases["presentation"] = (
@@ -2171,6 +2302,10 @@ def _generer_dossier_word(payload: ExportDossierInput, chapitres_lisibles: int |
     annee1 = None if is_achat_revente else resultat["annees"][0]
     marche = payload.marche
     avec_marche = bool(marche and (marche.get("comparables") or {}).get("prix_m2_moyen"))
+    # Adresse sans ventes publiées (Alsace-Moselle, Mayotte) : chapitre
+    # marché sur le repère de prix saisi, sans carte ni liste de ventes.
+    avec_repere = bool(marche and marche.get("sans_dvf") and not avec_marche)
+    pour_banque = _pour_la_banque(payload)
     avertissements = resultat.get("avertissements") or []
     # Carte de rentabilité des communes : loyers de location classique, sans
     # objet en location courte durée ou en achat-revente.
@@ -2206,6 +2341,15 @@ def _generer_dossier_word(payload: ExportDossierInput, chapitres_lisibles: int |
             "Étude de marché",
             "Le prix d'achat comparé aux ventes réelles de biens similaires autour du bien.",
             lambda d: _section_marche(d, inp, marche, is_achat_revente),
+        ),
+        (
+            avec_repere,
+            "marche",
+            "Étude de marché",
+            "Le prix d'achat comparé à un repère de prix du marché, faute de ventes publiées."
+            if (marche or {}).get("repere_prix")
+            else "Pourquoi le prix n'est pas comparé à des ventes réelles.",
+            lambda d: _section_repere(d, inp, resultat, marche, pour_banque),
         ),
         (
             True,

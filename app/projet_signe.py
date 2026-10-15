@@ -85,6 +85,15 @@ def importer(donnees: bytes) -> dict:
     raise FichierProjetInvalide("Ce fichier a été modifié après son enregistrement : il ne peut pas être rouvert.")
 
 
+def reprendre(cible: dict, valeurs: dict | None) -> None:
+    """Recopie dans un état du simulateur les valeurs d'un fichier projet,
+    en place et seulement pour les clés connues : un fichier plus ancien,
+    sans les champs ajoutés depuis, garde leurs valeurs par défaut."""
+    for k, v in (valeurs or {}).items():
+        if k in cible:
+            cible[k] = v
+
+
 def limite_modification(aujourd_hui: date | None = None) -> str:
     return ((aujourd_hui or date.today()) + timedelta(days=MODIFICATION_JOURS)).isoformat()
 

@@ -10,7 +10,10 @@ achat-revente) :
    loyers DHUP/ANIL, extraction depuis un lien d'annonce), carte des ventes
    comparables autour du bien, carte de rentabilité brute des communes
    du département, position du prix d'achat par rapport à la médiane des
-   ventes et liens pour recouper sur MeilleursAgents ou SeLoger.
+   ventes et liens pour recouper sur MeilleursAgents ou SeLoger. Là où les
+   ventes ne sont pas publiées (Alsace-Moselle, Mayotte), l'utilisateur
+   recopie un repère de prix au m² (MeilleursAgents, agence…) : le critère
+   Prix et le dossier s'en servent (jamais rouge pour un repère communal).
 2. **Financement** : caractéristiques du bien, frais de notaire automatiques,
    emprunt (classique ou différé partiel/total), spécificités achat-revente.
 3. **Exploitation** : loyers et charges (masqué en achat-revente).
@@ -62,6 +65,12 @@ la place (utile pour du débogage ou un accès à distance) :
 
 ```bash
 python3 main.py --web --port 8080
+```
+
+Tests (bibliothèque standard, sans dépendance) :
+
+```bash
+venv/bin/python -m unittest discover -s tests
 ```
 
 Les données de marché (DVF par département, indicateurs de loyers) sont
@@ -303,8 +312,10 @@ téléchargés à la demande (trop volumineux pour être livrés).
 
 ## Limites connues de l'étude de marché
 
-- DVF ne couvre pas l'Alsace-Moselle (67, 68, 57) ni Mayotte (l'app le
-  signale), et les ventes très récentes (< 6 à 12 mois) sont absentes de
+- DVF ne couvre pas l'Alsace-Moselle (67, 68, 57) ni Mayotte : l'app le
+  signale et demande un repère de prix saisi par l'utilisateur (une
+  estimation, pas une vente réelle ; Credaura ne le récupère jamais
+  lui-même). Les ventes très récentes (< 6 à 12 mois) sont absentes de
   l'export, publié deux fois par an.
 - Prix au m² : ventes des 24 derniers mois publiés (années détectées
   automatiquement, cache rafraîchi tous les 30 jours), une ligne par vente
