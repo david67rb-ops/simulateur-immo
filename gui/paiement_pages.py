@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hmac
 import json
+from html import escape
 import logging
 import os
 import time
@@ -136,36 +137,39 @@ def _masquer(valeur: str) -> str:
     return f"{valeur[:8]}…{valeur[-4:]}" if len(valeur) > 14 else ("définie" if valeur else "")
 
 
-@app.get("/paiement/diagnostic", response_class=HTMLResponse)
-async def diagnostic(request: Request, essai: str = "") -> HTMLResponse:
-    """Vérifie la configuration du paiement, réglage par réglage (lien d'essai
-    seulement). En mode test, crée aussi une vraie page de paiement Stripe."""
-    if not essai_valide(essai):
-        return HTMLResponse("Introuvable", status_code=404)
-    lignes: list[tuple[bool | None, str, str]] = []
+async def verifications(base: str) -> list[tuple[bool | None, str, str, str]]:
+    """Configuration du paiement, réglage par réglage : (bon ? None = neutre,
+    titre, explication, lien éventuel). En mode test, crée aussi une vraie page
+    de paiement Stripe. Partagé par /paiement/diagnostic et /admin/codes."""
+    lignes: list[tuple[bool | None, str, str, str]] = []
+
+    def noter(ok: bool | None, titre: str, texte: str, lien: str = "") -> None:
+        lignes.append((ok, titre, texte, lien))
+
     cle = paiement.cle_secrete()
-    lignes.append((bool(cle), "Clé secrète Stripe", (_masquer(cle) + (" (mode test)" if paiement.mode_test() else " (mode réel)")) if cle else "absente : IMMO_STRIPE_CLE_SECRETE"))
+    noter(bool(cle), "Clé secrète Stripe", (_masquer(cle) + (" (mode test)" if paiement.mode_test() else " (mode réel)")) if cle else "absente : IMMO_STRIPE_CLE_SECRETE")
     secret = paiement.secret_webhook()
-    lignes.append((secret.startswith("whsec_"), "Secret du webhook", _masquer(secret) or "absent : IMMO_STRIPE_SECRET_WEBHOOK"))
-    base = adresse_publique(request)
-    lignes.append((base.startswith("https://"), "Adresse du site (retours de Stripe)", base))
-    lignes.append((None, "Mode payant (IMMO_MODE_PAYANT)", "allumé" if offre.MODE_PAYANT else "éteint : boutons visibles seulement avec le lien d'essai"))
-    lignes.append((paiement.factures_actives(), "Facture jointe au reçu (IMMO_STRIPE_FACTURES=1)", "allumée : elle confirme la renonciation à la rétractation" if paiement.factures_actives() else "éteinte : à allumer avant l'ouverture (note obligatoire dès 25 €, confirmation de la renonciation)"))
+    noter(secret.startswith("whsec_"), "Secret du webhook", _masquer(secret) or "absent : IMMO_STRIPE_SECRET_WEBHOOK")
+    noter(base.startswith("https://"), "Adresse du site (retours de Stripe)", base)
+    noter(None, "Mode payant (IMMO_MODE_PAYANT)", "allumé" if offre.MODE_PAYANT else "éteint : boutons visibles seulement avec le lien d'essai")
+    noter(paiement.factures_actives(), "Facture jointe au reçu (IMMO_STRIPE_FACTURES=1)", "allumée : elle confirme la renonciation à la rétractation" if paiement.factures_actives() else "éteinte : à allumer avant l'ouverture (note obligatoire dès 25 €, confirmation de la renonciation)")
     manque = [nom for nom, valeur in (("SIRET", editeur.SIRET), ("adresse", editeur.ADRESSE), ("téléphone", editeur.TELEPHONE), ("médiateur", editeur.MEDIATEUR_NOM)) if not valeur]
-    lignes.append((not manque, "Identité du vendeur dans les CGV (app/editeur.py)", "complète" if not manque else f"à compléter : {', '.join(manque)}"))
+    noter(not manque, "Identité du vendeur dans les CGV (app/editeur.py)", "complète" if not manque else f"à compléter : {', '.join(manque)}")
     try:
         nb = len(codes.lister(5))
         dossier = os.environ.get("IMMO_DONNEES_DIR", "")
-        lignes.append((True, "Base des codes", f"accessible ({nb} code(s) récents){'' if dossier else ' ; IMMO_DONNEES_DIR absent : base perdue à chaque déploiement'}"))
+        noter(bool(dossier), "Base des codes", f"accessible ({nb} code(s) récents)" + (f", sur le disque permanent ({dossier})" if dossier else " ; IMMO_DONNEES_DIR absent : base perdue à chaque déploiement"))
     except Exception as exc:  # noqa: BLE001
-        lignes.append((False, "Base des codes", f"inaccessible : {exc}"))
+        noter(False, "Base des codes", f"inaccessible : {exc}")
+    signature = bool(os.environ.get("IMMO_SIGNATURE_SECRET") or os.environ.get("IMMO_STORAGE_SECRET"))
+    noter(signature, "Clé de signature des fichiers projet (IMMO_SIGNATURE_SECRET)", "définie" if signature else "absente : un fichier projet falsifié ouvrirait le dossier gratuitement")
     if cle:
         try:
             compte = await paiement._appel("GET", "/v1/account")
             nom = ((compte.get("business_profile") or {}).get("name")) or ((compte.get("settings") or {}).get("dashboard") or {}).get("display_name") or ""
-            lignes.append((bool(nom), "Compte Stripe", f"{nom or 'SANS NOM : Paramètres > Entreprise > Informations publiques'} · pays {compte.get('country', '?')} · paiements réels {'activés' if compte.get('charges_enabled') else 'pas encore activés'}"))
+            noter(bool(nom), "Compte Stripe", f"{nom or 'SANS NOM : Paramètres > Entreprise > Informations publiques'} · pays {compte.get('country', '?')} · paiements réels {'activés' if compte.get('charges_enabled') else 'pas encore activés'}")
         except paiement.ErreurPaiement as exc:
-            lignes.append((False, "Compte Stripe", str(exc)))
+            noter(False, "Compte Stripe", str(exc))
         try:
             points = (await paiement._appel("GET", "/v1/webhook_endpoints?limit=20")).get("data") or []
             attendu = f"{base}/stripe/webhook"
@@ -173,21 +177,33 @@ async def diagnostic(request: Request, essai: str = "") -> HTMLResponse:
             if trouve:
                 evts = set(trouve[0].get("enabled_events") or [])
                 manque = [e for e in paiement.EVENEMENTS_PAYES if e not in evts and "*" not in evts]
-                lignes.append((not manque and trouve[0].get("status") == "enabled", "Webhook chez Stripe", f"{attendu} · {trouve[0].get('status')}" + (f" · événements manquants : {', '.join(manque)}" if manque else " · événements OK")))
+                noter(not manque and trouve[0].get("status") == "enabled", "Webhook chez Stripe", f"{attendu} · {trouve[0].get('status')}" + (f" · événements manquants : {', '.join(manque)}" if manque else " · événements OK"))
             else:
-                lignes.append((False, "Webhook chez Stripe", f"aucun webhook vers {attendu} (trouvés : {', '.join(p.get('url', '') for p in points) or 'aucun'})"))
+                noter(False, "Webhook chez Stripe", f"aucun webhook vers {attendu} (trouvés : {', '.join(p.get('url', '') for p in points) or 'aucun'})")
         except paiement.ErreurPaiement as exc:
-            lignes.append((False, "Webhook chez Stripe", str(exc)))
+            noter(False, "Webhook chez Stripe", str(exc))
         if paiement.mode_test():
             try:
                 url = await paiement.creer_session(1, paiement.nouvel_achat_id(), base)
-                lignes.append((True, "Création d'une page de paiement", f'OK : <a href="{url}">ouvrir la page Stripe et payer avec 4242 4242 4242 4242</a>'))
+                noter(True, "Création d'une page de paiement", "OK : ouvrir la page Stripe et payer avec 4242 4242 4242 4242", url)
             except paiement.ErreurPaiement as exc:
-                lignes.append((False, "Création d'une page de paiement", str(exc)))
-    def ligne(ok: bool | None, titre: str, texte: str) -> str:
+                noter(False, "Création d'une page de paiement", str(exc))
+    return lignes
+
+
+@app.get("/paiement/diagnostic", response_class=HTMLResponse)
+async def diagnostic(request: Request, essai: str = "") -> HTMLResponse:
+    """Diagnostic par le lien d'essai (aussi dans /admin/codes, après le mot de passe)."""
+    if not essai_valide(essai):
+        return HTMLResponse("Introuvable", status_code=404)
+    lignes = await verifications(adresse_publique(request))
+
+    def ligne(ok: bool | None, titre: str, texte: str, lien: str) -> str:
         signe = "—" if ok is None else ("✔" if ok else "✘")
         couleur = "#555" if ok is None else ("#2d6a4f" if ok else "#b23a32")
-        return f'<tr><td style="color:{couleur};font-weight:700;padding:6px 10px">{signe}</td><td style="padding:6px 10px;font-weight:600">{titre}</td><td style="padding:6px 10px">{texte}</td></tr>'
+        corps = f'<a href="{escape(lien)}">{escape(texte)}</a>' if lien else escape(texte)
+        return f'<tr><td style="color:{couleur};font-weight:700;padding:6px 10px">{signe}</td><td style="padding:6px 10px;font-weight:600">{escape(titre)}</td><td style="padding:6px 10px">{corps}</td></tr>'
+
     html = (
         "<!doctype html><html lang='fr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
         "<meta name='robots' content='noindex'><title>Diagnostic du paiement · Credaura</title></head>"
