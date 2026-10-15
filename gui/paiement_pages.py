@@ -25,7 +25,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from nicegui import app, ui
 
-from app import codes, paiement
+from app import codes, editeur, paiement
 
 from . import offre, statistiques, theme
 from .pages_legales import _gabarit, _pied
@@ -150,6 +150,9 @@ async def diagnostic(request: Request, essai: str = "") -> HTMLResponse:
     base = adresse_publique(request)
     lignes.append((base.startswith("https://"), "Adresse du site (retours de Stripe)", base))
     lignes.append((None, "Mode payant (IMMO_MODE_PAYANT)", "allumé" if offre.MODE_PAYANT else "éteint : boutons visibles seulement avec le lien d'essai"))
+    lignes.append((paiement.factures_actives(), "Facture jointe au reçu (IMMO_STRIPE_FACTURES=1)", "allumée : elle confirme la renonciation à la rétractation" if paiement.factures_actives() else "éteinte : à allumer avant l'ouverture (note obligatoire dès 25 €, confirmation de la renonciation)"))
+    manque = [nom for nom, valeur in (("SIRET", editeur.SIRET), ("adresse", editeur.ADRESSE), ("téléphone", editeur.TELEPHONE), ("médiateur", editeur.MEDIATEUR_NOM)) if not valeur]
+    lignes.append((not manque, "Identité du vendeur dans les CGV (app/editeur.py)", "complète" if not manque else f"à compléter : {', '.join(manque)}"))
     try:
         nb = len(codes.lister(5))
         dossier = os.environ.get("IMMO_DONNEES_DIR", "")

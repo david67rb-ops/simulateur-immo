@@ -233,6 +233,22 @@ def ouvrir_dossier(code: str, dossier_id: str, aujourd_hui: date | None = None) 
     return True, f"Dossier ouvert. Il reste {restants} dossier{'s' if restants > 1 else ''} sur ce code."
 
 
+def desactiver(code: str, motif: str = "remboursé", aujourd_hui: date | None = None) -> dict | None:
+    """Fait expirer un code (achat remboursé, par exemple) : il n'ouvre plus de
+    nouveau dossier. Renvoie son état d'avant (None si le code n'existe pas)."""
+    avant = etat(code, aujourd_hui)
+    if avant is None:
+        return None
+    hier = (aujourd_hui or date.today()) - timedelta(days=1)
+    with _base() as cnx:
+        cnx.execute(
+            "UPDATE codes SET expire_le = MIN(expire_le, ?), "
+            "note = CASE WHEN note = '' THEN ? ELSE note || ' · ' || ? END WHERE code = ?",
+            (hier.isoformat(), f"désactivé : {motif}", f"désactivé : {motif}", avant["code"]),
+        )
+    return avant
+
+
 def lister(limite: int = 200) -> list[dict]:
     with _base() as cnx:
         lignes = cnx.execute(

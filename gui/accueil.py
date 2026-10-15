@@ -388,6 +388,7 @@ def _pied() -> str:
         ("/contact", "Nous contacter"),
         ("/mentions-legales", "Mentions légales"),
         ("/cgu", "Conditions d'utilisation"),
+        *((("/cgv", "Conditions de vente"),) if offre.MODE_PAYANT else ()),
         ("/confidentialite", "Confidentialité"),
         *RESEAUX,
     )

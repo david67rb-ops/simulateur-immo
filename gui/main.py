@@ -1630,6 +1630,11 @@ def _build_investor_view():
                                 "Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay) dans un nouvel onglet. "
                                 "Ton code s'affiche après le paiement et ton dossier s'ouvre ici tout seul."
                             ).classes(theme.HINT_CLASSES)
+                            ui.html(
+                                'En payant, tu acceptes les <a href="/cgv" target="_blank" rel="noopener" '
+                                'class="lien-exemple">conditions de vente</a>. Code jamais utilisé : remboursé '
+                                "sur simple demande pendant 14 jours."
+                            ).classes(theme.HINT_CLASSES)
                             achat_status = ui.label("").classes("text-sm")
                             ui.label("Tu as déjà un code ?").classes("text-sm font-semibold mt-1")
 

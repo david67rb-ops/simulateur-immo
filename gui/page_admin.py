@@ -62,6 +62,30 @@ def page_admin_codes() -> None:
 
         ui.button("Créer le code", on_click=creer).props("unelevated no-caps")
 
+        theme.subsection_title("Désactiver un code (achat remboursé)")
+        ui.label(
+            "Remboursement d'un code jamais utilisé (engagement des CGV) : vérifier ci-dessous que la colonne "
+            "« Utilisés » est à 0, rembourser dans Stripe, puis désactiver le code ici."
+        ).classes(theme.HINT_CLASSES)
+        with ui.row().classes("items-end gap-3 flex-wrap"):
+            code_a_desactiver = ui.input("Code", placeholder="CRED-XXXX-XXXX").props("outlined dense").classes("w-56")
+        resultat_desactivation = ui.label("").classes("text-sm")
+
+        def desactiver() -> None:
+            avant = codes.desactiver(code_a_desactiver.value or "")
+            if avant is None:
+                resultat_desactivation.set_text("Code introuvable.")
+                return
+            utilises = avant["dossiers"] - avant["restants"]
+            resultat_desactivation.set_text(
+                f"{avant['code']} désactivé ({utilises} dossier{'s' if utilises > 1 else ''} déjà ouvert"
+                f"{'s' if utilises > 1 else ''} avec ce code)."
+            )
+            code_a_desactiver.set_value("")
+            afficher_liste()
+
+        ui.button("Désactiver le code", on_click=desactiver).props("outline no-caps")
+
         theme.subsection_title("Codes existants")
         tableau = ui.table(
             columns=[

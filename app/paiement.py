@@ -24,8 +24,10 @@ Variables d'environnement (serveur) :
 - IMMO_URL_SITE : adresse publique du site (https://credaura.fr), pour les
   adresses de retour depuis Stripe ; à défaut, celle de la requête.
 - IMMO_STRIPE_CGV=1 : case « J'accepte les CGV » sur la page Stripe (l'adresse
-  des CGV se règle dans le tableau de bord Stripe, Paramètres > Public).
-- IMMO_STRIPE_FACTURES=1 : facture PDF envoyée par Stripe après l'achat.
+  des CGV, https://credaura.fr/cgv, se règle dans le tableau de bord Stripe,
+  Paramètres > Public).
+- IMMO_STRIPE_FACTURES=1 : facture PDF envoyée par Stripe avec le reçu, qui
+  rappelle la renonciation à la rétractation. À allumer avant l'ouverture.
 """
 from __future__ import annotations
 
@@ -40,7 +42,7 @@ import time
 
 import httpx
 
-from app import codes
+from app import codes, editeur
 
 log = logging.getLogger(__name__)
 
@@ -187,10 +189,34 @@ def parametres_session(lot: int, achat_id: str, base_url: str) -> dict[str, str]
     }
     if os.environ.get("IMMO_STRIPE_CGV", "").strip() == "1":
         donnees["consent_collection[terms_of_service]"] = "required"
-    if os.environ.get("IMMO_STRIPE_FACTURES", "").strip() == "1":
+    if factures_actives():
+        # La facture (envoyée par e-mail avec le reçu) est le support durable
+        # qui confirme la demande d'accès immédiat et la renonciation à la
+        # rétractation (Code de la consommation, L.221-13 et L.221-28 13°).
         donnees["invoice_creation[enabled]"] = "true"
-        donnees["invoice_creation[invoice_data][footer]"] = "TVA non applicable, art. 293 B du CGI."
+        donnees["invoice_creation[invoice_data][description]"] = memo_facture(base)
+        donnees["invoice_creation[invoice_data][footer]"] = (
+            f"{editeur.identite_facture()} · TVA non applicable, art. 293 B du CGI."
+        )
+        donnees["invoice_creation[invoice_data][metadata][achat_id]"] = achat_id
     return donnees
+
+
+def factures_actives() -> bool:
+    """Facture Stripe jointe au reçu (IMMO_STRIPE_FACTURES=1) : obligatoire
+    dès 25 € (note), et support durable de la renonciation. À allumer avant
+    l'ouverture de la vente."""
+    return os.environ.get("IMMO_STRIPE_FACTURES", "").strip() == "1"
+
+
+def memo_facture(base_url: str) -> str:
+    base = base_url.rstrip("/")
+    return (
+        "Avant le paiement, vous avez demandé l'accès immédiat à votre dossier de financement et renoncé "
+        "expressément à votre droit de rétractation, qui ne s'applique plus une fois le dossier fourni "
+        "(article L.221-28, 13°, du Code de la consommation). Votre code de dossier s'affiche sur credaura.fr "
+        f"dès le paiement ; en cas de perte, écrivez à {editeur.CONTACT_EMAIL}. Conditions de vente : {base}/cgv"
+    )
 
 
 async def creer_session(lot: int, achat_id: str, base_url: str) -> str:
