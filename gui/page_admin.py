@@ -64,8 +64,8 @@ def page_admin_codes() -> None:
 
         theme.subsection_title("Désactiver un code (achat remboursé)")
         ui.label(
-            "Remboursement d'un code jamais utilisé (engagement des CGV) : vérifier ci-dessous que la colonne "
-            "« Utilisés » est à 0, rembourser dans Stripe, puis désactiver le code ici."
+            "Après un remboursement (garantie de conformité, geste commercial) : rembourser dans Stripe, puis "
+            "désactiver le code ici. La colonne « Utilisés » indique les dossiers déjà ouverts avec ce code."
         ).classes(theme.HINT_CLASSES)
         with ui.row().classes("items-end gap-3 flex-wrap"):
             code_a_desactiver = ui.input("Code", placeholder="CRED-XXXX-XXXX").props("outlined dense").classes("w-56")

@@ -320,12 +320,22 @@ compétent ; si vous êtes consommateur, vous pouvez saisir celui de votre domic
 CGV_VERSION = "15 octobre 2026"
 
 
-def _mediateur() -> str:
+def _article_mediation() -> str:
+    """Article 14 des CGV. Sans médiateur (choix de lancement), un texte neutre
+    plutôt qu'une case « à compléter » visible des acheteurs."""
     if not editeur.MEDIATEUR_NOM:
-        return A_COMPLETER
+        return (
+            f"Le vendeur n'a pas encore désigné de médiateur de la consommation ; ses coordonnées figureront ici "
+            f"dès sa désignation. En attendant, toute réclamation est traitée directement à {_contact()}."
+        )
     site = editeur.MEDIATEUR_SITE
     lien = f" · [{site.removeprefix('https://').rstrip('/')}]({site})" if site else ""
-    return f"**{editeur.MEDIATEUR_NOM}**, {editeur.MEDIATEUR_ADRESSE or A_COMPLETER}{lien}"
+    return (
+        "Si un litige n'a pas pu être réglé par une réclamation écrite adressée au vendeur, vous pouvez recourir\n"
+        "gratuitement au médiateur de la consommation dont il relève, dans l'année qui suit votre réclamation\n"
+        "(articles L.612-1 et suivants du Code de la consommation) :\n\n"
+        f"**{editeur.MEDIATEUR_NOM}**, {editeur.MEDIATEUR_ADRESSE or A_COMPLETER}{lien}"
+    )
 
 
 @ui.page("/cgv", title="Conditions de vente · Credaura")
@@ -349,9 +359,8 @@ def page_cgv() -> None:
             f"""
 **En bref :** la vérification de votre projet est gratuite. Ce que vous achetez, c'est le dossier de
 financement complet : un code qui ouvre 1, 2 ou 3 dossiers, payé une seule fois, sans abonnement. Le dossier
-vous est fourni tout de suite ; en demandant cet accès immédiat, vous renoncez au droit de rétractation. Un
-code jamais utilisé vous est remboursé sur simple demande pendant 14 jours. Credaura n'est ni une banque ni
-un courtier : la banque reste seule décisionnaire de votre prêt.
+vous est fourni tout de suite ; en demandant cet accès immédiat, vous renoncez au droit de rétractation.
+Credaura n'est ni une banque ni un courtier : la banque reste seule décisionnaire de votre prêt.
 
 ## 1. Objet
 
@@ -396,8 +405,7 @@ Chaque achat vous donne un **code de dossier**, de la forme CRED-XXXX-XXXX :
 Le site ne conserve ni votre projet ni votre dossier (voir la [politique de confidentialité](/confidentialite)).
 Pour reprendre votre dossier pendant ces 30 jours, enregistrez votre projet (« Enregistrer mon projet »)
 après l'avoir ouvert : ce fichier, gardé sur votre appareil, le rouvre sans décompter de nouveau dossier.
-Sans lui, une nouvelle saisie du code décompte un nouveau dossier. Si un même bien a été décompté deux fois
-par erreur, écrivez-nous dans les 30 jours : nous vous remettons gratuitement un code pour le dossier perdu.
+Sans lui, une nouvelle saisie du code décompte un nouveau dossier.
 
 **Ce qu'il vous faut :** un navigateur récent (Chrome, Safari, Firefox ou Edge) et une connexion à
 internet. Le dossier se lit et se modifie avec Microsoft Word, LibreOffice, Google Docs ou Pages.
@@ -457,11 +465,6 @@ votre dossier et de renoncer à votre droit de rétractation, qui ne s'applique 
 fourni. Tant que cette case n'est pas cochée, le paiement ne peut pas démarrer. La confirmation de votre
 accord vous est envoyée par e-mail (article 7).
 
-**Notre engagement, en plus de la loi :** si vous n'avez ouvert aucun dossier avec votre code, vous pouvez
-demander le remboursement intégral de votre achat dans les 14 jours qui le suivent, par simple e-mail à
-{_contact()}. Le code est alors désactivé, et vous êtes remboursé sur le moyen de paiement utilisé, au plus
-tard sous 14 jours.
-
 ## 9. Garantie légale de conformité
 
 Le vendeur répond des défauts de conformité du dossier, dans les conditions des articles L.224-25-12 et
@@ -509,11 +512,7 @@ plus tard sous 3 jours ouvrés.
 
 ## 14. Médiation de la consommation
 
-Si un litige n'a pas pu être réglé par une réclamation écrite adressée au vendeur, vous pouvez recourir
-gratuitement au médiateur de la consommation dont il relève, dans l'année qui suit votre réclamation
-(articles L.612-1 et suivants du Code de la consommation) :
-
-{_mediateur()}
+{_article_mediation()}
 
 ## 15. Droit applicable et litiges
 
