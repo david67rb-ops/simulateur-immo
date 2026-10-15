@@ -3208,9 +3208,7 @@ def _build_investor_view():
             (dossier_meta_state, "meta"),
             (chapitres_state, "chapitres"),
         ):
-            for k, v in (etat.get(cle) or {}).items():
-                if k in cible:
-                    cible[k] = v
+            projet_signe.reprendre(cible, etat.get(cle))
         for k, ligne in (etat.get("patrimoine") or {}).items():
             if k in patrimoine_state and isinstance(ligne, dict):
                 patrimoine_state[k].update(ligne)
