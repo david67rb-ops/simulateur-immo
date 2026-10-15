@@ -12,6 +12,7 @@ Rien ne s'affiche ni ne s'ouvre tant que le mode payant et la clé Stripe ne
 sont pas définis sur le serveur."""
 from __future__ import annotations
 
+import hmac
 import json
 import logging
 import os
@@ -21,7 +22,7 @@ from datetime import date
 from urllib.parse import urlencode
 
 from fastapi import Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from nicegui import app, ui
 
 from app import codes, paiement
@@ -38,8 +39,28 @@ CSS = """
 """
 
 
-def paiement_ouvert() -> bool:
-    return offre.MODE_PAYANT and paiement.actif()
+def jeton_essai() -> str:
+    return os.environ.get("IMMO_STRIPE_ESSAI", "").strip()
+
+
+def essai_valide(jeton: str) -> bool:
+    """Lien d'essai privé (?essai=…) : le vrai paiement Stripe, visible
+    seulement par qui a le lien, même quand le mode payant est éteint."""
+    attendu = jeton_essai()
+    return len(attendu) >= 8 and hmac.compare_digest(attendu.encode(), (jeton or "").strip().encode())
+
+
+def essai_depuis_requete() -> str:
+    """Le jeton d'essai de la page en cours s'il est valide, sinon ""."""
+    try:
+        jeton = ui.context.client.request.query_params.get("essai", "")
+    except Exception:  # noqa: BLE001  (pas de requête : application de bureau)
+        return ""
+    return jeton if paiement.actif() and essai_valide(jeton) else ""
+
+
+def paiement_ouvert(essai: str = "") -> bool:
+    return paiement.actif() and (offre.MODE_PAYANT or essai_valide(essai))
 
 
 def adresse_publique(request: Request) -> str:
@@ -83,13 +104,16 @@ def _trop_de_commandes(ip: str) -> bool:
     return False
 
 
-def lien_commande(lot: int, achat_id: str) -> str:
-    return f"/paiement/commander?lot={lot}&achat={achat_id}&renonciation=1"
+def lien_commande(lot: int, achat_id: str, essai: str = "") -> str:
+    lien = f"/paiement/commander?lot={lot}&achat={achat_id}&renonciation=1"
+    return lien + (f"&{urlencode({'essai': essai})}" if essai else "")
 
 
 @app.get("/paiement/commander")
-async def commander(request: Request, lot: int = 0, achat: str = "", renonciation: str = "") -> RedirectResponse:
-    if not paiement_ouvert():
+async def commander(
+    request: Request, lot: int = 0, achat: str = "", renonciation: str = "", essai: str = ""
+) -> RedirectResponse:
+    if not paiement_ouvert(essai):
         return RedirectResponse("/simulateur", status_code=303)
     if renonciation != "1":
         return RedirectResponse("/paiement/erreur?motif=renonciation", status_code=303)
@@ -106,6 +130,70 @@ async def commander(request: Request, lot: int = 0, achat: str = "", renonciatio
             return RedirectResponse(f"/paiement/erreur?{urlencode({'detail': str(exc)[:400]})}", status_code=303)
         return RedirectResponse("/paiement/erreur", status_code=303)
     return RedirectResponse(url, status_code=303)
+
+
+def _masquer(valeur: str) -> str:
+    return f"{valeur[:8]}…{valeur[-4:]}" if len(valeur) > 14 else ("définie" if valeur else "")
+
+
+@app.get("/paiement/diagnostic", response_class=HTMLResponse)
+async def diagnostic(request: Request, essai: str = "") -> HTMLResponse:
+    """Vérifie la configuration du paiement, réglage par réglage (lien d'essai
+    seulement). En mode test, crée aussi une vraie page de paiement Stripe."""
+    if not essai_valide(essai):
+        return HTMLResponse("Introuvable", status_code=404)
+    lignes: list[tuple[bool | None, str, str]] = []
+    cle = paiement.cle_secrete()
+    lignes.append((bool(cle), "Clé secrète Stripe", (_masquer(cle) + (" (mode test)" if paiement.mode_test() else " (mode réel)")) if cle else "absente : IMMO_STRIPE_CLE_SECRETE"))
+    secret = paiement.secret_webhook()
+    lignes.append((secret.startswith("whsec_"), "Secret du webhook", _masquer(secret) or "absent : IMMO_STRIPE_SECRET_WEBHOOK"))
+    base = adresse_publique(request)
+    lignes.append((base.startswith("https://"), "Adresse du site (retours de Stripe)", base))
+    lignes.append((None, "Mode payant (IMMO_MODE_PAYANT)", "allumé" if offre.MODE_PAYANT else "éteint : boutons visibles seulement avec le lien d'essai"))
+    try:
+        nb = len(codes.lister(5))
+        dossier = os.environ.get("IMMO_DONNEES_DIR", "")
+        lignes.append((True, "Base des codes", f"accessible ({nb} code(s) récents){'' if dossier else ' ; IMMO_DONNEES_DIR absent : base perdue à chaque déploiement'}"))
+    except Exception as exc:  # noqa: BLE001
+        lignes.append((False, "Base des codes", f"inaccessible : {exc}"))
+    if cle:
+        try:
+            compte = await paiement._appel("GET", "/v1/account")
+            nom = ((compte.get("business_profile") or {}).get("name")) or ((compte.get("settings") or {}).get("dashboard") or {}).get("display_name") or ""
+            lignes.append((bool(nom), "Compte Stripe", f"{nom or 'SANS NOM : Paramètres > Entreprise > Informations publiques'} · pays {compte.get('country', '?')} · paiements réels {'activés' if compte.get('charges_enabled') else 'pas encore activés'}"))
+        except paiement.ErreurPaiement as exc:
+            lignes.append((False, "Compte Stripe", str(exc)))
+        try:
+            points = (await paiement._appel("GET", "/v1/webhook_endpoints?limit=20")).get("data") or []
+            attendu = f"{base}/stripe/webhook"
+            trouve = [p for p in points if (p.get("url") or "").rstrip("/") == attendu]
+            if trouve:
+                evts = set(trouve[0].get("enabled_events") or [])
+                manque = [e for e in paiement.EVENEMENTS_PAYES if e not in evts and "*" not in evts]
+                lignes.append((not manque and trouve[0].get("status") == "enabled", "Webhook chez Stripe", f"{attendu} · {trouve[0].get('status')}" + (f" · événements manquants : {', '.join(manque)}" if manque else " · événements OK")))
+            else:
+                lignes.append((False, "Webhook chez Stripe", f"aucun webhook vers {attendu} (trouvés : {', '.join(p.get('url', '') for p in points) or 'aucun'})"))
+        except paiement.ErreurPaiement as exc:
+            lignes.append((False, "Webhook chez Stripe", str(exc)))
+        if paiement.mode_test():
+            try:
+                url = await paiement.creer_session(1, paiement.nouvel_achat_id(), base)
+                lignes.append((True, "Création d'une page de paiement", f'OK : <a href="{url}">ouvrir la page Stripe et payer avec 4242 4242 4242 4242</a>'))
+            except paiement.ErreurPaiement as exc:
+                lignes.append((False, "Création d'une page de paiement", str(exc)))
+    def ligne(ok: bool | None, titre: str, texte: str) -> str:
+        signe = "—" if ok is None else ("✔" if ok else "✘")
+        couleur = "#555" if ok is None else ("#2d6a4f" if ok else "#b23a32")
+        return f'<tr><td style="color:{couleur};font-weight:700;padding:6px 10px">{signe}</td><td style="padding:6px 10px;font-weight:600">{titre}</td><td style="padding:6px 10px">{texte}</td></tr>'
+    html = (
+        "<!doctype html><html lang='fr'><head><meta charset='utf-8'><meta name='viewport' content='width=device-width'>"
+        "<meta name='robots' content='noindex'><title>Diagnostic du paiement · Credaura</title></head>"
+        "<body style='font-family:system-ui,sans-serif;max-width:860px;margin:32px auto;padding:0 16px;line-height:1.5'>"
+        "<h1 style='font-size:1.4rem'>Diagnostic du paiement</h1><table style='border-collapse:collapse'>"
+        + "".join(ligne(*l) for l in lignes)
+        + "</table></body></html>"
+    )
+    return HTMLResponse(html)
 
 
 @app.post("/stripe/webhook")

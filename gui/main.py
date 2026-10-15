@@ -653,6 +653,10 @@ def _page_principale(simulateur_ouvert: bool) -> None:
 # Vue particulier / investisseur : parcours complet en onglets
 # =========================================================================
 def _build_investor_view():
+    # Lien d'essai privé (?essai=…) : le dossier se comporte comme en mode
+    # payant, avec les boutons d'achat, pour tester Stripe sans les montrer à tous.
+    essai_page = paiement_pages.essai_depuis_requete()
+    payant = offre.MODE_PAYANT or bool(essai_page)
     market_state = default_market_state()
     sim_state = default_sim_state()
     profil_state = default_profil_state()
@@ -1595,7 +1599,7 @@ def _build_investor_view():
                     bloc_code = ui.column().classes("w-full gap-2 rounded-xl p-4 mb-3").style(
                         "background: var(--c-fond-calcule); border: 1px solid var(--c-bord-calcule)"
                     )
-                    bloc_code.visible = offre.MODE_PAYANT
+                    bloc_code.visible = payant
                     with bloc_code:
                         ui.label("Ouvrir ton dossier complet").classes("font-semibold")
                         ui.label(
@@ -1608,7 +1612,7 @@ def _build_investor_view():
                         achat = {"id": paiement.nouvel_achat_id(), "depuis": None}
                         liens_achat: list[tuple[int, ui.element]] = []
                         achat_status = None
-                        if not app.native.main_window and paiement_pages.paiement_ouvert():
+                        if not app.native.main_window and paiement_pages.paiement_ouvert(essai_page):
                             ui.label("Pas encore de code ? Choisis ton lot :").classes("text-sm font-semibold mt-1")
                             case_renonciation = ui.checkbox(
                                 "Je demande l'accès immédiat à mon dossier et je renonce à mon droit de "
@@ -1633,7 +1637,7 @@ def _build_investor_view():
                                 for lot_lien, element in liens_achat:
                                     if case_renonciation.value:
                                         element.props(
-                                            f'href="{paiement_pages.lien_commande(lot_lien, achat["id"])}" '
+                                            f'href="{paiement_pages.lien_commande(lot_lien, achat["id"], essai_page)}" '
                                             'target="_blank" rel="noopener"'
                                         )
                                         element.classes(remove="bouton-achat-off")
@@ -3042,7 +3046,7 @@ def _build_investor_view():
     def dossier_ouvert() -> bool:
         """Toujours vrai pendant la bêta. En mode payant : un code (ou un
         fichier projet) a ouvert le dossier de ce bien il y a moins de 30 jours."""
-        if not offre.MODE_PAYANT:
+        if not payant:
             return True
         d = ctx["debloque"]
         return bool(d) and d["adresse"] == adresse_du_bien() and date.today().isoformat() <= d["jusqu_au"]
@@ -3147,7 +3151,7 @@ def _build_investor_view():
         return chemin
 
     async def on_enregistrer_projet() -> None:
-        ouvert = offre.MODE_PAYANT and dossier_ouvert()
+        ouvert = payant and dossier_ouvert()
         etat = {
             "sim": sim_state,
             "marche": market_state,
