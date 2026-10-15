@@ -3222,10 +3222,16 @@ def _build_investor_view():
         derniere_saisie["signature"] = None
         upload_projet.reset()
         enregistre = date.fromisoformat(contenu["enregistre_le"]).strftime("%d/%m/%Y")
-        projet_status.set_text(f"Projet du {enregistre} rouvert.")
+        # Fichier de la bêta (ancienne clé) : rouvert sans dossier débloqué.
+        note_beta = (
+            " Enregistré pendant la bêta : le dossier complet s'ouvre avec un code."
+            if contenu.get("ancienne_cle") and payant
+            else ""
+        )
+        projet_status.set_text(f"Projet du {enregistre} rouvert.{note_beta}")
         if market_state.get("adresse"):
             await on_analyser_marche()
-            projet_status.set_text(f"Projet du {enregistre} rouvert, étude de marché mise à jour.")
+            projet_status.set_text(f"Projet du {enregistre} rouvert, étude de marché mise à jour.{note_beta}")
 
     upload_projet.on_upload(on_ouvrir_projet)
 

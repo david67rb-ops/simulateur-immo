@@ -7,7 +7,9 @@ pendant 30 jours après l'ouverture d'un dossier avec un code, ce même dossier
 se modifie et se retélécharge sans consommer de nouveau code.
 
 Clé de signature : IMMO_SIGNATURE_SECRET (à définir sur le serveur avant
-l'ouverture de la vente ; la clé de développement ne protège rien)."""
+l'ouverture de la vente, puis ne plus jamais la changer ; la clé de
+développement ne protège rien). Les fichiers signés avec la clé de
+développement (bêta) se rouvrent encore, sans débloquer de dossier."""
 from __future__ import annotations
 
 import base64
@@ -36,9 +38,9 @@ def nouvel_identifiant() -> str:
     return secrets.token_urlsafe(12)
 
 
-def _signer(contenu: dict) -> str:
+def _signer(contenu: dict, cle: bytes | None = None) -> str:
     brut = json.dumps(contenu, sort_keys=True, ensure_ascii=False, separators=(",", ":")).encode()
-    return base64.urlsafe_b64encode(hmac.new(_cle(), brut, hashlib.sha256).digest()).decode()
+    return base64.urlsafe_b64encode(hmac.new(cle or _cle(), brut, hashlib.sha256).digest()).decode()
 
 
 def exporter(etat: dict, dossier_id: str, modifiable_jusqu_au: str | None, aujourd_hui: date | None = None) -> bytes:
@@ -68,9 +70,19 @@ def importer(donnees: bytes) -> dict:
     if contenu.get("version") != VERSION:
         raise FichierProjetInvalide("Ce projet a été enregistré avec une autre version de Credaura.")
     signature = contenu.pop("signature", "")
-    if not hmac.compare_digest(signature, _signer(contenu)):
-        raise FichierProjetInvalide("Ce fichier a été modifié après son enregistrement : il ne peut pas être rouvert.")
-    return contenu
+    if hmac.compare_digest(signature, _signer(contenu)):
+        return contenu
+    # Fichier enregistré pendant la bêta, signé avec la clé de développement
+    # (publique dans le dépôt) : le projet se rouvre, mais sans débloquer de
+    # dossier, puisque n'importe qui peut fabriquer une telle signature.
+    if _cle() != CLE_DEV.encode() and hmac.compare_digest(signature, _signer(contenu, CLE_DEV.encode())):
+        contenu["modifiable_jusqu_au"] = None
+        contenu["dossier_id"] = None
+        if isinstance(contenu.get("etat"), dict):
+            contenu["etat"]["dossier"] = None
+        contenu["ancienne_cle"] = True
+        return contenu
+    raise FichierProjetInvalide("Ce fichier a été modifié après son enregistrement : il ne peut pas être rouvert.")
 
 
 def limite_modification(aujourd_hui: date | None = None) -> str:
