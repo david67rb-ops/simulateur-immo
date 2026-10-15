@@ -1282,7 +1282,7 @@ def _section_repere(doc, inp, resultat: dict, marche: dict, pour_banque: bool):
     _ajouter_note(
         doc,
         "Sources : repère de prix saisi par l'emprunteur (Credaura ne le récupère pas lui-même)"
-        + ("; loyers : carte des loyers (ANIL)." if (marche.get("loyer") or {}).get("loyer_m2_moyen") else "."),
+        + (" ; loyers : carte des loyers (ANIL)." if (marche.get("loyer") or {}).get("loyer_m2_moyen") else "."),
     )
 
 

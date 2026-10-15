@@ -49,11 +49,11 @@ class BlocPrixReference:
                 self.moyen = theme.ChampMontant("Prix moyen au m²", suffixe="€/m²", nullable=True).props(
                     "outlined dense"
                 ).classes("w-full")
-                self.bas = theme.ChampMontant("Bas de la fourchette (facultatif)", suffixe="€/m²", nullable=True).props(
+                self.bas = theme.ChampMontant("Bas (facultatif)", suffixe="€/m²", nullable=True).props(
                     "outlined dense"
                 ).classes("w-full")
                 self.haut = theme.ChampMontant(
-                    "Haut de la fourchette (facultatif)", suffixe="€/m²", nullable=True
+                    "Haut (facultatif)", suffixe="€/m²", nullable=True
                 ).props("outlined dense").classes("w-full")
                 self.source = ui.select(analyse.SOURCES_PRIX_REF, label="Source", value=etat["prix_ref_source"]).props(
                     "outlined dense"

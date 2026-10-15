@@ -1,6 +1,6 @@
 # Credaura : document de contexte
 
-*Mis à jour le 15 octobre 2026 (disque permanent, clé de signature et mot de passe d'administration sur Render ; fichiers projet de la bêta rouverts sans déblocage ; conditions générales de vente sur /cgv, sans engagement au-delà de la loi et sans médiateur au lancement, identité du vendeur et médiateur dans `app/editeur.py` ; facture Stripe qui confirme la renonciation à la rétractation ; désactivation d'un code remboursé depuis la page d'administration ; CGU sans mention de la bêta en mode payant), précédemment le 10 octobre (indicateurs mensuels en année courante : cash-flow, effort d'épargne et net-net après un différé et hors déductions ponctuelles de l'année 1 ; meilleur régime choisi sur l'enrichissement de toute la durée ; « Montant à financer » à côté du crédit ; exemple de dossier à +23 €/mois), précédemment le 9 octobre (paiement Stripe branché, éteint tant que le mode payant et la clé Stripe ne sont pas définis ; textes de l'accueil et confidentialité qui suivent le mode payant ; visite gardée 10 minutes sur téléphone), précédemment le 8 octobre (conditions générales d'utilisation sur /cgu ; page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
+*Mis à jour le 15 octobre 2026 (repère de prix saisi par l'utilisateur dans les zones sans DVF, branche feature/prix-reference-zones-sans-dvf ; disque permanent, clé de signature et mot de passe d'administration sur Render ; fichiers projet de la bêta rouverts sans déblocage ; conditions générales de vente sur /cgv, sans engagement au-delà de la loi et sans médiateur au lancement, identité du vendeur et médiateur dans `app/editeur.py` ; facture Stripe qui confirme la renonciation à la rétractation ; désactivation d'un code remboursé depuis la page d'administration ; CGU sans mention de la bêta en mode payant), précédemment le 10 octobre (indicateurs mensuels en année courante : cash-flow, effort d'épargne et net-net après un différé et hors déductions ponctuelles de l'année 1 ; meilleur régime choisi sur l'enrichissement de toute la durée ; « Montant à financer » à côté du crédit ; exemple de dossier à +23 €/mois), précédemment le 9 octobre (paiement Stripe branché, éteint tant que le mode payant et la clé Stripe ne sont pas définis ; textes de l'accueil et confidentialité qui suivent le mode payant ; visite gardée 10 minutes sur téléphone), précédemment le 8 octobre (conditions générales d'utilisation sur /cgu ; page Contact : bouton « Envoie-nous un mail » à la place de l'adresse affichée ; passe esthétique PC et iPhone : accueil, simulateur, résultats en cartes ; fond bleuté unique du dossier Word ; test complet et relecture : compteur GoatCounter des vérifications réparé, endettement assurance comprise, textes ; droits de mutation à 6,32 % ; bandeau du menu fixe, page /simulateur, reprise automatique des valeurs du marché), d'après le dépôt (code, README, historique git). Ce qui est déduit sans être écrit dans le dépôt est marqué [à confirmer].*
 
 ## 1. Vision
 
@@ -110,6 +110,7 @@
 - Ventes comparables DVF dans un rayon de 500 m et à ±30 % de surface.
 - Élargissement à 1 km, 2 km, ±50 %, puis toutes surfaces, tant qu'il y a moins de 15 ventes.
 - Fourchettes bas / médiane / haut = 10e / 50e / 90e percentiles.
+- **Zones sans DVF** (Bas-Rhin, Haut-Rhin, Moselle, Mayotte : `DEPARTEMENTS_SANS_DVF`) : l'utilisateur recopie un repère de prix au m² (MeilleursAgents, SeLoger, agence ou autre), avec fourchette facultative, niveau (à l'adresse ou moyenne de la commune) et date du relevé (`gui/prix_reference.py`, champs `prix_ref_*` de l'étude de marché). Credaura ne va jamais chercher ce chiffre : liens seulement, aucun appel réseau. Validation : 300 à 20 000 €/m², bas ≤ moyen ≤ haut, date pas dans le futur ; avertissement au-delà de 6 mois. Écart = (prix du projet au m² − repère) ÷ repère, avec le même prix au m² que pour DVF (`analyse.prix_projet_m2`). À l'adresse : mêmes seuils que DVF (`SEUIL_PRIX_VERT` 3 %, `SEUIL_PRIX_ORANGE` 10 %) ; repère communal : vert ou orange, jamais rouge. Sans repère : critère Prix non évalué. Le repère est effacé quand on analyse une autre adresse, gardé à la réouverture d'un projet. Dossier : chapitre « Étude de marché » sur le repère (factuel pour la banque, critère du site en plus dans la formule Personnel), sans carte ni liste de ventes ; « Aucun repère de prix n'a été renseigné » sinon.
 - Loyer de marché = loyer au m² × surface.
 
 ## 5. Entrées et sorties
@@ -117,6 +118,7 @@
 - **Saisies** :
   - type de projet et structure (en direct, SCI à l'IR, SCI à l'IS) ;
   - adresse, type de bien, surface, prix, travaux, mobilier ;
+  - en zone sans DVF : repère de prix au m² (fourchette, niveau, source, date du relevé) ;
   - apport, taux, durée, assurance, différé ;
   - loyer ou nuitée et occupation, charges ;
   - TMI, régime (nu ou meublé) ;
@@ -163,7 +165,7 @@
 - **Achat-revente** : intérêts de portage simples, pas d'assurance emprunteur dans le portage.
 - **Reste à vivre non calculé**, alors que c'est un critère bancaire courant.
 - **Marché** :
-  - pas de DVF en Alsace-Moselle ni à Mayotte, et les ventes ont 6 à 12 mois de décalage ;
+  - pas de DVF en Alsace-Moselle ni à Mayotte, et les ventes ont 6 à 12 mois de décalage ; dans ces zones, le prix est comparé à un repère saisi par l'utilisateur : une estimation en ligne ou d'agence, pas une vente réelle ;
   - loyers peu fiables dans les communes avec peu d'annonces ;
   - aucune donnée ouverte sur les prix en courte durée ;
   - les grands portails d'annonces bloquent l'import par lien.
