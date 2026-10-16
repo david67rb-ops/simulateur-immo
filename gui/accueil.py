@@ -103,10 +103,11 @@ CHEVRON = (
     '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#A8823B" stroke-width="2.2" '
     'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="flex-shrink:0"><path d="M9 6l6 6-6 6"/></svg>'
 )
-# Dans l'ordre des sections de la page.
+# Dans l'ordre des sections de la page ; « Comment ça marche » ouvre sa
+# page détaillée.
 LIENS_MENU = (
     ("#resultat", "Le dossier"),
-    ("#comment", "Comment ça marche"),
+    ("/comment-ca-marche", "Comment ça marche"),
     ("#tarifs", "Tarifs"),
     ("#faq", "FAQ"),
 )
@@ -121,7 +122,7 @@ def _entete(sur_accueil: bool) -> str:
         simulateur = f'href="#simulateur" onclick="{OUVRIR_SIMULATEUR}"'
     else:
         simulateur = 'href="/simulateur"'
-    rubriques = (() if sur_accueil else (("/", "Accueil"),)) + tuple((prefixe + h, t) for h, t in LIENS_MENU)
+    rubriques = (() if sur_accueil else (("/", "Accueil"),)) + tuple((h if h.startswith("/") else prefixe + h, t) for h, t in LIENS_MENU)
     liens = "".join(f'<a href="{h}" style="color:#FFFFFF;text-decoration:none">{t}</a>' for h, t in rubriques)
     # Le menu se referme quand on choisit une rubrique.
     # Le simulateur d'abord : c'est l'action principale.
@@ -278,6 +279,7 @@ COMMENT = f"""
       {_etape("2", "Je vérifie le projet", "Prix comparé aux ventes réelles autour du bien, loyer du marché, rentabilité et cash-flow : tu sais tout de suite si ça tient.")}
       {_etape("3", "Tu repars avec ton dossier", "Tu complètes ton financement et ton profil, puis tu télécharges le dossier à remettre à ta banque.")}
     </div>
+    <a href="/comment-ca-marche" style="align-self:flex-start;display:inline-flex;align-items:center;gap:6px;font-weight:600;text-decoration:none;color:{LAITON}">Tout le détail, étape par étape{CHEVRON}</a>
   </div>
 </section>"""
 

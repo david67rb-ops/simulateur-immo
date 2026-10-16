@@ -50,6 +50,7 @@ from app.utils import clean_result, libelle_regime, libelle_rentabilite_ar
 
 from . import accueil, apercus_dossier, avis, offre, pages_legales, paiement_pages, theme
 from . import page_contact  # noqa: F401  (enregistre la page /contact)
+from . import page_comment  # noqa: F401  (enregistre la page /comment-ca-marche)
 from . import page_admin  # noqa: F401  (enregistre la page /admin/codes)
 from . import statistiques
 from .prix_reference import BlocPrixReference
