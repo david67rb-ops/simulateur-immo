@@ -106,7 +106,7 @@ def page_mentions_legales() -> None:
         identite = (
             f"Adresse : {EDITEUR_ADRESSE}<br>\nContact : {_contact()}<br>\n"
             + (f"Téléphone : {editeur.TELEPHONE}<br>\n" if editeur.TELEPHONE else "")
-            + (f"SIRET : {EDITEUR_SIRET}<br>\n" if EDITEUR_SIRET else "SIRET : en cours d'immatriculation<br>\n")
+            + (f"SIRET : {EDITEUR_SIRET}<br>\n" if EDITEUR_SIRET else "SIRET : en cours d'attribution<br>\n")
             + "TVA non applicable, article 293 B du Code général des impôts."
         )
     else:
@@ -376,7 +376,7 @@ l'imprimer depuis votre navigateur. En commandant, vous déclarez être majeur e
 
 - {editeur.NOM}, {statut}
 - Adresse : {editeur.ADRESSE or A_COMPLETER}
-- SIRET : {editeur.SIRET or A_COMPLETER}
+- SIRET : {editeur.SIRET or ("en cours d'attribution" if editeur.STATUT else A_COMPLETER)}
 - Téléphone : {telephone}
 - E-mail : {_contact()}
 - TVA non applicable, article 293 B du Code général des impôts.

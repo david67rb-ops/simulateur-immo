@@ -10,10 +10,10 @@ from __future__ import annotations
 NOM = "David Lehmann"
 # Après l'immatriculation : « entrepreneur individuel (EI) ». La mention EI
 # accompagne le nom sur le site, les CGV et les factures (loi du 14 février 2022).
-STATUT = ""
-ADRESSE = ""
+STATUT = "entrepreneur individuel (EI)"
+ADRESSE = "3 rue de Hésingue, 68300 Saint-Louis"
 SIRET = ""
-TELEPHONE = ""  # exigé dans l'information avant l'achat (Code de la consommation, R.111-1)
+TELEPHONE = "+33 6 75 67 76 91"  # exigé dans l'information avant l'achat (Code de la consommation, R.111-1)
 CONTACT_EMAIL = "credaura.contact@gmail.com"
 
 # Médiateur de la consommation (Code de la consommation, L.612-1 et L.616-1) :
@@ -25,5 +25,7 @@ MEDIATEUR_SITE = ""
 
 def identite_facture() -> str:
     """« David Lehmann EI · SIRET 123 456 789 00012 », pour le pied des factures."""
-    nom = NOM + (" EI" if SIRET else "")
-    return nom + (f" · SIRET {SIRET}" if SIRET else "")
+    nom = NOM + (" EI" if (SIRET or STATUT) else "")
+    if SIRET:
+        return f"{nom} · SIRET {SIRET}"
+    return f"{nom} · SIRET en cours d'attribution" if STATUT else nom
