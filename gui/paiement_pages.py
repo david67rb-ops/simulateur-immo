@@ -252,8 +252,8 @@ def _carte_code(code: str) -> None:
             + (f", valable jusqu'au {date.fromisoformat(expire).strftime('%d/%m/%Y')}." if expire else ".")
         ).classes("text-sm")
     ui.label(
-        "Ton dossier s'ouvre tout seul dans l'onglet du simulateur : tu peux fermer celui-ci. Si l'onglet du "
-        "simulateur est fermé, rouvre ton projet ou refais la simulation, puis entre ce code à l'étape Dossier."
+        "Ton dossier complet se génère et se télécharge tout seul dans l'onglet du simulateur : retournes-y. Si "
+        "l'onglet du simulateur est fermé, rouvre ton projet ou refais la simulation, puis entre ce code à l'étape Dossier."
     ).classes("text-base mt-2")
     ui.label(
         "Note ce code : il sert pour tous les dossiers de ton lot pendant 12 mois. Stripe t'envoie aussi le reçu "

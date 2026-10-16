@@ -1711,7 +1711,8 @@ def _build_investor_view():
                                     liens_achat.append((lot, lien))
                             ui.label(
                                 "Paiement sécurisé par Stripe (carte, Apple Pay, Google Pay) dans un nouvel onglet. "
-                                "Ton code s'affiche après le paiement et ton dossier s'ouvre ici tout seul."
+                                "Ton code s'affiche après le paiement, et ton dossier complet se génère et se "
+                                "télécharge ici tout seul."
                             ).classes(theme.HINT_CLASSES)
                             ui.html(
                                 'En payant, tu acceptes les <a href="/cgv" target="_blank" rel="noopener" '
@@ -1721,8 +1722,18 @@ def _build_investor_view():
                             ui.label("Tu as déjà un code ?").classes("text-sm font-semibold mt-1")
 
                             def maj_liens_achat() -> None:
+                                # Le dossier est rattaché à l'adresse du bien : sans elle, le
+                                # code acheté ne pourrait rien ouvrir (et l'acheteur ne verrait
+                                # jamais son dossier). Les boutons restent éteints.
+                                sans_adresse = case_renonciation.value and not adresse_du_bien()
+                                avis_adresse = "Indique d'abord l'adresse du bien (étape Marché) : ton dossier lui est rattaché."
+                                if achat_status is not None:
+                                    if sans_adresse and achat_status.text in ("", avis_adresse):
+                                        achat_status.set_text(avis_adresse)
+                                    elif achat_status.text == avis_adresse:
+                                        achat_status.set_text("")
                                 for lot_lien, element in liens_achat:
-                                    if case_renonciation.value:
+                                    if case_renonciation.value and not sans_adresse:
                                         element.props(
                                             f'href="{paiement_pages.lien_commande(lot_lien, achat["id"], essai_page)}" '
                                             'target="_blank" rel="noopener"'
@@ -1757,7 +1768,7 @@ def _build_investor_view():
                             value=dossier_meta_state["adresse_bien"],
                         ).bind_value(dossier_meta_state, "adresse_bien").props(
                             'outlined dense hint="Sinon, le dossier reprend celle de l\'étape Marché."'
-                        ).classes("w-full")
+                        ).classes("w-full").on_value_change(lambda _e: maj_liens_achat())
 
                     theme.subsection_title("Photos du bien")
                     ui.label(
@@ -3081,7 +3092,7 @@ def _build_investor_view():
         progres_dossier.etape(progres_dossier.valeur, 0.88)  # reprend où en est la barre
         return await run.io_bound(dossier_export.generer_dossier_word, payload, chapitres_lisibles)
 
-    async def on_generer_apercu() -> None:
+    async def on_generer_apercu() -> bool:
         dossier_status.set_text("Génération de l'aperçu du dossier…")
         btn_generer_dossier.disable()
         try:
@@ -3092,7 +3103,7 @@ def _build_investor_view():
             )
         except Exception as exc:  # noqa: BLE001
             dossier_status.set_text(message_erreur(exc))
-            return
+            return False
         finally:
             btn_generer_dossier.enable()
         url = apercus_dossier.publier(contenu)
@@ -3120,8 +3131,12 @@ def _build_investor_view():
             )
         )
         marquer_fait(tab_dossier)
+        return True
 
-    btn_generer_dossier.on_click(on_generer_apercu)
+    async def sur_clic_generer() -> None:
+        await on_generer_apercu()
+
+    btn_generer_dossier.on_click(sur_clic_generer)
 
     async def on_telecharger_dossier() -> None:
         if not dossier_ouvert():
@@ -3185,6 +3200,13 @@ def _build_investor_view():
         return bool(d) and d["adresse"] == adresse_du_bien() and date.today().isoformat() <= d["jusqu_au"]
 
     async def on_utiliser_code() -> None:
+        await ouvrir_avec_code()
+
+    async def ouvrir_avec_code(telecharger: bool = False) -> None:
+        """Ouvre le dossier de ce bien avec le code saisi, puis affiche tout de
+        suite l'aperçu complet. Après un achat (telecharger=True), le dossier
+        Word se télécharge aussi tout seul : l'acheteur repart avec son
+        dossier même s'il n'avait jamais généré l'aperçu."""
         code = codes.normaliser(champ_code.value or "")
         if not code:
             code_status.set_text("Le code est de la forme CRED-XXXX-XXXX.")
@@ -3209,10 +3231,18 @@ def _build_investor_view():
         }
         statistiques.evenement("dossier-ouvert", "Dossier ouvert avec un code")
         derniere_saisie["signature"] = None  # réafficher les points de vigilance en détail
-        if apercu_dossier.visible:
-            await on_generer_apercu()
+        tab_panels.set_value(tab_dossier)
+        ui.notify("Dossier ouvert : génération de ton dossier complet…", type="positive")
+        if not await on_generer_apercu():
+            return
+        ui.run_javascript(
+            f"document.getElementById('c{btn_telecharger_dossier.id}')?.scrollIntoView({{behavior: 'smooth', block: 'center'}})"
+        )
+        if telecharger:
+            await on_telecharger_dossier()
 
     btn_code.on_click(on_utiliser_code)
+    tab_panels.on_value_change(lambda _e: maj_liens_achat() if onglet_actif(tab_dossier) else None)
 
     # Achat par Stripe : l'onglet du simulateur guette le paiement fait dans
     # l'autre onglet, puis ouvre le dossier avec le code acheté. Il guette dès
@@ -3240,7 +3270,12 @@ def _build_investor_view():
             achat_status.set_text(
                 f"Paiement reçu, merci ! Ton code : {', '.join(codes_payes)}. Note-le, il sert 12 mois."
             )
-        await on_utiliser_code()
+        # Génération et téléchargement à part : le minuteur reste libre pour
+        # guetter un second achat pendant que le dossier se prépare.
+        async def ouvrir_et_telecharger() -> None:
+            await ouvrir_avec_code(telecharger=True)
+
+        ui.timer(0.1, ouvrir_et_telecharger, once=True)
 
     minuteur_achat = ui.timer(4.0, guetter_paiement, active=False)
 
@@ -3255,6 +3290,9 @@ def _build_investor_view():
     def sur_clic_achat() -> None:
         if case_renonciation is not None and not case_renonciation.value:
             ui.notify("Coche d'abord la case d'accès immédiat au dossier.", type="warning")
+            return
+        if not adresse_du_bien():
+            ui.notify("Indique d'abord l'adresse du bien (étape Marché) : ton dossier lui est rattaché.", type="warning")
             return
         guetter()
         if achat_status is not None:
