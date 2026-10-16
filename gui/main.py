@@ -3351,7 +3351,7 @@ def _build_investor_view():
         enregistre = date.fromisoformat(contenu["enregistre_le"]).strftime("%d/%m/%Y")
         # Fichier de la bêta (ancienne clé) : rouvert sans dossier débloqué.
         note_beta = (
-            " Enregistré pendant la bêta : le dossier complet s'ouvre avec un code."
+            " Enregistré avant l'ouverture de la vente : le dossier complet s'ouvre avec un code."
             if contenu.get("ancienne_cle") and payant
             else ""
         )

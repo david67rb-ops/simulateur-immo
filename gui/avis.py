@@ -43,7 +43,7 @@ def mailto_avis(note: int, utile: str, manque: str, banque: str, publier: bool, 
         lignes.append(f"J'accepte que cet avis soit publié sur credaura.fr, signé : {signature}.")
     else:
         lignes.append("Je ne souhaite pas que cet avis soit publié.")
-    sujet = "Credaura · Mon avis de testeur"
+    sujet = "Credaura · Mon avis" if offre.MODE_PAYANT else "Credaura · Mon avis de testeur"
     return f"mailto:{CONTACT_EMAIL}?subject={quote(sujet)}&body={quote(chr(10).join(lignes))}"
 
 
@@ -60,7 +60,7 @@ def construire_carte() -> ui.element | None:
     with carte:
         with ui.row().classes("items-center gap-2 no-wrap"):
             ui.icon("rate_review", size="26px").classes("text-[color:var(--c-laiton)]")
-            ui.label("Ton avis de testeur").classes("text-lg font-semibold titre-sora")
+            ui.label("Ton avis" if offre.MODE_PAYANT else "Ton avis de testeur").classes("text-lg font-semibold titre-sora")
         ui.label(
             ("Ton avis m'aide à améliorer Credaura. " if offre.MODE_PAYANT else
              "Pendant la bêta, le dossier est offert : en échange, ton avis m'aide à améliorer Credaura. ")

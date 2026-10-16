@@ -306,7 +306,7 @@ TARIFS = f"""
 <section id="tarifs" class="bloc" style="padding-top:clamp(48px,7vw,88px);padding-bottom:clamp(48px,7vw,88px);display:flex;flex-direction:column;gap:32px">
   <div style="display:flex;flex-direction:column;gap:8px">
     <span class="surtitre">TARIFS</span>
-    <h2 class="titre-section">{"La vérification est gratuite. Le dossier pour la banque : 19,90 €." if offre.MODE_PAYANT else "La vérification est gratuite. Pendant la bêta, le dossier aussi."}</h2>
+    <h2 class="titre-section">{"La vérification est gratuite. Le dossier pour la banque : 19,90\u00a0€." if offre.MODE_PAYANT else "La vérification est gratuite. Pendant la bêta, le dossier aussi."}</h2>
     <p class="gris">{"Pas d'abonnement, rien à résilier : tu paies une fois, par dossier." if offre.MODE_PAYANT else "Tarifs à l'ouverture de la vente :"}</p>
   </div>
   <div style="display:flex;flex-wrap:wrap;gap:16px">

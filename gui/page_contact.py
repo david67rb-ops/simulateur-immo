@@ -8,14 +8,18 @@ from urllib.parse import quote
 
 from nicegui import ui
 
-from . import theme
+from . import offre, theme
 from .accueil import RESEAUX
 from .pages_legales import CONTACT_EMAIL, _gabarit, _pied
 
 MOTIFS = (
     ("calculate", "Une question sur le simulateur", "Un calcul, une hypothèse, un chiffre que tu ne comprends pas.", "Question sur le simulateur"),
     ("description", "Mon dossier de financement", "Son contenu, sa mise en forme, ce que la banque en a pensé.", "Mon dossier de financement"),
-    ("rate_review", "Donner mon avis de testeur", "Ce qui t'a servi, ce qui manque, et la réponse de ta banque.", "Mon avis de testeur"),
+    (
+        ("rate_review", "Donner mon avis", "Ce qui t'a servi, ce qui manque, et la réponse de ta banque.", "Mon avis")
+        if offre.MODE_PAYANT
+        else ("rate_review", "Donner mon avis de testeur", "Ce qui t'a servi, ce qui manque, et la réponse de ta banque.", "Mon avis de testeur")
+    ),
     ("bug_report", "Signaler un problème", "Dis-moi sur quel appareil et quel navigateur, et ce qui s'est passé.", "Problème sur le site"),
     ("handshake", "Professionnels et partenariats", "Courtiers, conseillers en patrimoine, créateurs de contenu.", "Partenariat"),
     ("campaign", "Presse", "Une interview, des chiffres sur le marché immobilier local.", "Presse"),
