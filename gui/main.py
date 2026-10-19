@@ -115,19 +115,23 @@ def champ(
     suffixe: str | None = None,
     aide: str | None = None,
     negatif: bool = False,
+    vide: str = "zero",
     **kwargs,
 ):
     """Champ numérique standard du formulaire, lié à `state[cle]`, avec unité
     affichée à droite et icône d'aide facultative. Les montants en euros
-    (positifs) s'affichent groupés par trois chiffres : 315 000."""
+    (positifs) s'affichent groupés par trois chiffres : 315 000. `vide` : ce
+    que devient le champ quitté vide, « zero » ou « precedent » (dernière
+    valeur, là où 0 n'a pas de sens) ; pendant la frappe, il reste vide."""
     if suffixe and "€" in suffixe and not negatif:
-        field = theme.ChampMontant(label, suffixe=suffixe).lier(state, cle).props("outlined dense").classes("w-full")
+        field = theme.ChampMontant(label, suffixe=suffixe, vide=vide).lier(state, cle).props("outlined dense").classes("w-full")
     else:
-        field = (
+        field = theme.remplir_si_vide(
             ui.number(label, value=state[cle], suffix=suffixe, **kwargs)
             .bind_value(state, cle)
             .props("outlined dense")
-            .classes("w-full")
+            .classes("w-full"),
+            vide,
         )
     if aide:
         with field.add_slot("append"):
@@ -887,26 +891,28 @@ def _build_investor_view():
                             .props("outlined dense")
                             .classes("w-full")
                         )
-                        ms_surface = (
+                        ms_surface = theme.remplir_si_vide(
                             ui.number("Surface (m²)", value=market_state["surface_m2"], min=1)
                             .bind_value(market_state, "surface_m2")
                             .props("outlined dense")
-                            .classes("w-full")
+                            .classes("w-full"),
+                            "precedent",
                         )
                         # Prix affiché dès l'étape 1 (même valeur que « Prix d'achat » au financement) :
                         # les informations de l'accueil se retrouvent toutes ici.
                         ms_prix = (
-                            theme.ChampMontant("Prix affiché", suffixe="€")
+                            theme.ChampMontant("Prix affiché", suffixe="€", vide="precedent")
                             .lier(sim_state, "prix_achat")
                             .props("outlined dense")
                             .classes("w-full")
                         )
                         ms_prix.on("update:model-value", lambda: on_prix_saisi())
-                        ms_rayon = (
+                        ms_rayon = theme.remplir_si_vide(
                             ui.number("Rayon de recherche (m)", value=market_state["rayon_metres"], min=100, step=100)
                             .bind_value(market_state, "rayon_metres")
                             .props("outlined dense")
-                            .classes("w-full")
+                            .classes("w-full"),
+                            "precedent",
                         )
                     ui.switch("Bien neuf (comparer aux ventes sur plan, VEFA)").bind_value(market_state, "bien_neuf")
 
@@ -981,8 +987,8 @@ def _build_investor_view():
                     theme.subsection_title("Le bien")
                     with ui.row().classes(theme.GRID_CLASSES):
                         liste(TYPE_BIEN_OPTIONS, "Type de bien", sim_state, "type_bien")
-                        champ("Surface", sim_state, "surface_m2", suffixe="m²", min=1)
-                        prix_achat_input = champ("Prix d'achat", sim_state, "prix_achat", suffixe="€", min=1)
+                        champ("Surface", sim_state, "surface_m2", suffixe="m²", min=1, vide="precedent")
+                        prix_achat_input = champ("Prix d'achat", sim_state, "prix_achat", suffixe="€", min=1, vide="precedent")
                         frais_notaire_input = champ(
                             "Frais de notaire",
                             sim_state,
@@ -1066,7 +1072,7 @@ def _build_investor_view():
                                 aide="Taux nominal annuel, hors assurance.",
                             )
                             refs["field_duree_credit"] = champ(
-                                "Durée du crédit", sim_state, "duree_credit_annees", suffixe="ans", min=1, max=35
+                                "Durée du crédit", sim_state, "duree_credit_annees", suffixe="ans", min=1, max=35, vide="precedent"
                             )
                         with plus_d_options("Plus d'options : assurance, différé, frais bancaires"):
                             with ui.row().classes(theme.GRID_CLASSES + " pt-2"):
@@ -1089,7 +1095,7 @@ def _build_investor_view():
                                 )
                                 refs["field_differe_type"] = differe_type_field
                                 refs["field_differe_duree"] = champ(
-                                    "Durée du différé", sim_state, "differe_duree_mois", suffixe="mois", min=0, max=60
+                                    "Durée du différé", sim_state, "differe_duree_mois", suffixe="mois", min=0, max=60, vide="precedent"
                                 )
                                 champ(
                                     "Frais de garantie",

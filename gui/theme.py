@@ -223,12 +223,49 @@ class ChampMontant(ui.input):
     (315 000) : le masque est appliqué dans le navigateur, le serveur reçoit
     les chiffres seuls (pas d'aller-retour qui ferait sauter le curseur)."""
 
-    def __init__(self, label: str = "", *, suffixe: str | None = None, nullable: bool = False, **kwargs) -> None:
+    def __init__(
+        self, label: str = "", *, suffixe: str | None = None, nullable: bool = False, vide: str = "zero", **kwargs
+    ) -> None:
+        """`vide` : ce que devient le champ quitté vide (sauf `nullable`, qui
+        reste vide) : « zero » (0 €) ou « precedent » (la dernière valeur
+        saisie, pour un montant où 0 n'a pas de sens, comme le prix d'achat)."""
         super().__init__(label, **kwargs)
         self._nullable = nullable
+        self._vide = vide
+        self._en_saisie = False
+        self._precedent: float | None = None
         self.props(f'mask="{MASQUE_MILLIERS}" reverse-fill-mask unmasked-value inputmode=numeric')
         if suffixe:
             self.props(f'suffix="{suffixe}"')
+        self.on("focus", self._entree)
+        self.on("blur", self._sortie)
+        self.on_value_change(self._retenir)
+
+    def _entree(self) -> None:
+        self._en_saisie = True
+
+    def _sortie(self) -> None:
+        """Champ quitté vide : 0 (ou la dernière valeur), écrit seulement
+        maintenant, pour ne pas s'imposer pendant la frappe."""
+        self._en_saisie = False
+        if self._nullable or str(self.value or "").strip():
+            return
+        if self._vide == "precedent" and self._precedent:
+            self.set_value(self._precedent)
+        else:
+            self.set_value("0")
+
+    def _retenir(self, e) -> None:
+        valeur = self.lire(e.value)
+        if valeur:
+            self._precedent = valeur
+
+    def _vers_le_champ(self, valeur) -> str:
+        # Pendant la frappe, un champ vidé reste vide (le calcul compte 0) ;
+        # le 0 ne s'écrit qu'en quittant le champ (_sortie).
+        if self._en_saisie and not str(self.value or "").strip() and not valeur:
+            return ""
+        return self.ecrire(valeur)
 
     def lire(self, texte) -> float | None:
         chiffres = "".join(c for c in str(texte or "") if c.isdigit())
@@ -247,7 +284,8 @@ class ChampMontant(ui.input):
         super().set_value(value)
 
     def lier(self, state: dict, cle: str) -> "ChampMontant":
-        return self.bind_value(state, cle, forward=self.lire, backward=self.ecrire)
+        self._precedent = state.get(cle) or None
+        return self.bind_value(state, cle, forward=self.lire, backward=self._vers_le_champ)
 
 
 def aide(texte: str) -> None:
@@ -302,6 +340,26 @@ def effacer_signalement_a_la_saisie(champ: ui.element) -> None:
         champ.props(remove="error-message no-error-icon")
 
     champ.on("update:model-value", effacer)
+
+
+def remplir_si_vide(champ: ui.number, mode: str = "zero") -> ui.number:
+    """ui.number quitté vide : 0, ou la dernière valeur (« precedent ») pour
+    une durée ou une surface, où 0 n'a pas de sens. Pendant la frappe, le
+    champ reste vide (le calcul compte 0)."""
+    dernier = {"valeur": champ.value}
+
+    def retenir(e) -> None:
+        if e.value not in (None, ""):
+            dernier["valeur"] = e.value
+
+    def sortie() -> None:
+        if champ.value not in (None, ""):
+            return
+        champ.set_value(dernier["valeur"] if mode == "precedent" and dernier["valeur"] not in (None, "") else 0)
+
+    champ.on_value_change(retenir)
+    champ.on("blur", sortie)
+    return champ
 
 
 def stat_card(
