@@ -24,6 +24,7 @@ fi
 
 source venv/bin/activate
 
+
 if ! python3 -c "import PyInstaller" 2>/dev/null; then
     echo "Installation de PyInstaller (outil de construction, pas une dépendance de l'app)..."
     python3 -m pip install pyinstaller
@@ -32,6 +33,21 @@ fi
 BUILD_DIR="/tmp/immo-rentabilite-build"
 rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
+
+# iCloud (« optimiser le stockage ») retire en continu le contenu des fichiers
+# du Mac quand le disque se remplit (fichiers « dataless ») ; PyInstaller les
+# copiait vides (polices de 0 octet → erreur FT_Open_Face à la génération du
+# dossier, le 28/10/2026). On construit donc à partir d'une copie hors iCloud,
+# faite par rsync, qui lit chaque fichier et force iCloud à le retélécharger.
+SRC_DIR="$BUILD_DIR/src"
+mkdir -p "$SRC_DIR"
+rsync -a --exclude "__pycache__" --exclude "data_cache" main.py app gui "$SRC_DIR/"
+VIDES=$(find "$SRC_DIR" -type f -size 0 ! -name "__init__.py" || true)
+if [ -n "$VIDES" ]; then
+    echo "Erreur : fichiers vides après la copie (iCloud ?), construction annulée :" >&2
+    echo "$VIDES" >&2
+    exit 1
+fi
 
 NICEGUI_DIR="$(python3 -c 'import nicegui, os; print(os.path.dirname(nicegui.__file__))')"
 # python-docx lit ses modèles d'en-tête/pied de page via « docx/parts/../templates » :
@@ -42,9 +58,10 @@ DOCX_DIR="$(python3 -c 'import docx, os; print(os.path.dirname(docx.__file__))')
 # dans les tailles attendues par macOS puis assemblé par iconutil.
 ICONSET="$BUILD_DIR/Credaura.iconset"
 mkdir -p "$ICONSET"
-python3 - "$ICONSET" <<'PY'
+python3 - "$ICONSET" "$SRC_DIR" <<'PY'
 import sys
 from pathlib import Path
+sys.path.insert(0, sys.argv[2])
 from app.visuels_dossier import logo
 dossier = Path(sys.argv[1])
 for taille in (16, 32, 64, 128, 256, 512):
@@ -61,14 +78,22 @@ python3 -m PyInstaller \
     --add-data "${NICEGUI_DIR}:nicegui" \
     --collect-data docx \
     --add-data "${DOCX_DIR}/parts/__init__.py:docx/parts" \
-    --add-data "$PWD/app/data:app/data" \
-    --add-data "$PWD/app/fonts:app/fonts" \
+    --add-data "$SRC_DIR/app/data:app/data" \
+    --add-data "$SRC_DIR/app/fonts:app/fonts" \
     --osx-bundle-identifier com.davidlehmann.credaura \
     --distpath "$BUILD_DIR/dist" \
     --workpath "$BUILD_DIR/build" \
     --specpath "$BUILD_DIR" \
     --noconfirm \
-    main.py
+    "$SRC_DIR/main.py"
+
+# Garde-fou : aucune police ni donnée vide dans l'app construite.
+VIDES=$(find "$BUILD_DIR/dist/Credaura.app/Contents/Resources/app" -type f -size 0 | grep -v "__init__.py" || true)
+if [ -n "$VIDES" ]; then
+    echo "Erreur : fichiers vides dans l'app (iCloud ?), installation annulée :" >&2
+    echo "$VIDES" >&2
+    exit 1
+fi
 
 INSTALL_PATH="/Applications/Credaura.app"
 # Anciens noms de l'application (avant le passage à la marque Credaura).
