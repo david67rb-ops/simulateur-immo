@@ -31,5 +31,14 @@ class RegimeLocatif(unittest.TestCase):
         self.assertNotIn("Location nue", texte)
 
 
+class ProfilEmprunteur(unittest.TestCase):
+    def test_note_sur_les_credits_en_cours(self):
+        inp = schemas.SimulationInput(surface_m2=42, prix_achat=70_000, frais_notaire=6_541, loyer_mensuel_hors_charges=600)
+        profil = schemas.ProfilEmprunteurInput(revenus_nets_mensuels_foyer=2_540, mensualites_credits_existants=150)
+        texte = _texte(dossier_export.generer_dossier_word(schemas.ExportDossierInput(simulation=inp, profil=profil)))
+        self.assertIn("Les crédits en cours ne se déduisent pas des revenus", texte)
+        self.assertIn("(page suivante).", texte)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -154,6 +154,7 @@
 ## 7. Limites connues, bugs, TODO, questions ouvertes
 
 - **Corrigé le 28 octobre 2026 (`dossier_export.py`)** : en location courte durée, la page « Le bien et le projet » affichait « Régime locatif : Location nue » (valeur par défaut du choix nue / meublée, masqué en courte durée). Elle affiche désormais « Meublé de tourisme (location courte durée) » ; le calcul traitait déjà la courte durée en meublé.
+- **Ajouté le 28 octobre 2026** : sous « Revenus et engagements » (profil de l'emprunteur), la note « Les crédits en cours ne se déduisent pas des revenus : ils s'ajoutent aux mensualités dans le calcul du taux d'endettement (page suivante). » Le dossier reste en Word (choix de David du 28 octobre 2026 : pas de PDF).
 
 - **Corrigé le 11 octobre 2026 (`theme.effacer_signalement_a_la_saisie`)** : chaque saisie dans un champ du formulaire (accueil, adresse du marché) retirait la propriété « error », et la saisie suivante provoquait un KeyError dans NiceGUI. La propriété reste désormais, à vide, et le champ n'est renvoyé au navigateur que s'il était signalé « À compléter » : le renvoyer à chaque frappe effaçait les lettres tapées entre-temps (adresse impossible à saisir en ligne, corrigé le même jour). En mode test Stripe, la page /paiement/erreur affiche aussi le message de Stripe pour le diagnostic.
 - **Corrigé le 7 octobre 2026 (`fiscalite.foncier_reel`)** : le déficit foncier imputait mal la part du déficit sur le revenu global. Les intérêts s'imputent désormais d'abord sur les loyers, comme le prévoit la règle.

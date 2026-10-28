@@ -1692,6 +1692,19 @@ def _section_profil(doc, payload):
     _texte(cell_revenus.paragraphs[0], "Revenus et engagements", 11, PRIMARY_COLOR, gras=True)
     cell_revenus.paragraphs[0].paragraph_format.space_after = Pt(6)
     _ajouter_table_kv(cell_revenus, lignes, largeur_cm=largeur_gauche)
+    # Évite la question « pourquoi les crédits ne sont-ils pas retirés des
+    # revenus ? » : ils comptent dans les mensualités du taux d'endettement.
+    avec_endettement = payload.chapitres is None or "endettement" in payload.chapitres
+    note_credits = cell_revenus.add_paragraph()
+    _texte(
+        note_credits,
+        "Les crédits en cours ne se déduisent pas des revenus : ils s'ajoutent aux mensualités dans le calcul "
+        "du taux d'endettement" + (" (page suivante)." if avec_endettement else "."),
+        8.5,
+        GRIS_COLOR,
+        italique=True,
+    )
+    note_credits.paragraph_format.space_before = Pt(5)
     titre = "Patrimoine du foyer" if saisies else "Patrimoine du foyer (à compléter)"
     _texte(cell_patrimoine.paragraphs[0], titre, 11, PRIMARY_COLOR, gras=True)
     cell_patrimoine.paragraphs[0].paragraph_format.space_after = Pt(6)
