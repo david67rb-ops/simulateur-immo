@@ -153,6 +153,8 @@
 
 ## 7. Limites connues, bugs, TODO, questions ouvertes
 
+- **Corrigé le 28 octobre 2026 (`dossier_export.py`)** : en location courte durée, la page « Le bien et le projet » affichait « Régime locatif : Location nue » (valeur par défaut du choix nue / meublée, masqué en courte durée). Elle affiche désormais « Meublé de tourisme (location courte durée) » ; le calcul traitait déjà la courte durée en meublé.
+
 - **Corrigé le 11 octobre 2026 (`theme.effacer_signalement_a_la_saisie`)** : chaque saisie dans un champ du formulaire (accueil, adresse du marché) retirait la propriété « error », et la saisie suivante provoquait un KeyError dans NiceGUI. La propriété reste désormais, à vide, et le champ n'est renvoyé au navigateur que s'il était signalé « À compléter » : le renvoyer à chaque frappe effaçait les lettres tapées entre-temps (adresse impossible à saisir en ligne, corrigé le même jour). En mode test Stripe, la page /paiement/erreur affiche aussi le message de Stripe pour le diagnostic.
 - **Corrigé le 7 octobre 2026 (`fiscalite.foncier_reel`)** : le déficit foncier imputait mal la part du déficit sur le revenu global. Les intérêts s'imputent désormais d'abord sur les loyers, comme le prévoit la règle.
 - **Corrigé le 7 octobre 2026 (`simulation.py`)** : en location nue au réel, les travaux sont désormais déduits des loyers l'année 1 et retirés du prix d'acquisition de la plus-value. Hypothèse : pas de travaux de construction ou d'agrandissement (non déductibles, non distingués dans le formulaire).

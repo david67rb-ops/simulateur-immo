@@ -1152,9 +1152,13 @@ def _section_presentation(doc, payload, inp, resultat, is_achat_revente):
     cout_total, _apport, _emprunt = _cout_apport_emprunt(resultat, is_achat_revente)
     lignes.append(("Coût total de l'opération", _eur(cout_total), "total"))
     if not is_achat_revente:
-        lignes.append(
-            ("Régime locatif", "Location meublée" if inp.regime_location.value == "meublee" else "Location nue")
-        )
+        # La location courte durée est toujours un meublé (de tourisme) : le
+        # choix nue / meublée, masqué dans le simulateur, ne s'applique pas.
+        if inp.type_projet == TypeProjet.location_courte_duree:
+            regime_locatif = "Meublé de tourisme (location courte durée)"
+        else:
+            regime_locatif = "Location meublée" if inp.regime_location.value == "meublee" else "Location nue"
+        lignes.append(("Régime locatif", regime_locatif))
         if inp.type_projet == TypeProjet.location_courte_duree:
             lignes.append(("Meublé de tourisme classé", "Oui" if inp.meuble_tourisme_classe else "Non"))
 
